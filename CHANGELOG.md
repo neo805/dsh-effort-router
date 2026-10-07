@@ -4,6 +4,28 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-10-08
+
+### Fixed
+
+- **The custom-model fill never ran — at all, since 0.1.0.** The host-side fill
+  guarded on `settings.get(ns)` / `settings.update(ns, patch)`, but the live
+  `@deepseek-ai/dsh-settings` seam has no `get`: it exposes `describe()`
+  (volatile-field projections with a revision) and
+  `update(ns, patch, expectedRevision)`. The guard failed on every host, the
+  sync returned silently before any candidate was even enumerated, and no
+  custom model ever received a `reasoningEfforts` table — which is why
+  custom-API routes (hand-declared `api`/`baseURL` gateways with no catalog)
+  still show no effort selector, while catalog providers (whose models inherit
+  levels) were unaffected. The fill now reads the `llm-pi-ai` descriptor via
+  `describe()` (user layer first, live value as fallback) and writes through
+  `update()` with the descriptor's revision as the conflict guard; a host
+  without the describe/update seam now logs an explicit warning instead of
+  skipping silently.
+- The integration test's settings mock now mirrors the real dsh-settings seam
+  (`describe`/`update` with revision), and asserts the fill write carries the
+  conflict-guard revision — a regression net for the exact API mismatch above.
+
 ## [0.1.2] - 2026-10-07
 
 ### Fixed

@@ -22,9 +22,13 @@ function makeHost() {
     },
   }
   const writes = []
+  // Mirror the REAL @deepseek-ai/dsh-settings seam: describe() returns volatile
+  // field projections keyed by ns (with a revision); update(ns, patch,
+  // expectedRevision) merges and persists. There is NO get(ns) — 0.1.0–0.1.2
+  // guarded on one, so the fill silently never ran.
   const settings = {
-    get: (ns) => (ns === 'llm-pi-ai' ? section : undefined),
-    update: async (ns, patch) => { writes.push({ ns, patch }) },
+    describe: () => [{ ns: 'llm-pi-ai', user: section, value: section, revision: 7 }],
+    update: async (ns, patch, expectedRevision) => { writes.push({ ns, patch, expectedRevision }) },
   }
   const llm = {
     adapters: new Map(),
@@ -62,6 +66,7 @@ test('fill → capability refresh → auto schedules the previously-bare custom 
   await new Promise((resolve) => setTimeout(resolve, 50))
 
   assert.equal(writes.length, 1, 'exactly one settings write')
+  assert.equal(writes[0].expectedRevision, 7, 'the write is conflict-guarded by the describe() revision')
   const providers = writes[0].patch.providers
   const lite = providers['acme-gateway'].models.find((m) => m.id === 'think-lite')
   assert.deepEqual(lite.reasoningEfforts, { off: null, high: 'high', max: 'max' })
