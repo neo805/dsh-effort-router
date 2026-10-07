@@ -4,6 +4,33 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-10-07
+
+### Fixed
+
+- **The fill write was rejected by the pi-ai gate and no model was ever
+  filled.** The default table spelled `off` as an empty string; pi-ai rejects
+  empty wire values (`reasoningEfforts.off must not be an empty string`) — only
+  `off: null` omits the parameter, the shape the native Models page writes.
+  The default table is now `{ off: null, high: 'high', max: 'max' }`, and
+  `normalizeEffortTable` (empty/blank → null for `off`, dropped otherwise)
+  plus `validateEffortTable` (a local mirror of the pi-ai gate) keep every
+  write — automatic fill and settings-card edit — valid before it is sent.
+- Models filled on explicit `openai-completions` routes now also gain
+  `compat.supportsReasoningEffort: true` (mirroring the native Models page):
+  without it the level validated but was never serialized on the wire.
+- Settings-card saves are pre-validated locally and name the exact problem
+  instead of failing with a bare rejection; the card's "fill all" stays
+  conservative (custom-gateway routes only — the host's resolution-gated fill
+  covers catalog routes safely).
+
+### Changed
+
+- A fill candidate whose resolution fails is now logged once (a permanently
+  failing resolution is visible instead of a silent skip).
+- A failing decision-store write warns once per run (in-memory decisions keep
+  working; the badge never depends on the disk).
+
 ## [0.1.1] - 2026-10-07
 
 ### Fixed

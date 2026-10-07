@@ -17,7 +17,7 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 
 ## 自定义模型（llm-pi-ai）
 
-手写的自定义模型常常没有 `reasoningEfforts` 声明，选择器里根本没有档位行。本插件在启动与设置变更时扫描 `llm-pi-ai` 配置，并用**解析门控**精确补齐：每个缺表的模型先经 `resolveModelInfo` 解析，只有解析后确实没有思考档位的模型才补 `{ off, high, max }` 默认表——目录已带档位的模型解析后自带档位，天然跳过，绝不遮蔽目录能力；`false`（非思考模型）与已有表一律尊重。
+手写的自定义模型常常没有 `reasoningEfforts` 声明，选择器里根本没有档位行。本插件在启动与设置变更时扫描 `llm-pi-ai` 配置，并用**解析门控**精确补齐：每个缺表的模型先经 `resolveModelInfo` 解析，只有解析后确实没有思考档位的模型才补 `{ off: null, high, max }` 默认表（`off: null` = 线上省略该参数，与原生模型页写出的形状一致）——目录已带档位的模型解析后自带档位，天然跳过，绝不遮蔽目录能力；`false`（非思考模型）与已有表一律尊重。显式 `openai-completions` 路由上补齐的模型还会自动带上 `compat.supportsReasoningEffort: true`（该协议的 effort 需要这个 compat 开关才会上线）。
 
 每模型的「档位 → 网关线上值」映射在 **设置 → 思考强度路由** 里编辑（如 `high → ultra`），直接写入 `llm-pi-ai` 配置，由官方 schema 校验，下一请求生效。pi-ai 原生按表序列化，无需插件侧翻译。
 

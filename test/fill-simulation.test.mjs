@@ -72,7 +72,7 @@ test('resolution gate: only models resolving with NO thinking levels are filled'
   const { next, filled } = withDefaultEfforts(productionSection, { targets })
   assert.equal(filled.length, 6)
   const thinker = next.providers['globex-go'].models.find((m) => m.id === 'thinker-k3')
-  assert.deepEqual(thinker.reasoningEfforts, { off: '', high: 'high', max: 'max' })
+  assert.deepEqual(thinker.reasoningEfforts, { off: null, high: 'high', max: 'max' })
   // untouched: catalog-inheriting model, failed-resolution model, and the input itself
   const vendorFlash = next.providers['acme-token-plan'].models.find((m) => m.id === 'vendor-flash')
   assert.equal(vendorFlash.reasoningEfforts, undefined)

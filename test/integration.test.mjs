@@ -64,9 +64,9 @@ test('fill → capability refresh → auto schedules the previously-bare custom 
   assert.equal(writes.length, 1, 'exactly one settings write')
   const providers = writes[0].patch.providers
   const lite = providers['acme-gateway'].models.find((m) => m.id === 'think-lite')
-  assert.deepEqual(lite.reasoningEfforts, { off: '', high: 'high', max: 'max' })
+  assert.deepEqual(lite.reasoningEfforts, { off: null, high: 'high', max: 'max' })
   const pro = providers['acme-gateway'].models.find((m) => m.id === 'think-pro')
-  assert.deepEqual(pro.reasoningEfforts, { off: '', high: 'high', max: 'max' })
+  assert.deepEqual(pro.reasoningEfforts, { off: null, high: 'high', max: 'max' })
   // the catalog-blessed model was never touched
   assert.equal(providers['catalog-blessed'].models[0].reasoningEfforts, undefined)
 

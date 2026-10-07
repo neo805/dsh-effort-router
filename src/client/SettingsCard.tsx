@@ -8,8 +8,10 @@
  */
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import {
-  DEFAULT_EFFORT_TABLE,
+  fillCandidates,
   isCustomGateway,
+  normalizeEffortTable,
+  validateEffortTable,
   withDefaultEfforts,
   withModelEfforts,
 } from '../../lib/custom-models.js'
@@ -93,15 +95,18 @@ function NumberRow(props: {
 function ModelEditor(props: {
   provider: string
   model: string
-  table: Record<string, string> | false | undefined
+  table: Record<string, string | null> | false | undefined
   readonly: boolean
   t: (key: string) => string
-  onSave: (provider: string, model: string, table: Record<string, string>) => Promise<boolean>
+  onSave: (provider: string, model: string, table: Record<string, string>) => Promise<{ ok: boolean; problems?: string[] }>
 }) {
   const current: Record<string, string> =
-    props.table && typeof props.table === 'object' ? props.table : {}
+    props.table && typeof props.table === 'object'
+      ? Object.fromEntries(Object.entries(props.table).map(([k, v]) => [k, v ?? '']))
+      : {}
   const [draft, setDraft] = useState<Record<string, string>>(() => ({ ...current }))
   const [state, setState] = useState<'idle' | 'saved' | 'failed'>('idle')
+  const [problems, setProblems] = useState<string[]>([])
   const dirty = useMemo(() => {
     const keys = new Set([...Object.keys(draft), ...Object.keys(current)])
     for (const key of keys) if ((draft[key] ?? undefined) !== (current[key] ?? undefined)) return true
@@ -110,6 +115,7 @@ function ModelEditor(props: {
 
   const toggle = (level: string, on: boolean) => {
     setState('idle')
+    setProblems([])
     setDraft((prev) => {
       const next = { ...prev }
       if (on) next[level] = level === 'off' ? '' : (next[level] ?? level)
@@ -119,6 +125,7 @@ function ModelEditor(props: {
   }
   const setWire = (level: string, wire: string) => {
     setState('idle')
+    setProblems([])
     setDraft((prev) => ({ ...prev, [level]: wire }))
   }
 
@@ -132,8 +139,17 @@ function ModelEditor(props: {
           data-primary={dirty}
           disabled={!dirty || props.readonly}
           onClick={async () => {
-            const ok = await props.onSave(props.provider, props.model, draft)
-            setState(ok ? 'saved' : 'failed')
+            // Pre-validate exactly the way the pi-ai gate will, so a bad table
+            // is refused HERE with the reason, not there with a bare rejection.
+            const local = validateEffortTable(normalizeEffortTable(draft))
+            if (local.length > 0) {
+              setProblems(local)
+              setState('failed')
+              return
+            }
+            const result = await props.onSave(props.provider, props.model, draft)
+            setProblems(result.problems ?? [])
+            setState(result.ok ? 'saved' : 'failed')
           }}
         >
           {props.t('card.custom.save')}
@@ -167,7 +183,12 @@ function ModelEditor(props: {
         })}
       </div>
       {state === 'saved' && <span className="er-note" data-tone="ok">{props.t('card.custom.saved')}</span>}
-      {state === 'failed' && <span className="er-note" data-tone="error">{props.t('card.custom.failed')}</span>}
+      {state === 'failed' && (
+        <span className="er-note" data-tone="error">
+          {props.t('card.custom.failed')}
+          {problems.length > 0 ? '：' + problems.join('；') : ''}
+        </span>
+      )}
     </div>
   )
 }
@@ -186,17 +207,25 @@ function CustomModels(props: { piAiScope: any; t: (key: string) => string }) {
 
   const saveModel = async (provider: string, model: string, table: Record<string, string>) => {
     try {
-      const { next, changed } = withModelEfforts(snapshot.value, provider, model, table)
-      if (!changed) return false
+      const { next, changed, problems } = withModelEfforts(snapshot.value, provider, model, table)
+      if (!changed) return { ok: false, problems }
       await piAiScope.set('providers', next.providers)
-      return true
+      return { ok: true }
     } catch {
-      return false
+      return { ok: false }
     }
   }
 
   const fillAll = async () => {
-    const { next, filled } = withDefaultEfforts(snapshot.value)
+    // The card cannot resolve model capability, so the manual fill stays
+    // conservative: only rows on explicit custom gateways (api / non-official
+    // baseURL). Catalog-route rows are covered by the host's resolution-gated
+    // fill at startup, which provably skips models that inherit catalog levels.
+    const targets = fillCandidates(snapshot.value).filter((key) => {
+      const provider = key.slice(0, key.indexOf('/'))
+      return isCustomGateway(providers[provider])
+    })
+    const { next, filled } = withDefaultEfforts(snapshot.value, { targets })
     if (next === snapshot.value || filled.length === 0) return
     try { await piAiScope.set('providers', next.providers) } catch { /* rejected: leave as is */ }
   }
