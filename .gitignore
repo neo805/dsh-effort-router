@@ -1,0 +1,7 @@
+node_modules/
+*.tgz
+lib/.client.bundle.cjs
+
+# Local operations logs: machine-specific paths, provider ids, rollback notes.
+# Kept out of the public repository on purpose.
+docs/ops/

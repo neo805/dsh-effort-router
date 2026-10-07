@@ -1,0 +1,5 @@
+# esbuild ships its platform binary as an optional dependency package; its
+# postinstall script only validates and is not required (the client build works
+# with the script blocked). Keep builds deterministic: no install scripts here.
+allowBuilds:
+  esbuild: false

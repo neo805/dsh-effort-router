@@ -1,0 +1,4 @@
+# dsh-effort-router loader entry. Applied by `dsh plugin add`.
+- insert:
+    - id: effort-router
+      name: dsh-effort-router
