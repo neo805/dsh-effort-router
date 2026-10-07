@@ -13,9 +13,9 @@ import {
   withModelEfforts,
 } from '../lib/custom-models.js'
 
-test('DEFAULT_EFFORT_TABLE passes the pi-ai gate shape (off is null, never empty string)', () => {
+test('DEFAULT_EFFORT_TABLE passes the pi-ai gate shape (low/high/max, no off rung)', () => {
   assert.deepEqual(validateEffortTable(DEFAULT_EFFORT_TABLE), [])
-  assert.equal(DEFAULT_EFFORT_TABLE.off, null)
+  assert.equal('off' in DEFAULT_EFFORT_TABLE, false)
 })
 
 test('normalizeEffortTable: blank off -> null, blank others dropped, values kept', () => {
@@ -78,9 +78,9 @@ test('withDefaultEfforts fills exactly the target set (models[] and modelOverrid
     targets: ['my-gateway/thinker', 'catalog-route/other-model'],
   })
   assert.deepEqual(filled, ['my-gateway/thinker', 'catalog-route/other-model'])
-  // pi-ai gate: off is null (never an empty string)
-  assert.deepEqual(next.providers['my-gateway'].models[0].reasoningEfforts, { off: null, high: 'high', max: 'max' })
-  assert.deepEqual(next.providers['catalog-route'].modelOverrides['other-model'].reasoningEfforts, { off: null, high: 'high', max: 'max' })
+  // 0.2.0 default table: low/high/max, no off rung (thinking stays on)
+  assert.deepEqual(next.providers['my-gateway'].models[0].reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
+  assert.deepEqual(next.providers['catalog-route'].modelOverrides['other-model'].reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
   assert.equal(next.providers['catalog-route'].modelOverrides['other-model'].name, 'Override')
   // compat flag added on the explicit openai-completions route only
   assert.equal(next.providers['my-gateway'].models[0].compat.supportsReasoningEffort, true)

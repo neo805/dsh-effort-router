@@ -1,6 +1,7 @@
 /**
- * signals.js tests with a synthetic agent/session, plus the full schedule
- * composition (decideEffort -> hysteresis) the host interceptor runs.
+ * signals.js tests with a synthetic agent/session: sliding-window evidence,
+ * volume cues, plus the full schedule composition (decideEffort -> hysteresis)
+ * the host interceptor runs.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -40,6 +41,7 @@ test('collect: claimed brief text is classified', () => {
   signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
   const sig = signals.collect(agent, { turn: 1, step: 1 })
   assert.ok(sig.text.includes('重构'))
+  assert.ok(sig.briefTokens > 0, 'brief token estimate is exposed')
   const d = decideEffort(normalizePolicyConfig({}), sig)
   assert.equal(d.stepClass, 'engineering')
 })
@@ -51,7 +53,7 @@ test('collect: falls back to the last user message when no claim seen', () => {
   assert.ok(sig.text.includes('解释'))
 })
 
-test('tool evidence accumulates and escalates on errors', () => {
+test('tool evidence folds into the window and escalates on errors', () => {
   const signals = makeSignals()
   const agent = makeAgent([])
   signals.onClaimed({ agent, message: userMsg('看看这些文件'), turn: 1 })
@@ -70,6 +72,7 @@ test('tool evidence accumulates and escalates on errors', () => {
   assert.equal(sig.toolCalls, 2)
   assert.equal(sig.taskErrors, 2)
   assert.equal(sig.escalations, 1) // >= escalateOnErrors(2) -> 1
+  assert.ok(sig.toolVolume > 0, 'tool-result volume is tracked')
   // and the schedule reflects it: standard +1 -> engineering -> high
   const d = decideEffort(normalizePolicyConfig({}), sig)
   assert.equal(d.stepClass, 'engineering')
@@ -91,6 +94,25 @@ test('repeated identical tool calls escalate', () => {
   const sig = signals.collect(agent, { turn: 1, step: 4 })
   assert.equal(sig.taskRepeats, 2)
   assert.equal(sig.escalations, 0) // 2 repeats < escalateOnRepeats(3)
+})
+
+test('the sliding window ages old evidence out', () => {
+  // window of 2 step buckets: the first error retires once two newer buckets seal
+  const signals = makeSignals({ scoring: { toolWindow: 2 } })
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('看看这些文件'), turn: 1 })
+  agent.session.deriveMessages = () => [
+    assistantCall('read', '{"p":"a"}'),
+    toolResult('[exit code: 1] boom'),     // bucket 1: 1 error — evicted below
+    assistantCall('read', '{"p":"b"}'),
+    toolResult('[exit code: 1] bam'),      // bucket 2: 1 error — kept
+    assistantCall('read', '{"p":"c"}'),
+    toolResult('ok'),                      // bucket 3: clean — kept
+  ]
+  const sig = signals.collect(agent, { turn: 1, step: 4 })
+  assert.equal(sig.toolCalls, 2, 'only the last 2 buckets count their calls')
+  assert.equal(sig.taskErrors, 1, 'the oldest error aged out of the window')
+  assert.equal(sig.escalations, 0)
 })
 
 test('a new claim retires the evidence of the previous task', () => {

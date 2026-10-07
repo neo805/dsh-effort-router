@@ -5,7 +5,8 @@ English | [中文](README.zh.md)
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
 - Task-shape classification: `trivial / standard / engineering / hard` from the brief itself, not from tool-call counts
-- Evidence escalation: tool errors and identical-argument retries lift the class (capped per task)
+- Wish detector: a short delegation-style brief in the cue vacuum zone (`帮我…`, `can you…`) starts at the engineering floor — underspecified tasks get the benefit of the doubt
+- Evidence escalation: tool errors, identical-argument retries, brief text volume, and recent tool-result volume lift the class (loudest signal wins, capped per task, sliding 32-step window)
 - Hysteresis: upgrades apply immediately, downgrades wait for two consecutive quiet decisions
 - Frugal signals: subagents, context pressure, or a session token budget demote one class
 - Capability clamp: the scheduled tier maps onto the target model's advertised vocabulary (nearest rank, so gateway vocabularies like `ultra` work)
@@ -17,7 +18,7 @@ The host's native model selector already is the per-session effort control. The 
 
 ## Custom models (llm-pi-ai)
 
-Hand-declared custom models often ship no `reasoningEfforts` table, so the composer shows no effort selector at all. On startup and on settings changes the plugin scans the `llm-pi-ai` config and fills the default `{ off: null, high, max }` table through a **resolution gate**: every table-less user-layer row is resolved with `resolveModelInfo`, and only models that resolve with NO thinking levels are filled — a model inheriting levels from its catalog is skipped, so catalog capability is never shadowed. An explicit table or an explicit `false` is never touched. Tables follow the pi-ai gate exactly (`off: null` omits the parameter on the wire — the shape the native Models page writes), and models filled on explicit `openai-completions` routes also gain `compat.supportsReasoningEffort: true`, the switch that protocol needs to actually send the effort.
+Hand-declared custom models often ship no `reasoningEfforts` table, so the composer shows no effort selector at all. On startup and on settings changes the plugin scans the `llm-pi-ai` config and fills the default `{ low, high, max }` table through a **resolution gate**: every table-less user-layer row is resolved with `resolveModelInfo`, and only models that resolve with NO thinking levels are filled — a model inheriting levels from its catalog is skipped, so catalog capability is never shadowed. An explicit table or an explicit `false` is never touched. The table deliberately has **no `off` rung**: an off selection followed by a tool call poisons the conversation for every later thinking-enabled request, and the router never routes to off either (you can still add `off: null` back per model in the editor — explicit intent is never overwritten). Models filled on explicit `openai-completions` routes also gain `compat.supportsReasoningEffort: true`, the switch that protocol needs to actually send the effort.
 
 The per-model level → gateway wire-value mapping (e.g. `high → ultra`) is edited under **Settings → Effort Router** and written straight into the `llm-pi-ai` config, gated by the official schema, effective on the next request. pi-ai serializes the table natively; no plugin-side translation layer.
 
@@ -26,14 +27,14 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) is ed
 **Settings → Effort Router**:
 
 - Enabled / default level / subagent default
-- Bounds: allow max (off by default, hard falls back to high), max fallback, frugal demotion, context-pressure threshold, token budget
+- Bounds: allow max (**on by default** since 0.2.0 — hard tasks reach max; opt out here and `maxFallback` applies), max fallback, wish detector, frugal demotion, context-pressure threshold, token budget
 - Class → tier route table (trivial/standard default low, engineering high, hard max)
-- Advanced: downgrade hysteresis, escalation thresholds (apply on plugin reload)
+- Advanced: downgrade hysteresis, escalation thresholds (apply on plugin reload), custom cue dictionaries (strong / normal / cheap / wish)
 - Custom-model editor: expand a provider, tick levels and enter wire values, or fill missing levels everywhere in one click
 
 ## In-session visibility
 
-- **Composer badge** (right of the model selector): the mode and effort of the session's last step (`Auto · high`), with class, score and reason in the tooltip. Read-only — control stays in the native selector.
+- **Composer badge** (right of the model selector): the mode and effort of the session's last step (`Auto · high`), with class and reason in the tooltip. Read-only — control stays in the native selector.
 - **Tool-call captions**: every tool call in the chat flow is annotated with the `provider/model · effort` that step actually ran with.
 
 ## Safety and degradation

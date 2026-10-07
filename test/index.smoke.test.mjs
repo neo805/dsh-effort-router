@@ -89,7 +89,7 @@ test('apply: a model without reasoning metadata gets the field stripped', async 
   assert.equal(out.reasoningEffort, undefined)
 })
 
-test('apply: enabled=false passes everything through', async () => {
+test('apply: enabled=false passes through, but strips our own auto mask', async () => {
   const listeners = new Map()
   const ctx = {
     logger: () => ({ info() {}, warn() {} }),
@@ -100,7 +100,13 @@ test('apply: enabled=false passes everything through', async () => {
   const config = entry.Config({ enabled: false })
   entry.apply(ctx, config)
   const onRequest = listeners.get('agent/request')
-  const seed = { provider: 'p', model: 'm', reasoningEffort: 'auto' }
-  const out = await onRequest({ agent: { session: {} }, turn: 1, step: 1 }, async () => seed)
-  assert.equal(out, seed)
+  // 'auto' is OUR advertisement, unknown to the model: stripped even when off
+  const autoOut = await onRequest({ agent: { session: {} }, turn: 1, step: 1 }, async () => ({
+    provider: 'p', model: 'm', reasoningEffort: 'auto',
+  }))
+  assert.equal(autoOut.reasoningEffort, undefined)
+  // a concrete manual level is not ours to touch: passes through by reference
+  const manualSeed = { provider: 'p', model: 'm', reasoningEffort: 'max' }
+  const manualOut = await onRequest({ agent: { session: {} }, turn: 1, step: 2 }, async () => manualSeed)
+  assert.equal(manualOut, manualSeed)
 })

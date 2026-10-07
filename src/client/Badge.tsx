@@ -78,7 +78,6 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
     ? t('badge.none')
     : [
         last.stepClass ? `class: ${last.stepClass}` : '',
-        last.score !== null && last.score !== undefined ? `score: ${last.score}` : '',
         last.reason || '',
       ].filter(Boolean).join('\n')
 

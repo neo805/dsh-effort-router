@@ -36,6 +36,8 @@ export const CSS = [
   '.er-note[data-tone="error"]{color:var(--dsw-alias-status-error,#f85149)}',
   '.er-note[data-tone="ok"]{color:var(--dsw-alias-status-success,#3fb950)}',
   '.er-search{width:100%;box-sizing:border-box;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));color:inherit;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));border-radius:7px;padding:5px 10px;font:inherit;font-size:12px;margin:4px 0 8px}',
+  '.er-row-top{align-items:flex-start}',
+  '.er-cues{width:220px;max-width:260px;resize:vertical;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));color:inherit;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));border-radius:6px;padding:4px 8px;font:inherit;font-size:12px;font-family:var(--dsw-mono-font,monospace)}',
   '.er-call{display:flex;align-items:center;gap:4px;max-width:100%;padding:0 2px;color:var(--dsw-alias-label-caption,#8b9096);font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
   '.er-call-model{min-width:0;color:var(--dsw-alias-label-secondary,#a2a8b0);overflow:hidden;text-overflow:ellipsis}',
   '.er-call-eff{flex:none}',

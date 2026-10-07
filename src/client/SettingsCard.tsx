@@ -29,7 +29,7 @@ function useScope(scope: any) {
 function SwitchRow(props: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
   return (
     <div className="er-row">
-      <label htmlFor={undefined}>{props.label}</label>
+      <label>{props.label}</label>
       <input
         type="checkbox"
         checked={props.checked}
@@ -91,6 +91,27 @@ function NumberRow(props: {
   )
 }
 
+/** A multiline cue-list editor (one cue per line or comma-separated). */
+function CuesRow(props: {
+  label: string
+  value: string
+  disabled?: boolean
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="er-row er-row-top">
+      <label>{props.label}</label>
+      <textarea
+        className="er-cues"
+        rows={2}
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(event) => props.onChange(event.currentTarget.value)}
+      />
+    </div>
+  )
+}
+
 /** One model row of the custom-model editor: level checkboxes + wire values. */
 function ModelEditor(props: {
   provider: string
@@ -100,10 +121,12 @@ function ModelEditor(props: {
   t: (key: string) => string
   onSave: (provider: string, model: string, table: Record<string, string>) => Promise<{ ok: boolean; problems?: string[] }>
 }) {
-  const current: Record<string, string> =
-    props.table && typeof props.table === 'object'
+  const current: Record<string, string> = useMemo(
+    () => (props.table && typeof props.table === 'object'
       ? Object.fromEntries(Object.entries(props.table).map(([k, v]) => [k, v ?? '']))
-      : {}
+      : {}),
+    [props.table],
+  )
   const [draft, setDraft] = useState<Record<string, string>>(() => ({ ...current }))
   const [state, setState] = useState<'idle' | 'saved' | 'failed'>('idle')
   const [problems, setProblems] = useState<string[]>([])
@@ -296,7 +319,9 @@ function CustomModels(props: { piAiScope: any; t: (key: string) => string }) {
                 ? <span className="er-note">{t('card.custom.none')}</span>
                 : visible.map((m) => (
                   <ModelEditor
-                    key={m.id}
+                    // Remount on external table changes (e.g. fill-all), so a
+                    // stale draft can never shadow a freshly filled table.
+                    key={m.id + '|' + JSON.stringify(m.table ?? null)}
                     provider={provider}
                     model={m.id}
                     table={m.table}
@@ -350,11 +375,13 @@ export function SettingsCard(props: { scope: any; piAiScope: any; t: (key: strin
 
       <div className="er-group">
         <h3>{t('card.bounds')}</h3>
-        <SwitchRow label={t('card.allowMax')} checked={value.allowMax === true} disabled={readonly}
+        <SwitchRow label={t('card.allowMax')} checked={value.allowMax !== false} disabled={readonly}
           onChange={(v) => set('allowMax', v)} />
         <SelectRow label={t('card.maxFallback')} value={value.maxFallback ?? 'high'}
           options={routeOptions(['low', 'high'])} disabled={readonly || value.allowMax === true}
           onChange={(v) => set('maxFallback', v)} />
+        <SwitchRow label={t('card.wish')} checked={value.wish !== false} disabled={readonly}
+          onChange={(v) => set('wish', v)} />
         <SwitchRow label={t('card.frugalDemote')} checked={value.frugalDemote !== false} disabled={readonly}
           onChange={(v) => set('frugalDemote', v)} />
         <NumberRow label={t('card.contextPressure')} value={Number(value.contextPressure ?? 0.75)}
@@ -385,6 +412,15 @@ export function SettingsCard(props: { scope: any; piAiScope: any; t: (key: strin
           disabled={readonly} onChange={(v) => set('escalateOnRepeats', v)} />
         <NumberRow label={t('card.maxEscalations')} value={Number(value.maxEscalations ?? 2)} min={1} max={3}
           disabled={readonly} onChange={(v) => set('maxEscalations', v)} />
+        <p>{t('card.cues.hint')}</p>
+        <CuesRow label={t('card.cues.strong')} value={String(value.cuesStrong ?? '')} disabled={readonly}
+          onChange={(v) => set('cuesStrong', v)} />
+        <CuesRow label={t('card.cues.normal')} value={String(value.cuesNormal ?? '')} disabled={readonly}
+          onChange={(v) => set('cuesNormal', v)} />
+        <CuesRow label={t('card.cues.cheap')} value={String(value.cuesCheap ?? '')} disabled={readonly}
+          onChange={(v) => set('cuesCheap', v)} />
+        <CuesRow label={t('card.cues.wish')} value={String(value.cuesWish ?? '')} disabled={readonly}
+          onChange={(v) => set('cuesWish', v)} />
       </details>
 
       <div className="er-group">

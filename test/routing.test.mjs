@@ -6,7 +6,6 @@ import assert from 'node:assert/strict'
 import {
   activeTodoText,
   contextPressureRatio,
-  effortTierForClass,
   mapEffort,
   sessionTokensOf,
   stabilize,
@@ -36,12 +35,6 @@ test('mapEffort: custom gateway vocabulary (ultra)', () => {
 test('mapEffort: no advertised efforts -> undefined', () => {
   assert.equal(mapEffort('high', []), undefined)
   assert.equal(mapEffort('high', undefined), undefined)
-})
-
-test('effortTierForClass: reads the route table, validates values', () => {
-  const cfg = { routes: { trivial: 'low', standard: 'low', engineering: 'high', hard: 'max' } }
-  assert.equal(effortTierForClass(cfg, 'engineering'), 'high')
-  assert.equal(effortTierForClass({ routes: { engineering: 'bogus' } }, 'engineering'), 'low')
 })
 
 test('stabilize: raises apply immediately', () => {

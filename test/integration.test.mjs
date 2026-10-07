@@ -69,9 +69,9 @@ test('fill → capability refresh → auto schedules the previously-bare custom 
   assert.equal(writes[0].expectedRevision, 7, 'the write is conflict-guarded by the describe() revision')
   const providers = writes[0].patch.providers
   const lite = providers['acme-gateway'].models.find((m) => m.id === 'think-lite')
-  assert.deepEqual(lite.reasoningEfforts, { off: null, high: 'high', max: 'max' })
+  assert.deepEqual(lite.reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
   const pro = providers['acme-gateway'].models.find((m) => m.id === 'think-pro')
-  assert.deepEqual(pro.reasoningEfforts, { off: null, high: 'high', max: 'max' })
+  assert.deepEqual(pro.reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
   // the catalog-blessed model was never touched
   assert.equal(providers['catalog-blessed'].models[0].reasoningEfforts, undefined)
 
@@ -94,9 +94,9 @@ test('fill → capability refresh → auto schedules the previously-bare custom 
   }))
   assert.equal(manualOut.reasoningEffort, 'max')
 
-  // A cheap brief on the filled model: the table is off/high/max, so the
-  // scheduled low maps to the nearest advertised level, ties resolving to the
-  // STRONGER one — high (thinking stays on; off would poison tool loops).
+  // A cheap brief on the filled model: the 0.2.0 table is low/high/max, so
+  // the scheduled low tier hits the advertised low exactly (no off rung in
+  // the table means thinking can never be switched off on filled models).
   const cheap = {
     sessionId: 's-e2e-2',
     session: { id: 's-e2e-2', header: {}, deriveMessages: () => [] },
@@ -105,7 +105,7 @@ test('fill → capability refresh → auto schedules the previously-bare custom 
   const cheapOut = await onRequest({ agent: cheap, turn: 1, step: 1 }, async () => ({
     provider: 'acme-gateway', model: 'think-lite', reasoningEffort: 'auto',
   }))
-  assert.equal(cheapOut.reasoningEffort, 'high', 'low tier clamps up to high on an off/high/max table')
+  assert.equal(cheapOut.reasoningEffort, 'low', 'low tier hits the advertised low on a low/high/max table')
 
   // On a model that DOES advertise low, the same cheap brief schedules low.
   const cheap2 = {
