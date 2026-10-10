@@ -110,3 +110,138 @@ test('apply: enabled=false passes through, but strips our own auto mask', async 
   const manualOut = await onRequest({ agent: { session: {} }, turn: 1, step: 2 }, async () => manualSeed)
   assert.equal(manualOut, manualSeed)
 })
+
+test('apply: a selection echo is proven by OUR decision store and rescheduled', async () => {
+  const logs = []
+  const appends = []
+  const listeners = new Map()
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+    },
+  }
+  // No durable pick (pending null); the projection mock stays static so the
+  // echo window persists — the append spy proves the write-back fired.
+  const sessionProjections = {
+    stateOf: (_session, key) => (key === 'modelSelection'
+      ? { pending: null, lastUsed: { provider: 'gw', model: 'thinker', reasoningEffort: 'low' } }
+      : undefined),
+  }
+  const ctx = {
+    logger: () => ({ info: (m) => logs.push(m), warn() {} }),
+    get(name) {
+      if (name === 'llm') return llm
+      if (name === 'sessionProjections') return sessionProjections
+      throw new Error('no service ' + name)
+    },
+    on(event, handler) { listeners.set(event, handler); return () => {} },
+    inject() { return () => {} },
+  }
+  entry.apply(ctx, entry.Config({}))
+  const onRequest = listeners.get('agent/request')
+  const onClaimed = listeners.get('agent/inbox/claimed')
+  const agent = {
+    sessionId: 's-echo',
+    session: {
+      id: 's-echo',
+      header: {},
+      deriveMessages: () => [],
+      append: (type, data) => appends.push({ type, data }),
+    },
+  }
+  onClaimed({ agent, message: { content: '翻译这句话', role: 'user' }, turn: 1 })
+  // step 1: seed 'auto' -> scheduled (records mode 'auto', effort 'low')
+  const step1 = await onRequest({ agent, turn: 1, step: 1 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
+  }))
+  assert.equal(step1.reasoningEffort, 'low')
+  // the write-back stamped pending='auto' for the host's selection state
+  assert.deepEqual(appends, [{
+    type: 'model/selection',
+    data: { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' },
+  }])
+  // step 2: the concrete echo comes back — the store proves it was OURS
+  const step2 = await onRequest({ agent, turn: 1, step: 2 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'low',
+  }))
+  assert.equal(step2.reasoningEffort, 'low')
+  assert.equal(
+    logs.filter((m) => m.includes('class trivial')).length,
+    2,
+    'both steps went through the scheduler (the echo was not honored as manual)',
+  )
+})
+
+test('apply: a consumed explicit pick stays manual (store witness says mode manual)', async () => {
+  const logs = []
+  const listeners = new Map()
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+    },
+  }
+  // The user picked 'high'; the host consumed the pending pick after the
+  // matching header, so pending is null again and only lastUsed remains —
+  // indistinguishable from an echo UNLESS the store proves the last decision
+  // was mode 'manual'.
+  const sessionProjections = {
+    stateOf: (_session, key) => (key === 'modelSelection'
+      ? { pending: null, lastUsed: { provider: 'gw', model: 'thinker', reasoningEffort: 'high' } }
+      : undefined),
+  }
+  const ctx = {
+    logger: () => ({ info: (m) => logs.push(m), warn() {} }),
+    get(name) {
+      if (name === 'llm') return llm
+      if (name === 'sessionProjections') return sessionProjections
+      throw new Error('no service ' + name)
+    },
+    on(event, handler) { listeners.set(event, handler); return () => {} },
+    inject() { return () => {} },
+  }
+  entry.apply(ctx, entry.Config({}))
+  const onRequest = listeners.get('agent/request')
+  const agent = { sessionId: 's-picked', session: { id: 's-picked', header: {}, deriveMessages: () => [] } }
+  const seed1 = { provider: 'gw', model: 'thinker', reasoningEffort: 'high' }
+  const out1 = await onRequest({ agent, turn: 1, step: 1 }, async () => seed1)
+  assert.equal(out1, seed1)
+  const seed2 = { provider: 'gw', model: 'thinker', reasoningEffort: 'high' }
+  const out2 = await onRequest({ agent, turn: 1, step: 2 }, async () => seed2)
+  assert.equal(out2, seed2)
+  assert.ok(!logs.some((m) => m.includes('class ')), 'a consumed manual pick is never rescheduled')
+})
+
+test('apply: a durable pending pick keeps the concrete level manual', async () => {
+  const logs = []
+  const listeners = new Map()
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+    },
+  }
+  const sessionProjections = {
+    stateOf: (_session, key) => (key === 'modelSelection'
+      ? { pending: { provider: 'gw', model: 'thinker', reasoningEffort: 'low' }, lastUsed: null }
+      : undefined),
+  }
+  const ctx = {
+    logger: () => ({ info: (m) => logs.push(m), warn() {} }),
+    get(name) {
+      if (name === 'llm') return llm
+      if (name === 'sessionProjections') return sessionProjections
+      throw new Error('no service ' + name)
+    },
+    on(event, handler) { listeners.set(event, handler); return () => {} },
+    inject() { return () => {} },
+  }
+  entry.apply(ctx, entry.Config({}))
+  const onRequest = listeners.get('agent/request')
+  const agent = { sessionId: 's-pick', session: { id: 's-pick', header: {}, deriveMessages: () => [] } }
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'low' }
+  const out = await onRequest({ agent, turn: 1, step: 1 }, async () => seed)
+  assert.equal(out, seed, 'explicit pick passes through verbatim')
+  assert.ok(!logs.some((m) => m.includes('class ')), 'no scheduling happened for a durable pick')
+})

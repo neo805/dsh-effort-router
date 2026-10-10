@@ -48,6 +48,21 @@ All notable changes to dsh-effort-router are documented here. The format follows
 
 ### Fixed
 
+- **Auto no longer decays into "manual" after a session's first step.** The
+  host's `modelSelection` projection mirrors the last stamped request header
+  into the session selection whenever no durable pick exists — and since this
+  plugin resolves the scheduled `auto` into a concrete level before the
+  header is stamped, step 2 came back carrying OUR scheduled value as if it
+  were a manual pick (the native selector flipped off Auto the same way).
+  Two cooperating layers, both anchored in our own durable decision store:
+  after scheduling, the plugin appends `model/selection 'auto'` when no
+  durable pick exists (the echo channel closes at the source and the
+  selector keeps showing Auto; never written for subagent sessions or over
+  an explicit pick); and a concrete seed is treated as a manual pick only
+  when the store does NOT prove the session's last decision was our own
+  auto schedule of the same effort on the same route — so an explicit pick
+  that the host already consumed (pending cleared after a matching header)
+  records `manual` and is never mistaken for an echo.
 - **The decision store no longer leaks across profiles.** `resolveStoreFile`
   took the profile from env vars that the host only injects into tool
   sandboxes, never into plugin fibers — so a Desktop instance fell back to the
