@@ -48,6 +48,14 @@ All notable changes to dsh-effort-router are documented here. The format follows
 
 ### Fixed
 
+- **The decision store no longer leaks across profiles.** `resolveStoreFile`
+  took the profile from env vars that the host only injects into tool
+  sandboxes, never into plugin fibers — so a Desktop instance fell back to the
+  `web` default and SHARED the Web profile's `state.json` (two instances
+  racing one tmp+rename writer; Desktop decisions showed up only in Web's
+  file). The store path now resolves through the host's `profileContext`
+  service (`profile.dir`) with the env chain as fallback, and the resolved
+  path is logged at plugin start.
 - **With `enabled: false`, an `auto` selection is now stripped before the
   request passes through.** The mask is this plugin's own advertisement —
   unknown to the model — and could be rejected by request validation.
