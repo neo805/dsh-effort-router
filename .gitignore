@@ -6,3 +6,10 @@ lib/.client.bundle.cjs
 # Local operations logs: machine-specific paths, provider ids, rollback notes.
 # Kept out of the public repository on purpose.
 docs/ops/
+
+# Session-mining research (a PARALLEL project, not part of this plugin):
+# statistically studies real session logs to recommend values for this
+# plugin's dictionaries and thresholds. Kept out of the public repository;
+# only reports explicitly cleared by the maintainer are committed.
+docs/
+scripts/session-mining/
