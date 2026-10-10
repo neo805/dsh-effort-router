@@ -34,7 +34,7 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) is ed
 
 ## In-session visibility
 
-- **Composer badge** (right of the model selector): the mode and effort of the session's last step (`Auto · high`), with class and reason in the tooltip. Read-only — control stays in the native selector.
+- **Composer badge** (left of the model selector): the mode and effort of the session's last step (`Auto · high`), with class and reason in the tooltip. Read-only — control stays in the native selector.
 - **Tool-call captions**: every tool call in the chat flow is annotated with the `provider/model · effort` that step actually ran with.
 
 ## Safety and degradation

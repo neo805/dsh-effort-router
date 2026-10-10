@@ -31,7 +31,6 @@
     "@deepseek-ai/schemastery": "^3.18.4"
   },
   "devDependencies": {
-    "@deepseek-ai/schemastery": "^3.18.4",
     "esbuild": "^0.25.0"
   },
   "engines": {

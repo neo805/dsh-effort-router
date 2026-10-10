@@ -4,6 +4,31 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `lib/capability.js` carried a literal NUL byte in the cache-key separator
+  constant, which made tools (git, grep, editors) treat the source file as
+  binary. The separator is now spelled as the `'\0'` escape — same runtime
+  value, text-clean source.
+- The normalized live config (including ~200 compiled cue matchers) was
+  rebuilt up to three times per request step — once in the interceptor, twice
+  in signal collection. It is now memoized on the volatile snapshot and only
+  recompiled when a setting actually changes.
+- `toolCallsOf` stringified non-string tool-call arguments as
+  `"[object Object]"`, which would have collapsed every same-name call onto
+  one repeat-detection key on hosts that emit object arguments. Non-string
+  arguments are now JSON-stringified.
+- `depthOf` treated a `null` (not merely missing) `parentAgent` as a subagent.
+- README (both languages): the composer badge sits LEFT of the model
+  selector, not right.
+
+### Removed
+
+- Duplicate `@deepseek-ai/schemastery` entry in `devDependencies` (it remains
+  a runtime dependency).
+
 ## [0.2.0] - 2026-10-10
 
 ### Added
