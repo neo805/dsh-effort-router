@@ -32,28 +32,31 @@ does NOT render `request/header` payloads — per-step effort is not visible
 there. That is a host-side presentation gap (no plugin-side trace seam is
 known); the plugin-side fallback is R4.
 
-## R4 — Decision trace surface (plugin-side substitute for trajectory-view effort)
+## R4 — Trajectory effort visibility (DONE, 0.2.1→0.2.2)
 
 **Context.** R1 retired the chat-flow captions on the understanding that the
-trajectory view would show per-step effort; the host does not render
-`request/header` payloads (verified 2026-10-11), so that information is
-currently only in the decision log (`<profile>/.effort-router/state.json`)
-and the read-only route `GET /effort-router/state?sessionId=…` (which already
-returns the last 20 decisions with turn/step/mode/effort/class/reason).
+trajectory view would show per-step effort; the host renders `request/header`
+payloads only inside the per-request inspector (请求计时 → 选项), not on the
+default ledger rows (verified 2026-10-11).
 
-**Proposal (awaiting maintainer decision).** A third, read-only client surface
-that lists the session's recent decisions — the trace the trajectory view was
-meant to provide, without touching the chat flow. Placement options:
+**Implemented (0.2.2): trajectory hoisting, NOT a panel.** The maintainer
+supplied community reference routes (2026-10-11); the plugin took the
+`dsh-trajectory-zh` route — an assembly-layer client bundle + a
+MutationObserver DOM projection on the native trajectory tab, touching no
+host package and adding no view:
 
-- a collapsible section inside the composer badge's tooltip/popup (cheapest,
-  but tooltips are a poor list container);
-- a small dock/panel card fed by the same state route the badge already polls
-  (clean, persistent, out of the conversation);
-- a section at the bottom of Settings → Effort Router (no new surface, but
-  far from the session context).
+- Host: a new `effortRouterAnchors` session projection folds
+  `request/header` + `assistant/message` (message.id) + `tool/call` (callId)
+  into an anchor → provider/model/effort table (500/session cap), served on
+  the existing read-only state route.
+- Client: `src/client/trajectory.ts` watches the trajectory ledger and
+  decorates rows keyed by `data-trajectory-row-key` (`tool\0call\0<callId>`
+  for tool rows, the message recordId for assistant rows) with a compact
+  `provider/model · effort` caption. Idempotent, debounced, no-op outside
+  the trajectory tab or when `trajectoryAnnotate` is off.
 
-Data plumbing needs nothing new: the badge's poll already fetches `recent`;
-the surface only renders it. The open question is placement, not feasibility.
+Earlier panel-placement proposal (badge popup / dock card / settings
+section): superseded — no new surface was needed after all.
 
 ## R2 — Poison detection: provenance-gated pin (DONE, 0.2.1)
 

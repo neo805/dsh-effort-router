@@ -27,7 +27,7 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 **设置 → 思考强度路由**：
 
 - 启用 / 默认档位 / 子代理默认档
-- 调度边界：允许 max（**0.2.0 起默认开**，hard 任务直达 max；在此关闭则回退到 max 回退档）、max 回退、许愿检测、毒化恢复、节俭降档、上下文压力阈值、token 预算
+- 调度边界：允许 max（**0.2.0 起默认开**，hard 任务直达 max；在此关闭则回退到 max 回退档）、max 回退、许愿检测、毒化恢复、轨迹提级、节俭降档、上下文压力阈值、token 预算
 - 分类 → 档位路由表（trivial/standard 默认 low，engineering 默认 high，hard 默认 max）
 - 高级：降档迟滞、升档阈值（重启插件生效）、自定义线索词典（strong / normal / cheap / wish）
 - 自定义模型编辑器：按提供方展开模型，勾选档位并填线上值，一键补齐缺失档位
@@ -35,7 +35,7 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 ## 会话内可见性
 
 - **Composer 徽标**（模型选择器左侧）：当前会话最近一步的模式与档位（`Auto · high`），悬停显示分类与理由。只读——控制永远在原生的模型选择器里。
-- **轨迹视图**：每一步实际发出的 `provider/model · reasoningEffort` 都记录在会话的 `request/header` 事件里，宿主的轨迹视图可直接查看。会话流本身不带任何标注（0.2.x 起移除——优先保持对话干净）。
+- **轨迹提级**（默认开）：每一步的 `provider/model · 档位` 直接投影到**原生轨迹视图**的记录行上（以 `data-trajectory-row-key` 为锚的 DOM 投影——装配层路线，不动任何宿主包、不新增视图）。锚点表由宿主侧折叠 `request/header` + `assistant/message` + `tool/call` 事件生成，经只读路由提供给客户端。会话流本身保持零标注。
 
 ## 安全与降级
 

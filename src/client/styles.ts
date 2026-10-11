@@ -38,6 +38,7 @@ export const CSS = [
   '.er-search{width:100%;box-sizing:border-box;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));color:inherit;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));border-radius:7px;padding:5px 10px;font:inherit;font-size:12px;margin:4px 0 8px}',
   '.er-row-top{align-items:flex-start}',
   '.er-cues{width:220px;max-width:260px;resize:vertical;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));color:inherit;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));border-radius:6px;padding:4px 8px;font:inherit;font-size:12px;font-family:var(--dsw-mono-font,monospace)}',
+  '.er-trj{display:inline-block;margin-left:8px;padding:0 6px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));color:var(--dsw-alias-label-caption,#8b9096);font-size:10px;line-height:15px;white-space:nowrap;vertical-align:1px}',
 ].join('')
 
 export function ensureStyles() {

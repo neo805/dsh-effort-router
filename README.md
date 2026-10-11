@@ -27,7 +27,7 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) is ed
 **Settings → Effort Router**:
 
 - Enabled / default level / subagent default
-- Bounds: allow max (**on by default** since 0.2.0 — hard tasks reach max; opt out here and `maxFallback` applies), max fallback, wish detector, poison recovery, frugal demotion, context-pressure threshold, token budget
+- Bounds: allow max (**on by default** since 0.2.0 — hard tasks reach max; opt out here and `maxFallback` applies), max fallback, wish detector, poison recovery, trajectory hoisting, frugal demotion, context-pressure threshold, token budget
 - Class → tier route table (trivial/standard default low, engineering high, hard max)
 - Advanced: downgrade hysteresis, escalation thresholds (apply on plugin reload), custom cue dictionaries (strong / normal / cheap / wish)
 - Custom-model editor: expand a provider, tick levels and enter wire values, or fill missing levels everywhere in one click
@@ -35,7 +35,7 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) is ed
 ## In-session visibility
 
 - **Composer badge** (left of the model selector): the mode and effort of the session's last step (`Auto · high`), with class and reason in the tooltip. Read-only — control stays in the native selector.
-- **Trajectory view**: the resolved `provider/model · reasoningEffort` of every step is stamped on the session's `request/header` events, which the host's trajectory view reads. The chat flow itself carries no annotations (removed in 0.2.x — a clean conversation was preferred).
+- **Trajectory hoisting** (default on): each step's `provider/model · effort` is projected onto the NATIVE trajectory ledger rows (DOM projection anchored on `data-trajectory-row-key` — the assembly-layer route, no host package touched and no new view added). The anchor table is folded host-side from `request/header` + `assistant/message` + `tool/call` events and served on the state route. The chat flow itself stays annotation-free.
 
 ## Safety and degradation
 

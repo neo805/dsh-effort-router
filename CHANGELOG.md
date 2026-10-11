@@ -4,6 +4,22 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-10-11
+
+### Added
+
+- **Trajectory hoisting (`trajectoryAnnotate`, default on, volatile).** Each
+  step's `provider/model · effort` is projected onto the NATIVE trajectory
+  ledger rows — the assembly-layer route the community `dsh-trajectory-zh`
+  plugin takes: a MutationObserver DOM projection keyed on the rows'
+  `data-trajectory-row-key`, touching no host package and adding no view. The
+  anchor table (`callId` / assistant `message.id` → provider/model/effort) is
+  folded host-side by a new `effortRouterAnchors` session projection
+  (capped at 500 anchors/session) and served on
+  `GET /effort-router/state?sessionId=…`. This closes R4 without a panel:
+  the information that was two menus deep (请求计时 → 选项) is now on the
+  default ledger rows. A new switch in Settings → Effort Router disables it.
+
 ## [0.2.1] - 2026-10-11
 
 ### Added

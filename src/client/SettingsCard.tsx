@@ -384,6 +384,8 @@ export function SettingsCard(props: { scope: any; piAiScope: any; t: (key: strin
           onChange={(v) => set('wish', v)} />
         <SwitchRow label={t('card.poisonRecovery')} checked={value.poisonRecovery !== false} disabled={readonly}
           onChange={(v) => set('poisonRecovery', v)} />
+        <SwitchRow label={t('card.trajectoryAnnotate')} checked={value.trajectoryAnnotate !== false} disabled={readonly}
+          onChange={(v) => set('trajectoryAnnotate', v)} />
         <SwitchRow label={t('card.frugalDemote')} checked={value.frugalDemote !== false} disabled={readonly}
           onChange={(v) => set('frugalDemote', v)} />
         <NumberRow label={t('card.contextPressure')} value={Number(value.contextPressure ?? 0.75)}
