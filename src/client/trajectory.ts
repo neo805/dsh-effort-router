@@ -12,8 +12,10 @@
  *   - message rows:   encodeURIComponent(<assistant message id>)
  *
  * Rows that resolve to an anchor gain a compact caption
- * `provider/model · effort` right after the row's kind chip (the purple 助手
- * badge); rows that resolve to nothing stay untouched. Everything is
+ * `provider/model · effort` at the start of the content cell — visually right
+ * next to the row's kind chip (the purple 助手 badge) — and the row's own
+ * text shifts right to make room; rows that resolve to nothing stay
+ * untouched. Everything is
  * idempotent (rows are keyed, captions carry a marker) and degrades to a
  * no-op outside the trajectory tab or when the host route reports
  * trajectoryAnnotate: false. When the shell URL carries no session id the
@@ -125,18 +127,18 @@ export function startTrajectoryDecorator(): () => void {
     }
   }
 
-  // Preferred mount: inside the first cell's eventInner, right after the
-  // kind chip (data-role-kind = the purple 助手 badge), so the caption reads
-  // 【助手】 provider/model · effort. Fallback: the row's last cell.
+  // Mount: the FIRST child of the content cell (the column right after the
+  // kind chip). The event cell holding the chip is a fixed-width flex box
+  // (76px / 44px zh), so mounting there overflows and overlaps the row text;
+  // prepending into the content cell puts the caption visually right of the
+  // 【助手】 badge AND pushes the row's own text to the right.
   const mountCaption = (tr: HTMLElement, caption: HTMLElement) => {
-    const chip = tr.querySelector('td [data-role-kind]')
-    const slot = chip && chip.parentElement
-    if (slot && slot.parentElement) {
-      slot.insertAdjacentElement('afterend', caption)
+    const cell = tr.querySelector('td:last-child')
+    if (cell) {
+      cell.insertAdjacentElement('afterbegin', caption)
       return
     }
-    const cell = tr.querySelector('td:last-child') ?? tr
-    cell.appendChild(caption)
+    tr.appendChild(caption)
   }
 
   const scheduleDecorate = () => {

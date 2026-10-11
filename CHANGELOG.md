@@ -4,6 +4,23 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.4] - 2026-10-11
+
+### Fixed
+
+- **Idle sessions show no trajectory capsules.** The merged-anchors fallback
+  enumerated only hook-fed `sessionRefs`, which holds sessions that fired an
+  LLM hook in this runtime — a session merely OPENED from history was never
+  in it. The route now enumerates the live `sessions` store (`ctx.sessions`
+  `get`/`list`, which covers sessions restored by viewing them in the GUI)
+  first, with `sessionRefs` as a supplement (deduped by session id).
+- **Capsule overlapped the row text.** The 0.2.3 mount point sat inside the
+  event cell, whose kind slot is a fixed-width flex box (76px / 44px zh), so
+  the capsule overflowed onto the content text instead of pushing it. The
+  caption now mounts as the first child of the CONTENT cell — visually right
+  next to the purple 【助手】 badge — so the row's own text shifts right
+  (margin moved from `margin-left` to `margin-right`).
+
 ## [0.2.3] - 2026-10-11
 
 ### Fixed
