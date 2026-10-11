@@ -4,6 +4,21 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.3] - 2026-10-11
+
+### Fixed
+
+- **Trajectory capsule invisible + moved next to the role chip.** Two live-test
+  findings from the 0.2.2 rollout: (1) the decorator derived the session id
+  only from `location.href`, which the shell URL does not always carry — the
+  poll never ran and nothing was decorated. The state route now answers
+  session-less queries with a merged anchor table of the 8 most recent
+  sessions (anchor keys are globally unique message/call ids, so merging is
+  collision-safe and only the on-screen session's rows resolve), and the
+  client polls with or without an id. (2) The caption now mounts right after
+  the row's kind chip (`td [data-role-kind]` — the purple 助手 badge) instead
+  of the last cell, with the old last-cell mount as fallback.
+
 ## [0.2.2] - 2026-10-11
 
 ### Added

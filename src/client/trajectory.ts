@@ -12,10 +12,14 @@
  *   - message rows:   encodeURIComponent(<assistant message id>)
  *
  * Rows that resolve to an anchor gain a compact caption
- * `provider/model · effort` in their last cell; rows that resolve to nothing
- * stay untouched. Everything is idempotent (rows are keyed, captions carry a
- * marker) and degrades to a no-op outside the trajectory tab, without a
- * session id, or when the host route reports trajectoryAnnotate: false.
+ * `provider/model · effort` right after the row's kind chip (the purple 助手
+ * badge); rows that resolve to nothing stay untouched. Everything is
+ * idempotent (rows are keyed, captions carry a marker) and degrades to a
+ * no-op outside the trajectory tab or when the host route reports
+ * trajectoryAnnotate: false. When the shell URL carries no session id the
+ * host route answers with a merged anchor table of the most recent sessions
+ * (anchor keys are globally unique, so only the on-screen session's rows
+ * resolve).
  */
 
 const POLL_MS = 2500
@@ -60,9 +64,13 @@ export function startTrajectoryDecorator(): () => void {
   const tick = async () => {
     if (stopped) return
     sessionId = currentSessionId()
-    if (sessionId && (typeof document === 'undefined' || document.visibilityState !== 'hidden')) {
+    // Even without a session id in the URL we still poll: the host route then
+    // answers with a merged anchor table of the most recent sessions (anchor
+    // keys are globally unique, so only rows of the on-screen session match).
+    if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
       try {
-        const response = await fetch('/effort-router/state?sessionId=' + encodeURIComponent(sessionId), {
+        const query = sessionId ? '?sessionId=' + encodeURIComponent(sessionId) : ''
+        const response = await fetch('/effort-router/state' + query, {
           cache: 'no-store',
         })
         if (response.ok) {
@@ -113,11 +121,22 @@ export function startTrajectoryDecorator(): () => void {
       caption.setAttribute('class', 'er-trj')
       caption.setAttribute('title', label)
       caption.textContent = label
-      if (!existing) {
-        const cell = tr.querySelector('td:last-child') ?? tr
-        cell.appendChild(caption)
-      }
+      if (!existing) mountCaption(tr, caption)
     }
+  }
+
+  // Preferred mount: inside the first cell's eventInner, right after the
+  // kind chip (data-role-kind = the purple 助手 badge), so the caption reads
+  // 【助手】 provider/model · effort. Fallback: the row's last cell.
+  const mountCaption = (tr: HTMLElement, caption: HTMLElement) => {
+    const chip = tr.querySelector('td [data-role-kind]')
+    const slot = chip && chip.parentElement
+    if (slot && slot.parentElement) {
+      slot.insertAdjacentElement('afterend', caption)
+      return
+    }
+    const cell = tr.querySelector('td:last-child') ?? tr
+    cell.appendChild(caption)
   }
 
   const scheduleDecorate = () => {
