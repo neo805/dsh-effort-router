@@ -4,7 +4,7 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
-## R1 — Tool-call captions: retired from the chat flow (DONE, Unreleased)
+## R1 — Tool-call captions: retired from the chat flow (DONE, 0.2.1)
 
 **Status quo.** 0.1.x annotated every tool call in the chat flow with the
 `provider/model · effort` the step ran with (client surface 3:
@@ -27,14 +27,35 @@ The per-step effort remains stamped on every `request/header` session event
 (`config.reasoningEffort`), which is the event stream the trajectory view is
 built from.
 
-**Follow-up verification (maintainer, 30 seconds):** open the trajectory view
-of a session that ran at mixed efforts (e.g. the 2026-10-10 measurement
-session `session-eb12fb23-28ea-4ff7-8aeb-92f41ad3676e`, turns at low / high /
-low) and confirm the per-step effort is legible there. If the host's
-trajectory view does not render `request/header` payloads, that is a host-side
-feature gap — no plugin-side trace seam is currently known.
+**Follow-up verification (maintainer, 2026-10-11):** the host's trajectory view
+does NOT render `request/header` payloads — per-step effort is not visible
+there. That is a host-side presentation gap (no plugin-side trace seam is
+known); the plugin-side fallback is R4.
 
-## R2 — Poison detection: provenance-gated pin (DONE, Unreleased)
+## R4 — Decision trace surface (plugin-side substitute for trajectory-view effort)
+
+**Context.** R1 retired the chat-flow captions on the understanding that the
+trajectory view would show per-step effort; the host does not render
+`request/header` payloads (verified 2026-10-11), so that information is
+currently only in the decision log (`<profile>/.effort-router/state.json`)
+and the read-only route `GET /effort-router/state?sessionId=…` (which already
+returns the last 20 decisions with turn/step/mode/effort/class/reason).
+
+**Proposal (awaiting maintainer decision).** A third, read-only client surface
+that lists the session's recent decisions — the trace the trajectory view was
+meant to provide, without touching the chat flow. Placement options:
+
+- a collapsible section inside the composer badge's tooltip/popup (cheapest,
+  but tooltips are a poor list container);
+- a small dock/panel card fed by the same state route the badge already polls
+  (clean, persistent, out of the conversation);
+- a section at the bottom of Settings → Effort Router (no new surface, but
+  far from the session context).
+
+Data plumbing needs nothing new: the badge's poll already fetches `recent`;
+the surface only renders it. The open question is placement, not feasibility.
+
+## R2 — Poison detection: provenance-gated pin (DONE, 0.2.1)
 
 **Problem.** The 0.2.0 continuity guard (`toolCallWithoutReasoning`) inferred
 "this assistant turn ran with thinking off" from the ABSENCE of a reasoning
