@@ -4,6 +4,20 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.5] - 2026-10-12
+
+### Fixed
+
+- **Capsule only on assistant rows, inline with the text.** Two live findings
+  from the 0.2.4 rollout: (1) tool rows (data-kind="tool") also carried the
+  capsule — now only assistant message rows (data-kind="message") are
+  decorated, so the badge sits next to the purple 【助手】 chip exclusively.
+  (2) The capsule was prepended BEFORE the content cell's text container
+  (span.contentText is display:block), which put it on its own line above
+  the row text and pushed the text down; it is now inserted INTO the text
+  container as its first inline child, so badge and text share one line and
+  the text shifts right.
+
 ## [0.2.4] - 2026-10-11
 
 ### Fixed

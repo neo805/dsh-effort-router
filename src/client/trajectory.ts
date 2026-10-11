@@ -11,11 +11,11 @@
  *   - tool rows:      encodeURIComponent('tool\0call\0<callId>')
  *   - message rows:   encodeURIComponent(<assistant message id>)
  *
- * Rows that resolve to an anchor gain a compact caption
- * `provider/model · effort` at the start of the content cell — visually right
- * next to the row's kind chip (the purple 助手 badge) — and the row's own
- * text shifts right to make room; rows that resolve to nothing stay
- * untouched. Everything is
+ * Assistant message rows (data-kind="message") that resolve to an anchor
+ * gain a compact caption `provider/model · effort` inline at the start of
+ * the row's text — visually right next to the row's kind chip (the purple
+ * 助手 badge) — and the row's own text shifts right to make room; tool rows
+ * and rows that resolve to nothing stay untouched. Everything is
  * idempotent (rows are keyed, captions carry a marker) and degrades to a
  * no-op outside the trajectory tab or when the host route reports
  * trajectoryAnnotate: false. When the shell URL carries no session id the
@@ -107,9 +107,13 @@ export function startTrajectoryDecorator(): () => void {
     const rows = document.querySelectorAll('tr[data-trajectory-row-key]')
     for (const row of Array.from(rows)) {
       const tr = row as HTMLElement
+      // Only assistant message rows carry the caption: tool rows are already
+      // attributed to the step that produced them, and the badge belongs
+      // next to the purple 【助手】 chip.
+      const isAssistantRow = (tr.getAttribute('data-kind') || '') === 'message'
       const rowKey = tr.getAttribute('data-trajectory-row-key') || ''
       const anchorId = anchorOf(rowKey)
-      const anchor = anchorId !== null && anchors.enabled ? anchors.anchors[anchorId] : undefined
+      const anchor = isAssistantRow && anchorId !== null && anchors.enabled ? anchors.anchors[anchorId] : undefined
       const label = anchor ? labelOf(anchor) : ''
       if (tr.getAttribute(DONE_ATTR) === label) continue
       tr.setAttribute(DONE_ATTR, label)
@@ -127,18 +131,15 @@ export function startTrajectoryDecorator(): () => void {
     }
   }
 
-  // Mount: the FIRST child of the content cell (the column right after the
-  // kind chip). The event cell holding the chip is a fixed-width flex box
-  // (76px / 44px zh), so mounting there overflows and overlaps the row text;
-  // prepending into the content cell puts the caption visually right of the
-  // 【助手】 badge AND pushes the row's own text to the right.
+  // Mount: INSIDE the content cell's text container (td.content >
+  // span.contentText — display:block holding inline spans). Inserting before
+  // that block container puts the caption on its own line ABOVE the row
+  // text; inserting INTO it keeps the caption on the same line, visually
+  // right of the 【助手】 badge, pushing the row's own text right.
   const mountCaption = (tr: HTMLElement, caption: HTMLElement) => {
     const cell = tr.querySelector('td:last-child')
-    if (cell) {
-      cell.insertAdjacentElement('afterbegin', caption)
-      return
-    }
-    tr.appendChild(caption)
+    const target = (cell && cell.firstElementChild) ?? cell ?? tr
+    target.insertAdjacentElement('afterbegin', caption)
   }
 
   const scheduleDecorate = () => {
