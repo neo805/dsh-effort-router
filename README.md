@@ -27,7 +27,7 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) is ed
 **Settings → Effort Router**:
 
 - Enabled / default level / subagent default
-- Bounds: allow max (**on by default** since 0.2.0 — hard tasks reach max; opt out here and `maxFallback` applies), max fallback, wish detector, frugal demotion, context-pressure threshold, token budget
+- Bounds: allow max (**on by default** since 0.2.0 — hard tasks reach max; opt out here and `maxFallback` applies), max fallback, wish detector, poison recovery, frugal demotion, context-pressure threshold, token budget
 - Class → tier route table (trivial/standard default low, engineering high, hard max)
 - Advanced: downgrade hysteresis, escalation thresholds (apply on plugin reload), custom cue dictionaries (strong / normal / cheap / wish)
 - Custom-model editor: expand a provider, tick levels and enter wire values, or fill missing levels everywhere in one click
@@ -35,13 +35,13 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) is ed
 ## In-session visibility
 
 - **Composer badge** (left of the model selector): the mode and effort of the session's last step (`Auto · high`), with class and reason in the tooltip. Read-only — control stays in the native selector.
-- **Tool-call captions**: every tool call in the chat flow is annotated with the `provider/model · effort` that step actually ran with.
+- **Trajectory view**: the resolved `provider/model · reasoningEffort` of every step is stamped on the session's `request/header` events, which the host's trajectory view reads. The chat flow itself carries no annotations (removed in 0.2.x — a clean conversation was preferred).
 
 ## Safety and degradation
 
 - The interceptor is one try/catch: any error passes the request through untouched (fail-open)
 - Models without reasoning metadata never receive `reasoningEffort` — never an `UNSUPPORTED_REASONING_EFFORT`
-- Automatic routing never emits `off` (thinking continuity: a tool call made with thinking off poisons every later thinking-enabled request); an already-poisoned history pins `off` with a warning
+- Automatic routing never emits `off` (thinking continuity on strict thinking-mode APIs). A history PROVEN poisoned — a reasoning-less tool-call turn exists AND the session's decision log recorded a manual `off` step — pins `off` with a warning until compaction removes the offending turn. Shape alone never pins: models like kimi-K3 emit no reasoning blocks before tool calls with thinking on (measured, 2026-10-10). Disable via `poisonRecovery` if your routes are all non-strict
 - Session reads go through `deriveMessages()` + `sessionProjections` only; an empty sample raises an explicit warning instead of silently degrading
 
 ## Authorship & maintenance

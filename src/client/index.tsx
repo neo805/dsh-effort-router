@@ -1,13 +1,15 @@
 /**
  * dsh-effort-router — client plugin.
  *
- * Three surfaces, no write path of its own beyond the settings scopes:
+ * Two surfaces, no write path of its own beyond the settings scopes:
  *   1. a settings.section card (global scheduler config + the llm-pi-ai
  *      custom-model effort editor) bound through configForms;
  *   2. a read-only composer badge (conversation.input.right) showing the last
- *      scheduled effort of the session;
- *   3. per-tool-call effort captions (conversation.chat.node) folded from the
- *      host's effortRouterRoute session projection.
+ *      scheduled effort of the session.
+ *
+ * The chat flow stays clean on purpose (0.2.x review): the per-step effort is
+ * stamped on every request/header session event, which the host's trajectory
+ * view reads — no chat-flow annotations.
  *
  * The per-session CONTROL stays in the native model selector: the host plugin
  * advertises an `auto` mask on every reasoning-capable model, so Auto vs a
@@ -17,7 +19,6 @@ import { NS, en, zh } from './locales'
 import { ensureStyles } from './styles'
 import { SettingsCard } from './SettingsCard'
 import { Badge } from './Badge'
-import { ROUTE_KIND, RouteRow, routeRowDefinition } from './annotations'
 
 /** Services every surface needs; feature services are optional-injected below. */
 export const inject = ['slots', 'locale']
@@ -52,18 +53,4 @@ export function apply(ctx: any) {
     locale: NS,
     inject: (sessionId: string) => ({ sessionId, t }),
   }, Badge))
-
-  // 3. Chat annotations --------------------------------------------------------
-  ctx.inject(['uiConversation'], (scope: any) => {
-    const conversation = scope.uiConversation
-    if (conversation && conversation.events && typeof conversation.events.register === 'function') {
-      conversation.events.register(routeRowDefinition)
-    }
-    scope.slots.inject('conversation.chat.node', () => scope.slots.register({
-      name: 'conversation.chat.node',
-      key: ROUTE_KIND,
-      locale: NS,
-      inject: () => ({ t }),
-    }, RouteRow))
-  })
 }

@@ -245,3 +245,69 @@ test('apply: a durable pending pick keeps the concrete level manual', async () =
   assert.equal(out, seed, 'explicit pick passes through verbatim')
   assert.ok(!logs.some((m) => m.includes('class ')), 'no scheduling happened for a durable pick')
 })
+
+test('apply: poison pin needs shape AND store provenance, and bypasses hysteresis', async () => {
+  const listeners = new Map()
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+    },
+  }
+  const ctx = {
+    logger: () => ({ info() {}, warn() {} }),
+    get(name) {
+      if (name === 'llm') return llm
+      throw new Error('no service ' + name)
+    },
+    on(event, handler) { listeners.set(event, handler); return () => {} },
+    inject() { return () => {} },
+  }
+  entry.apply(ctx, entry.Config({}))
+  const onRequest = listeners.get('agent/request')
+  const onClaimed = listeners.get('agent/inbox/claimed')
+
+  // History carries the SHAPE SUSPECT from the start: a reasoning-less tool
+  // call — exactly what a thinking-on kimi-K3 tool step looks like.
+  const suspectTurn = { role: 'assistant', content: [{ type: 'tool-call', name: 'calculator', arguments: '{}' }] }
+  const agent = {
+    sessionId: 's-poison',
+    session: {
+      id: 's-poison',
+      header: {},
+      deriveMessages: () => [{ role: 'user', content: '重构缓存层' }, suspectTurn],
+    },
+  }
+  onClaimed({ agent, message: { content: '帮我重构这个模块的缓存层', role: 'user' }, turn: 1 })
+
+  // 1. Shape alone never pins: the engineering brief schedules high (and sets
+  //    the hysteresis memory to high).
+  const step1 = await onRequest({ agent, turn: 1, step: 1 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
+  }))
+  assert.equal(step1.reasoningEffort, 'high', 'no store proof: shape alone must not pin off')
+
+  // 2. The user explicitly picks off: passes through and records a PROVEN
+  //    manual-off step in the decision store.
+  const step2 = await onRequest({ agent, turn: 1, step: 2 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'off',
+  }))
+  assert.equal(step2.reasoningEffort, 'off')
+
+  // 3. Shape + provenance: pinned off IMMEDIATELY — hysteresis would have held
+  //    'high' for downAfter quiet decisions, so 'off' here also proves the pin
+  //    bypasses hysteresis.
+  const step3 = await onRequest({ agent, turn: 1, step: 3 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
+  }))
+  assert.equal(step3.reasoningEffort, 'off', 'proven poison pins off at once')
+
+  // 4. Compaction removes the offending turn: the projection shrinks, the
+  //    shape flag clears, and scheduling resumes (hysteresis memory was not
+  //    touched by the pin, so high comes straight back).
+  agent.session.deriveMessages = () => [{ role: 'user', content: '重构缓存层' }]
+  const step4 = await onRequest({ agent, turn: 1, step: 4 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
+  }))
+  assert.equal(step4.reasoningEffort, 'high', 'the pin lifts with compaction')
+})

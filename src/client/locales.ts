@@ -15,6 +15,7 @@ export const zh = {
   'card.allowMax': '允许自动升到 max（默认开；更贵更慢，仅重任务受益）',
   'card.maxFallback': 'max 未允许时的回退档',
   'card.wish': '许愿检测：委托式短简报按 engineering 起步（默认开）',
+  'card.poisonRecovery': '毒化恢复：确证手动 off 步骤带工具调用时保持 off（默认开；仅凭消息形态永不钉死）',
   'card.frugalDemote': '节俭信号降一档（子代理 / 上下文压力 / token 预算）',
   'card.contextPressure': '上下文压力阈值（0–1，0 关闭）',
   'card.sessionTokenBudget': '会话 token 预算（0 关闭）',
@@ -55,7 +56,6 @@ export const zh = {
   'badge.poisoned': '思考关闭',
   'badge.unsupported': '不支持',
   'badge.none': '本会话暂无调度记录',
-  'annotation.default': '默认',
 }
 
 export const en = {
@@ -70,6 +70,7 @@ export const en = {
   'card.allowMax': 'Allow auto max (default on; slower and pricier, only hard tasks gain)',
   'card.maxFallback': 'Fallback while max is disallowed',
   'card.wish': 'Wish detector: delegation-style short briefs start at engineering (default on)',
+  'card.poisonRecovery': 'Poison recovery: pin off only on proven manual-off tool turns (default on; message shape alone never pins)',
   'card.frugalDemote': 'Frugal signals demote one class (subagent / context pressure / token budget)',
   'card.contextPressure': 'Context pressure threshold (0–1, 0 disables)',
   'card.sessionTokenBudget': 'Session token budget (0 disables)',
@@ -110,7 +111,6 @@ export const en = {
   'badge.poisoned': 'Thinking off',
   'badge.unsupported': 'Unsupported',
   'badge.none': 'No routing decision in this session yet',
-  'annotation.default': 'default',
 }
 
 export type LocaleKey = keyof typeof zh

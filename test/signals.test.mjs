@@ -147,18 +147,34 @@ test('hysteresis holds a downgrade for downAfter quiet decisions', () => {
   assert.equal(s.tier, 'low')
 })
 
-test('poisoned history is detected and cleared after a shrink', () => {
+test('off-shape history is detected and cleared after a shrink (shape fact, not poison)', () => {
   const signals = makeSignals()
   const agent = makeAgent([
     userMsg('do something'),
     { role: 'assistant', content: [{ type: 'tool-call', name: 'read', arguments: '{}' }] }, // no reasoning block
   ])
   let sig = signals.collect(agent, { turn: 1, step: 1 })
-  assert.equal(sig.poisonedHistory, true)
+  assert.equal(sig.offShapeHistory, true)
   // compaction summarizes the offending turn away: the projection SHRINKS
   agent.session.deriveMessages = () => [userMsg('summary')]
   sig = signals.collect(agent, { turn: 1, step: 2 })
-  assert.equal(sig.poisonedHistory, false)
+  assert.equal(sig.offShapeHistory, false)
+})
+
+test('off shape alone does NOT poison the decision (the kimi-K3 false positive)', () => {
+  // K3 with thinking ON emits no reasoning block before a tool call. decideEffort
+  // only reads caller-PROVEN poison (signals.poisonedHistory), which the host
+  // sets from shape + store provenance — a bare offShapeHistory never pins off.
+  const signals = makeSignals()
+  const agent = makeAgent([
+    userMsg('do something'),
+    { role: 'assistant', content: [{ type: 'tool-call', name: 'calculator', arguments: '{}' }] },
+  ])
+  const sig = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig.offShapeHistory, true)
+  const d = decideEffort(normalizePolicyConfig({}), sig)
+  assert.equal(d.poisoned, false)
+  assert.notEqual(d.tier, 'off')
 })
 
 test('loud degradation: missing deriveMessages warns once and still classifies the brief', () => {

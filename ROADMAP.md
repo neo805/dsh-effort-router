@@ -4,7 +4,7 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
-## R1 — Tool-call captions: retire from the chat flow, surface effort in the trajectory view
+## R1 — Tool-call captions: retired from the chat flow (DONE, Unreleased)
 
 **Status quo.** 0.1.x annotated every tool call in the chat flow with the
 `provider/model · effort` the step ran with (client surface 3:
@@ -18,71 +18,63 @@ missed them.
 keep the conversation clean. Instead, the per-step assistant effort should be
 visible in the host's **trajectory view** (轨迹视图).
 
-**What changes when picked up.**
+**Implemented.** Removed the chat-annotation surface: `annotations.ts`,
+surface 3 in `src/client/index.tsx`, the `.er-call*` styles, the
+`annotation.default` locale keys, the host-side `effortRouterRoute`
+projection + its registration (`lib/route-projection.js`), the
+`dsh-client-ui-conversation` inject/peer entries, and the README bullets.
+The per-step effort remains stamped on every `request/header` session event
+(`config.reasoningEffort`), which is the event stream the trajectory view is
+built from.
 
-- Remove the chat-annotation surface: `src/client/annotations.ts`, surface 3
-  in `src/client/index.tsx`, the `.er-call*` styles in `src/client/styles.ts`,
-  the `annotation.default` locale keys, and the README bullet (both
-  languages). Rebuild `lib/client.js`.
-- The data needed by a trajectory view already exists without any chat
-  surface:
-  - the stamped `request/header` session events carry the resolved
-    `reasoningEffort` for every step (the trajectory view is built from the
-    same event stream), and
-  - the host-side `effortRouterRoute` projection (`lib/route-projection.js`)
-    folds header + step + tool/call into a per-call table.
-- Open question for implementation: whether the host's trajectory view renders
-  `request/header` payload natively (then nothing plugin-side is needed —
-  verify and document), or whether a plugin-side trace contribution seam
-  exists. Investigate against the live host before writing code.
-- If no trace seam exists: keep `lib/route-projection.js` (harmless, and it is
-  the natural data source for a future trace view) but stop registering its
-  chat renderer.
+**Follow-up verification (maintainer, 30 seconds):** open the trajectory view
+of a session that ran at mixed efforts (e.g. the 2026-10-10 measurement
+session `session-eb12fb23-28ea-4ff7-8aeb-92f41ad3676e`, turns at low / high /
+low) and confirm the per-step effort is legible there. If the host's
+trajectory view does not render `request/header` payloads, that is a host-side
+feature gap — no plugin-side trace seam is currently known.
 
-## R2 — Poison detection: replace the "no reasoning block ⇒ thinking was off" heuristic
+## R2 — Poison detection: provenance-gated pin (DONE, Unreleased)
 
-**Problem.** The continuity guard (`toolCallWithoutReasoning` in
-`lib/policy.js`, folded by `scanFresh`/`poisonedIn` in `lib/signals.js`)
-infers "this assistant turn ran with thinking off" from the ABSENCE of a
-reasoning block on a tool-call message. That inference is only sound for
-routes that persist reasoning blocks — and it fails both ways:
+**Problem.** The 0.2.0 continuity guard (`toolCallWithoutReasoning`) inferred
+"this assistant turn ran with thinking off" from the ABSENCE of a reasoning
+block on a tool-call message. That inference is unsound for routes that do
+not persist reasoning blocks per step — and it fired on the common case:
 
-- **False positive (observed, kimi-K3):** thinking is ON, but the model emits
-  no reasoning block before tool calls. Every K3 tool loop looks "poisoned",
-  so Auto pins `off` forever after the first tool call — the exact state the
-  rule exists to avoid.
-- **The strict-API problem is real for other models:** on thinking-mode APIs
-  that reject mixed histories, an actual off turn carrying a tool call does
-  poison every later thinking-enabled request. The guard cannot simply be
-  deleted.
+- **Measured 2026-10-10** (session `eb12fb23`, kimi-K3 @ `low`, explicitly
+  asked to think): turn 1 step 1 carried a 424-char reasoning block, step 2
+  carried a tool call with NO reasoning block, step 3 reasoned again. Same
+  model, same effort, thinking ON the whole time. The 0.2.0 rule read step 2
+  as poison and would have pinned Auto to `off` forever. (deepseek-flash @
+  `high` in the same session emitted a `reasoning(0)` empty block — presence,
+  not content, is what the old heuristic read.)
+- The strict-API problem the guard exists for is real on other models: on
+  thinking-mode APIs that reject mixed histories, an actual off turn carrying
+  a tool call does poison every later thinking-enabled request.
 
-**Design direction (proposal, to be validated against live routes).**
+**Implemented design.** Shape is now only a SUSPECT fact, never a verdict:
 
-1. **Self-calibrating persistence check.** Only treat a reasoning-less
-   tool-call turn as poison when the SAME session proves this route persists
-   reasoning blocks (at least one reasoning block exists anywhere in the
-   derived history). Routes that never surface reasoning blocks (K3-style)
-   then never declare poison; strict routes (K2-style, which persist
-   `reasoning_content`) keep the guard with its original semantics.
-2. **Provenance backstop.** Additionally declare poison when our own decision
-   store proves a step in this session actually ran at `effort: off` with tool
-   calls (manual off picks are recorded, mode `manual`). This covers the
-   all-off-history edge where (1) has no positive persistence evidence.
-3. **Config escape hatch.** A tri-state `poisonRecovery: 'auto' | 'strict' |
-   'off'` (default `auto` = 1+2) lets users on provably non-strict models
-   disable the pin, and users on strict gateways force it.
-4. Compaction already re-derives the flag (the projection-shrink resync in
-   `scanFresh`); keep that behavior — the pin must lift once the offending
-   turn is gone.
+1. `signals` exposes `offShapeHistory` — "a reasoning-less tool-call turn
+   exists in history" (the payload shape a strict API would choke on).
+2. The host pins `off` only when shape is backed by decision-store
+   PROVENANCE: a recorded step in this session with `mode: 'manual'` and
+   `effort: 'off'` (`storeProvenManualOff`). Auto never routes off (rule 4),
+   so only an explicit human off pick can arm the pin; K3-style auto sessions
+   never carry such a record and can never be pinned.
+3. The pin bypasses hysteresis (a 0.2.0 bug routed the pin through
+   `stabilizeEffort`, which held the previous thinking-on tier for `downAfter`
+   steps — sending exactly the request the pin exists to prevent).
+4. The pin still lifts on compaction (the shape flag is re-derived on
+   projection shrink), and a new `poisonRecovery` switch (default on) lets
+   users on provably non-strict routes disable it.
 
-**Open questions before implementation.**
-
-- Confirm on live sessions which routes persist reasoning blocks in
-  `deriveMessages()` (K3: tool-call turns only, or nothing at all?). The
-  heuristic's correctness depends on this measurement, not on documentation.
-- Whether to attempt reactive detection (pin `off` only after observing the
-  API's thinking-mode rejection) as a complement — costs one failed request
-  but removes all guesswork. Probably unnecessary if 1+2 hold.
+**Known residual (accepted, documented in code):** provenance does not tie the
+manual-off STEP to the tool-call MESSAGE (at request time the step's own tool
+calls do not exist yet). A manual off pick whose step made NO tool calls,
+followed by auto routing on a K3-style model, still pins off until compaction
+or manual override. Rare, reversible, and strictly better than the 0.2.0
+false-positive-on-every-K3-tool-loop; refining it needs lazy
+record↔message association and is not currently worth the plumbing.
 
 ## R3 — (done in the 0.2.0 review pass) README badge position
 

@@ -6,6 +6,36 @@ All notable changes to dsh-effort-router are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **`poisonRecovery` switch** (default on, volatile): disables the poisoned-history
+  pin entirely on provably non-strict routes.
+
+### Changed
+
+- **Poison detection is provenance-gated, no longer shape-based.** The 0.2.0
+  rule inferred "thinking was off" from any tool-call assistant turn without a
+  reasoning block — but measured on kimi-K3 @ low (2026-10-10, session
+  eb12fb23), thinking-ON tool steps routinely carry no reasoning block, so the
+  rule false-pinned Auto to `off` after the first K3 tool loop. The pin now
+  requires BOTH the shape suspect (a reasoning-less tool-call turn in history)
+  AND decision-store proof of a manual `off` step in the same session; it
+  still lifts on compaction. Signals expose the shape fact as
+  `offShapeHistory` (was `poisonedHistory`).
+- **The poison pin bypasses hysteresis.** In 0.2.0 the pinned `off` tier went
+  through `stabilizeEffort`, which held the previous thinking-on tier for
+  `downAfter` steps — sending exactly the request the pin exists to prevent.
+
+### Removed
+
+- **Chat-flow tool-call captions** (R1): the per-call `provider/model · effort`
+  annotation surface (`src/client/annotations.ts`, the `conversation.chat.node`
+  slot, `.er-call*` styles, `annotation.default` locale keys), the host-side
+  `effortRouterRoute` session projection (`lib/route-projection.js`), and the
+  `@deepseek-ai/dsh-client-ui-conversation` inject/peer entries. The per-step
+  effort stays on every `request/header` session event for the host's
+  trajectory view; the conversation flow is intentionally annotation-free.
+
 ### Fixed
 
 - `lib/capability.js` carried a literal NUL byte in the cache-key separator
