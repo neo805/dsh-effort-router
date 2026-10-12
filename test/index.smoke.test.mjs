@@ -246,6 +246,78 @@ test('apply: a durable pending pick keeps the concrete level manual', async () =
   assert.ok(!logs.some((m) => m.includes('class ')), 'no scheduling happened for a durable pick')
 })
 
+test('route: sessionId direct, hint resolution, and newest-wins merged order', async () => {
+  const routes = []
+  const webServer = { register: (route) => { routes.push(route); return () => {} } }
+  const KIMI = { provider: 'moonshotai-cn', model: 'kimi-k3', effort: 'low' }
+  const FLASH = { provider: 'deepseek-account', model: 'deepseek-flash', effort: 'max' }
+  const KEY = ['assistant', '1', '1'].join('\0')
+  const perSession = {
+    's-old': { [KEY]: KIMI, call_old: KIMI },
+    's-new': { [KEY]: FLASH, call_new: FLASH },
+  }
+  // list() comes back oldest → newest, matching the live sessions store.
+  const sessions = {
+    list: () => [{ id: 's-old' }, { id: 's-new' }],
+    get: (id) => (perSession[id] ? { id } : undefined),
+  }
+  const sessionProjections = {
+    stateOf: (session) => ({ anchors: perSession[session.id] }),
+    register: () => () => {},
+  }
+  const ctx = {
+    logger: () => ({ info() {}, warn() {} }),
+    get(name) {
+      if (name === 'sessions') return sessions
+      if (name === 'sessionProjections') return sessionProjections
+      throw new Error('no service ' + name)
+    },
+    on() { return () => {} },
+    inject(_services, fn) {
+      const scope = {
+        webServer,
+        sessionProjections,
+        effect: (run) => { try { run() } catch (_ignored) { /* other injects */ } return () => {} },
+      }
+      try { fn(scope) } catch (_ignored) { /* this mock only serves webServer */ }
+      return () => {}
+    },
+  }
+  entry.apply(ctx, entry.Config({}))
+  const route = routes.find((r) => r.path === '/effort-router/state')
+  assert.ok(route, 'state route registered')
+
+  const call = async (query) => {
+    const res = {
+      status: 0,
+      body: '',
+      writeHead(status) { this.status = status },
+      end(text) { this.body = text },
+    }
+    await route.handler({ url: '/effort-router/state' + query }, res)
+    assert.equal(res.status, 200)
+    return JSON.parse(res.body)
+  }
+
+  // Direct: the sessionId table comes back untouched.
+  const direct = await call('?sessionId=s-old')
+  assert.equal(direct.anchorsResolved, 'session')
+  assert.equal(direct.anchors[KEY].model, 'kimi-k3')
+
+  // Hint: one visible tool call id identifies the on-screen session despite
+  // the colliding assistant key — the 0.2.6 wrong-attribution bug.
+  const hinted = await call('?hint=call_old')
+  assert.equal(hinted.anchorsResolved, 'hint')
+  assert.equal(hinted.anchors[KEY].model, 'kimi-k3')
+
+  // Bare merge: the newest session wins colliding assistant keys, unique
+  // tool call keys from every session survive.
+  const merged = await call('')
+  assert.equal(merged.anchorsResolved, 'merged')
+  assert.equal(merged.anchors[KEY].model, 'deepseek-flash')
+  assert.equal(merged.anchors.call_old.model, 'kimi-k3')
+})
+
 test('apply: poison pin needs shape AND store provenance, and bypasses hysteresis', async () => {
   const listeners = new Map()
   const llm = {

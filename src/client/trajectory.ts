@@ -19,9 +19,11 @@
  * idempotent (rows are keyed, captions carry a marker) and degrades to a
  * no-op outside the trajectory tab or when the host route reports
  * trajectoryAnnotate: false. When the shell URL carries no session id the
- * host route answers with a merged anchor table of the most recent sessions
- * (anchor keys are globally unique, so only the on-screen session's rows
- * resolve).
+ * host route answers with a merged anchor table of the most recent sessions;
+ * one visible tool call id travels as `hint` so the host can answer with the
+ * on-screen session's OWN table — assistant anchor keys are per-session
+ * coordinates and collide across sessions, so a bare merged table can
+ * otherwise paint a neighbouring session's capsules (fixed in 0.2.7).
  *
  * 0.2.6 performance rewrite (measured ~300 ms to first full caption paint on
  * a busy ledger, now one animation frame):
@@ -67,6 +69,44 @@ function anchorOf(rowKey: string): string | null {
   const toolPrefix = 'tool\0call\0'
   if (key.startsWith(toolPrefix)) return key.slice(toolPrefix.length)
   return key || null
+}
+
+/**
+ * One tool call id visible on screen. Call ids are globally unique, so the
+ * host resolves the on-screen session's own anchor table from it — assistant
+ * anchor keys (per-session turn/step coordinates) collide across sessions in
+ * the merged fallback and cannot identify the session on their own.
+ */
+function visibleToolCallId(): string | null {
+  if (typeof document === 'undefined') return null
+  const rows = document.querySelectorAll('tr[data-trajectory-row-key]')
+  const toolPrefix = 'tool\0call\0'
+  for (const row of Array.from(rows)) {
+    const raw = (row as HTMLElement).getAttribute('data-trajectory-row-key') || ''
+    let key: string
+    try {
+      key = decodeURIComponent(raw)
+    } catch {
+      continue
+    }
+    if (key.startsWith(toolPrefix)) return key.slice(toolPrefix.length)
+  }
+  return null
+}
+
+/**
+ * Cheap content hash of the anchor table. Count alone cannot tell two
+ * same-sized tables apart — e.g. the hint switching the resolved session —
+ * and a stale table would keep painting the previous session's capsules.
+ */
+function hashAnchors(table: AnchorsState['anchors']): number {
+  let h = 5381
+  for (const key of Object.keys(table).sort()) {
+    const a = table[key]
+    const s = key + '|' + (a && a.provider) + '|' + (a && a.model) + '|' + (a && a.effort)
+    for (let i = 0; i < s.length; i += 1) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  }
+  return h
 }
 
 export function startTrajectoryDecorator(): () => void {
@@ -191,11 +231,19 @@ export function startTrajectoryDecorator(): () => void {
     if (stopped) return
     sessionId = currentSessionId()
     // Even without a session id in the URL we still poll: the host route then
-    // answers with a merged anchor table of the most recent sessions (anchor
-    // keys are globally unique, so only rows of the on-screen session match).
+    // answers with a merged anchor table of the most recent sessions. One
+    // visible tool call id goes along as `hint` — assistant anchor keys
+    // collide across sessions, and the hint lets the host answer with the
+    // on-screen session's own table instead.
     if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
       try {
-        const query = sessionId ? '?sessionId=' + encodeURIComponent(sessionId) : ''
+        const params = new URLSearchParams()
+        if (sessionId) params.set('sessionId', sessionId)
+        else {
+          const hint = visibleToolCallId()
+          if (hint) params.set('hint', hint)
+        }
+        const query = params.toString() ? '?' + params.toString() : ''
         const response = await fetch('/effort-router/state' + query, {
           cache: 'no-store',
         })
@@ -206,7 +254,7 @@ export function startTrajectoryDecorator(): () => void {
               enabled: json.trajectoryAnnotate === true,
               anchors: json.anchors && typeof json.anchors === 'object' ? json.anchors : {},
             }
-            const nextFingerprint = String(next.enabled) + ':' + Object.keys(next.anchors).length
+            const nextFingerprint = String(next.enabled) + ':' + String(hashAnchors(next.anchors))
             const changed = nextFingerprint !== fingerprint
             fingerprint = nextFingerprint
             anchors = next

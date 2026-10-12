@@ -4,6 +4,25 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.1] - 2026-10-13
+
+### Fixed
+
+- **Trajectory capsules could attribute the wrong session in merged mode.**
+  Assistant anchor keys are per-session `turn/step` coordinates and collide
+  across sessions; when the shell URL carries no session id, the merged
+  fallback let `Object.assign` decide whose capsule painted a colliding row —
+  a deepseek-flash session showed the capsules of an unrelated kimi-k3
+  session (masked until 0.2.7-rc.1 by single-model usage: every colliding
+  table said the same model). The client now sends one visible tool call id
+  as a `hint` — call ids are globally unique — and the route answers with the
+  owning session's own table (`anchorsResolved: "hint"` in the state payload);
+  without a hint the merge runs oldest → newest so the most recently active
+  session wins collisions. Resolution logic lives in the pure, unit-tested
+  `lib/anchors-resolve.js`. The client anchor-table fingerprint is now a
+  content hash, so a same-sized table swap (session switch) triggers a full
+  re-decoration instead of keeping the previous session's capsules.
+
 ## [0.2.6] - 2026-10-13
 
 Lands the 2026-10-09 dictionary & parameter audit
