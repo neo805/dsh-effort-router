@@ -4,6 +4,20 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.5-rc.1] - 2026-10-12
+
+### Fixed
+
+- **Assistant-row capsules never resolved (root cause of "no capsules at
+  all").** The host anchor projection keyed assistant steps by `message.id`,
+  but the trajectory view keys its assistant cells `assistant\0<turn>\0<step>`
+  (trajectoryRecordId) — message rows never matched, which is why 0.2.4
+  showed capsules only on tool rows and 0.2.5 (assistant-rows-only) showed
+  none. The projection now keys message anchors by `assistant\0turn\0step`
+  from the event's validated integer `data.turn`/`data.step`, falling back to
+  `message.id` only for replayed logs that predate the validator; projection
+  stateVersion bumped to 2.
+
 ## [0.2.5] - 2026-10-12
 
 ### Fixed

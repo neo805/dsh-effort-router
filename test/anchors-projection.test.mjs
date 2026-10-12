@@ -10,19 +10,29 @@ const header = (provider, model, effort) => ({
   data: { header: { config: { provider, model, reasoningEffort: effort } } },
 })
 const call = (callId) => ({ type: 'tool/call', data: { callId } })
-const message = (id) => ({ type: 'assistant/message', data: { message: { id, role: 'assistant', content: [] } } })
+const message = (id, turn, step) => ({ type: 'assistant/message', data: { message: { id, role: 'assistant', content: [] }, turn, step } })
 
 test('anchors fold the header in force at each call/message event', () => {
   let state = projection.init()
   state = projection.apply(state, header('moonshotai-cn', 'kimi-k3', 'low'))
   state = projection.apply(state, call('call_1'))
-  state = projection.apply(state, message('msg-1'))
+  state = projection.apply(state, message('msg-1', 3, 1))
   state = projection.apply(state, header('moonshotai-cn', 'kimi-k3', 'high'))
   state = projection.apply(state, call('call_2'))
   assert.deepEqual(state.anchors.call_1, { provider: 'moonshotai-cn', model: 'kimi-k3', effort: 'low' })
-  assert.deepEqual(state.anchors['msg-1'], { provider: 'moonshotai-cn', model: 'kimi-k3', effort: 'low' })
+  // message anchors key by 'assistant\0turn\0step' (the trajectory row key),
+  // not by the message id.
+  assert.deepEqual(state.anchors[['assistant', '3', '1'].join('\0')], { provider: 'moonshotai-cn', model: 'kimi-k3', effort: 'low' })
+  assert.equal(state.anchors['msg-1'], undefined)
   assert.deepEqual(state.anchors.call_2, { provider: 'moonshotai-cn', model: 'kimi-k3', effort: 'high' })
   assert.deepEqual(projection.wire.view(state), { anchors: state.anchors })
+})
+
+test('a message event without turn/step falls back to the message id', () => {
+  let state = projection.init()
+  state = projection.apply(state, header('p', 'm', 'low'))
+  state = projection.apply(state, { type: 'assistant/message', data: { message: { id: 'msg-legacy', role: 'assistant', content: [] } } })
+  assert.ok(state.anchors['msg-legacy'], 'legacy logs keep the message-id anchor')
 })
 
 test('events before any header, duplicate anchors, and unchanged headers are no-ops', () => {
