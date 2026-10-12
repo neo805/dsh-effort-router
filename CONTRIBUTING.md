@@ -8,3 +8,7 @@ and evolve your own copy — that is the intended collaboration channel.
 **中文：** 本仓库不接受外部贡献：Issues 已关闭，Pull Requests 不会被审阅或合并。
 这是出品人的个人业余项目，公开仅为分享。欢迎在 MIT 许可下 fork 并自行演进——
 这正是本仓库预期的协作方式。
+
+本项目在「维护者 + AI 协作者」的结对模式下开发，双方的协作约定见
+[COLLABORATION.md](COLLABORATION.md)（版本号治理、push 授权、实证优先、
+追根因、交付清单、已知残留公示、隐私边界）。
