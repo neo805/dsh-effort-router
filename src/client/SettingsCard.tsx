@@ -410,7 +410,7 @@ export function SettingsCard(props: { scope: any; piAiScope: any; t: (key: strin
         <summary>{t('card.advanced')}</summary>
         <NumberRow label={t('card.downAfter')} value={Number(value.downAfter ?? 2)} min={1} max={5}
           disabled={readonly} onChange={(v) => set('downAfter', v)} />
-        <NumberRow label={t('card.escalateOnErrors')} value={Number(value.escalateOnErrors ?? 2)} min={1} max={10}
+        <NumberRow label={t('card.escalateOnErrors')} value={Number(value.escalateOnErrors ?? 1)} min={1} max={10}
           disabled={readonly} onChange={(v) => set('escalateOnErrors', v)} />
         <NumberRow label={t('card.escalateOnRepeats')} value={Number(value.escalateOnRepeats ?? 3)} min={2} max={10}
           disabled={readonly} onChange={(v) => set('escalateOnRepeats', v)} />

@@ -4,6 +4,68 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.6] - 2026-10-13
+
+Lands the 2026-10-09 dictionary & parameter audit
+(`docs/ops/2026-10-09-词典与参数统计审计建议报告.md` + the T6 dictionary
+recommendations that supersede its §6; six-harness, 200k-event corpus) and a
+trajectory-rendering performance pass.
+
+### Fixed
+
+- **Tool evidence channel was blind on DSH v4 sessions (audit R1, P0).** The
+  collector folded tool results only out of v0/v3 user-role messages carrying
+  `tool-result` blocks; current DSH derives them as first-class
+  `role: "tool"` messages (message-level `isError`, plain text blocks), so
+  the sliding window's error and volume counters stayed at 0 and
+  `escalateOnErrors` / the volume ladders never fired. `scanFresh` gained the
+  v4 branch, with a new message-level `toolErrorOfMessage` (the block-level
+  `toolErrorsOf` stays for replayed pre-v4 logs; the two shapes are mutually
+  exclusive per session in the corpus and the watermark scans each message
+  once, so no dedupe table is kept).
+- **Trajectory capsules painted ~300 ms late.** The decorator debounced every
+  mutation by 250 ms and then re-scanned the whole ledger with a per-row
+  `querySelector`. Decoration is now incremental (observer collects only
+  added rows) on the next animation frame, with per-row anchor ids and
+  caption elements cached in WeakMaps; full re-registration happens only when
+  the anchor table actually changes (fingerprint) plus a slow safety sweep,
+  and rows leaving the ledger are dropped from the tracking sets.
+
+### Changed
+
+- **Error-text markers rebuilt (audit R2).** The single 0.2.x regex became
+  four focused patterns — `[exit code: N]` (N≥1), a bare `Exit code: N` line,
+  line-anchored English markers (Traceback/Errors:/Exception/FATAL/…), and
+  CJK markers (错误/失败/异常/报错) that now require a following colon, digit,
+  or end-of-line, so prose like "没有错误" no longer counts. A CJK-only hit on
+  output that itself reports a zero exit code is demoted (not a failure).
+- **`escalateOnErrors` default 2 → 1 (audit R4.1).** The first tool error
+  already lifts the class one step; the second error reaches the +2 cap via
+  the existing `onErrors*2` rung. (Settings card fallback display aligned.)
+- **`trivialTokenCap` 60 → 200 (audit R4.4).** Real trivial-paste briefs
+  cluster at 80–160 tokens; the 60 cap pushed them to standard.
+- **Dictionaries to the T6 final lists (audit R3; counts verified):
+  strong 97 / normal 29 / cheap 21 / wish 21.** `依赖`/`api`/`异常` migrate
+  strong → normal (both signals leaned light); `一句话`/`define`/`是什么`
+  migrate cheap → normal (heavy association conflicts with the trivial
+  privilege); `计划`/`搜索`/`评估`/`环境`/`开发`/`负责` added to strong;
+  `return only`/`bullet points` added to cheap. `wish` unchanged. The audit's
+  own `解析` demotion (v2.3-R3) was revoked by T6 and is NOT applied.
+- **Repeat-detection keys are order-stable (audit R4.6).** Tool-call argument
+  JSON is canonicalized with sorted keys (`stableStringify`), so identical
+  arguments emitted in a different key order still count as repeats;
+  unparsable argument strings keep their raw spelling.
+
+### Added
+
+- **Decision-log observation fields (audit §10.3).** Scheduled decisions now
+  record the actual `briefTokens` / `toolVolume`, the window counters
+  `windowErrors` / `windowRepeats`, the frugal trigger (`frugal` /
+  `frugalWhy`), and a new trailing-identical-tool-run signal
+  `consecSameTool` — observation only, so the next audit cycle can judge
+  whether "stuck on one tool" deserves its own escalation. Nothing here feeds
+  back into decisions.
+
 ## [0.2.5-rc.1] - 2026-10-12
 
 ### Fixed

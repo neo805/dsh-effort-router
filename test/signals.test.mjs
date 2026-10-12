@@ -60,22 +60,30 @@ test('tool evidence folds into the window and escalates on errors', () => {
   // step 1: no errors yet
   let sig = signals.collect(agent, { turn: 1, step: 1 })
   assert.equal(sig.escalations, 0)
-  // the session gains two failed tool results
+  // one failed tool result: the FIRST error already lifts (0.2.6, audit R4.1)
   agent.session.messages = [
     assistantCall('read', '{"p":"a"}'),
     toolResult('[exit code: 1] boom'),
-    assistantCall('read', '{"p":"b"}'),
-    toolResult('[exit code: 2] boom again'),
   ]
   agent.session.deriveMessages = () => agent.session.messages
   sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.toolCalls, 1)
+  assert.equal(sig.taskErrors, 1)
+  assert.equal(sig.escalations, 1) // >= escalateOnErrors(1) -> 1
+  assert.ok(sig.toolVolume > 0, 'tool-result volume is tracked')
+  // a second failure reaches the +2 rung (errors >= onErrors*2)
+  agent.session.messages = [
+    ...agent.session.messages,
+    assistantCall('read', '{"p":"b"}'),
+    toolResult('[exit code: 2] boom again'),
+  ]
+  sig = signals.collect(agent, { turn: 1, step: 3 })
   assert.equal(sig.toolCalls, 2)
   assert.equal(sig.taskErrors, 2)
-  assert.equal(sig.escalations, 1) // >= escalateOnErrors(2) -> 1
-  assert.ok(sig.toolVolume > 0, 'tool-result volume is tracked')
-  // and the schedule reflects it: standard +1 -> engineering -> high
+  assert.equal(sig.escalations, 2)
+  // and the schedule reflects it: standard +2 -> hard -> max
   const d = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(d.stepClass, 'engineering')
+  assert.equal(d.stepClass, 'hard')
 })
 
 test('repeated identical tool calls escalate', () => {
@@ -112,7 +120,7 @@ test('the sliding window ages old evidence out', () => {
   const sig = signals.collect(agent, { turn: 1, step: 4 })
   assert.equal(sig.toolCalls, 2, 'only the last 2 buckets count their calls')
   assert.equal(sig.taskErrors, 1, 'the oldest error aged out of the window')
-  assert.equal(sig.escalations, 0)
+  assert.equal(sig.escalations, 1, 'the surviving single error still lifts (0.2.6, audit R4.1)')
 })
 
 test('a new claim retires the evidence of the previous task', () => {
@@ -221,4 +229,74 @@ test('delegationDepth from the session header marks subagents frugal', () => {
   assert.equal(sig.delegationDepth, 1)
   assert.equal(sig.frugal, true)
   assert.equal(sig.frugalWhy, 'subagent')
+})
+
+/** DSH v4 shape: first-class role:"tool" message (verified against the host's own construction). */
+const v4ToolResult = (text, isError = false, callId = 'c1') => ({
+  role: 'tool',
+  toolCallId: callId,
+  isError,
+  source: { kind: 'tool', callId },
+  content: [{ type: 'text', text }],
+})
+
+test('v4 tool channel: message-level isError folds into the window (audit R1)', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('看看这些文件'), turn: 1 })
+  agent.session.deriveMessages = () => [
+    assistantCall('read', '{"p":"a"}'),
+    v4ToolResult('Error: boom', true, 'c1'),
+  ]
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.toolCalls, 1)
+  assert.equal(sig.taskErrors, 1, 'v4 message-level isError counts')
+  assert.equal(sig.escalations, 1, 'the v4 error reaches escalateOnErrors(1)')
+  assert.ok(sig.toolVolume > 0, 'v4 text blocks count toward result volume')
+})
+
+test('v4 tool channel: exit-code text counts without the flag; clean results do not', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('跑一下'), turn: 1 })
+  agent.session.deriveMessages = () => [
+    assistantCall('pwsh', '{"command":"a"}'),
+    v4ToolResult('done\n[exit code: 1]', false, 'c1'), // flag false but text reports failure
+    assistantCall('pwsh', '{"command":"b"}'),
+    v4ToolResult('all good', false, 'c2'), // no marker at all
+  ]
+  const sig = signals.collect(agent, { turn: 1, step: 3 })
+  assert.equal(sig.toolCalls, 2)
+  assert.equal(sig.taskErrors, 1, 'only the exit-code result counts')
+})
+
+test('mixed v4 + v0/v3 history folds each result exactly once', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('看看'), turn: 1 })
+  agent.session.deriveMessages = () => [
+    assistantCall('read', '{"p":"a"}'),
+    v4ToolResult('Error: boom', true, 'c1'), // v4
+    assistantCall('read', '{"p":"b"}'),
+    toolResult('[exit code: 1] bam', false), // v0/v3 wrapper
+  ]
+  const sig = signals.collect(agent, { turn: 1, step: 3 })
+  assert.equal(sig.toolCalls, 2)
+  assert.equal(sig.taskErrors, 2, 'one error per result, no double counting')
+})
+
+test('consecSameTool observes the trailing identical-tool run (no decision use)', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('检查'), turn: 1 })
+  agent.session.deriveMessages = () => [
+    assistantCall('read', '{"p":"a"}'),
+    v4ToolResult('ok', false, 'c1'),
+    assistantCall('read', '{"p":"b"}'),
+    v4ToolResult('ok', false, 'c2'),
+    assistantCall('pwsh', '{"command":"x"}'),
+    v4ToolResult('ok', false, 'c3'),
+  ]
+  const sig = signals.collect(agent, { turn: 1, step: 4 })
+  assert.equal(sig.consecSameTool, 1, 'last call was pwsh, breaking the read run')
 })
