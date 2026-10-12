@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+**当前版本：** `0.2.5-rc.1` · [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
+
 DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考档位（reasoning effort）**，并让手写声明的 `llm-pi-ai` 自定义模型也能选档位。
 
 - 任务形态分类：`trivial / standard / engineering / hard`，由任务书本身决定，而不是工具数量

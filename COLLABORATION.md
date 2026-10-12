@@ -28,6 +28,9 @@ It intentionally contains no personal or machine‑specific information.
   不是进度条的装饰。
 - 每次版本变更**必须**同步写 `CHANGELOG.md`（遵循 [Keep a Changelog]：
   `Added / Changed / Fixed / Removed`，同版本内只记对外可见的行为变化）。
+- **README 首屏必须标注当前版本号**，并在版本变更时同步更新：`README.md` 与
+  `README.zh.md` 两版都要有，且与实际发布的版本号一致。读者应当从 README 就能
+  知道自己在用哪个版本、去哪个文件看变更。
 - 版本号写在 `package.json` 的 `version`；`engines.dsh` 与 `peerDependencies`
   的区间必须能覆盖维护者当前运行的 dsh 版本。
 
