@@ -105,3 +105,31 @@ record↔message association and is not currently worth the plumbing.
 The READMEs said the composer badge sits right of the model selector; it
 actually sits left. Doc-only fix, applied to `README.md` and `README.zh.md`
 in the 0.2.0 review pass.
+
+## R5 — Subagent sessions never reach the auto scheduler (candidate, observed 2026-10-13)
+
+**Observation (evidence).** A subagent spawned for a controlled experiment
+(session `daebe1cc`, 3 steps) recorded `mode: 'manual', effort: 'max'` on
+every step: subagent requests arrive carrying the parent's RESOLVED effort as
+a concrete seed, and the echo guard cannot reclassify it — a fresh subagent
+session has no decision-store history, so `isSelectionEcho` stays false and
+the inherited level is indistinguishable from a human pick. Consequence:
+`subagentPreferCheap` / `subagentEffort` never fire on the current host;
+frugal demotion is dead code in practice. Fixing it needs host-side
+delegation provenance (e.g. an explicit marker on subagent seeds) or a
+plugin-side heuristic we have explicitly avoided so far (provenance over
+inference). Parked until the maintainer weighs in on whether subagents
+SHOULD be auto-routed at all.
+
+## R6 — Evidence-window pollution after a host restart (candidate, observed 2026-10-13)
+
+**Observation (evidence).** After a DSH restart, the in-memory per-agent
+signal state is empty; the first collect of a resumed session replays the
+whole projection from watermark 0, folding historical tool errors into the
+sliding window. A resumed session's first steps therefore carry stale
+escalations (measured: `windowErrors=5 → escalated on evidence x2` on the
+first post-restart steps of session `53eaf0fb`, all from pre-restart
+failures). The window ages out after 32 new buckets, so the blast radius is
+the first few steps of a resumed session. Options: persist the watermark
+with the decision store, or stamp evidence with wall-clock age and discount
+old buckets. Not urgent — the lift is capped and self-heals.
