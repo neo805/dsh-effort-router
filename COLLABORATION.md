@@ -1,18 +1,19 @@
 # 人机协作规范 / Human–AI Collaboration Norms
 
 > 本文件记录本项目的**维护者**（人类决策者）与 **AI 协作者**（在 DSH 中工作的编码
-> agent）在 Vibe Coding 模式下共同约定的协作规范。它由 0.2.x「轨迹提级」开发周期的
-> 实际摩擦与复盘凝结而成，是**双向约定**，不是单方面的流程说明书。
+> agent）在 Vibe Coding 模式下共同约定的协作规范。它是**双向约定**：双方都按它执行，
+> 不是单方面的流程说明书。
 >
-> 约定一旦写在这里，双方都按它执行；要改，先改这份文件。
+> 要改规范，先改这份文件。
 
 **English abstract.** This repository is developed in a human–AI pair‑programming
 ("vibe coding") mode. This document states the norms **both** sides follow:
 restrained versioning (rc‑level for fixes, maintainer approval for real version
 bumps), explicit permission before `git push`, evidence‑over‑assertion reporting,
-root‑cause‑first debugging, a fixed delivery checklist, and public disclosure of
-accepted residue. It intentionally contains no personal or machine‑specific
-information.
+root‑cause‑first debugging, skill‑guided plugin development, `dsh-plugin-check`
+as one necessary‑but‑not‑sufficient acceptance step, a fixed delivery checklist,
+public disclosure of accepted residue, and privacy boundaries for committed docs.
+It intentionally contains no personal or machine‑specific information.
 
 ---
 
@@ -22,10 +23,9 @@ information.
 |---|---|
 | 修 bug、调参数、改 UI 细节 | **不动基数位**，只在既有版本后递增 `-rc.N`（如 `0.2.5-rc.1`） |
 | 需要变更 `major.minor.patch` 基数位 | **必须先报维护者审批**，批准后才动 |
-| 已经把版本号加上去了 | **不追改**。既往不咎，从下一次开始按本规范执行 |
 
-- **要谦虚。** 一串 bug 修复不值得一个 patch 号；"从 0.2.2 到 0.2.5 只是修 bug，
-  连 0.0.1 都不该加"。版本号是给使用者的承诺，不是进度条的装饰。
+- **要谦虚。** 一串 bug 修复不值得一个 patch 号；版本号是给使用者的承诺，
+  不是进度条的装饰。
 - 每次版本变更**必须**同步写 `CHANGELOG.md`（遵循 [Keep a Changelog]：
   `Added / Changed / Fixed / Removed`，同版本内只记对外可见的行为变化）。
 - 版本号写在 `package.json` 的 `version`；`engines.dsh` 与 `peerDependencies`
@@ -51,25 +51,18 @@ information.
   - 功能可用 → 测试实际通过数（本项目基线 **77/77**）；
   - 安装成功 → **构建产物与已安装文件的哈希逐一比对**，而不是"拷过去了"；
   - 接口可用 → 实际请求一次并把响应读出来。
-- **不确定就说不确定**；失败要如实、完整地报告，包括失败的原始错误文本。
-  例：`node --test` 裸跑报 `SyntaxError: Octal escape sequences are not allowed
-  in strict mode`，定位到是测试里 `'\03'` 的写法问题，修正为 `join('\0')`，
-  而不是绕过或改断言。
+- **不确定就说不确定**；失败要如实、完整地报告，包括失败的原始错误文本，
+  不绕过、不改断言去迎合结果。
 - 报告结论时**带上数值与路径**（版本号、提交号、通过数、文件、哈希），
   让维护者能独立复核。
 
 ## 4. 追根因，不打补丁
 
 - 症状出现时，**逐层定位到机制层的根因再修**，不用"看着像好了"的绕过。
+- 定位到哪一层，就在那一层修：如果根因在数据构造/投影层，就不要在渲染/选择器层打补丁。
 - 每次排查都问：这是**什么时候开始错的**？如果答案是"从第一天就错"，
   那要修的是最初的设计，而不是最近一次改动。
 - 排查过程要产出**结论**（试过什么、为什么不行），避免重复走同一条死路。
-
-**范例（0.2.5-rc.1 的锚点键修复）**：轨迹胶囊一直不显示。表面症状在客户端 DOM
-装饰层，但逐层排查后发现路由正常、投影正常、DOM 行结构也正常——真正的原因是
-**宿主锚点投影用 `message.id` 做键，而轨迹视图的助手行键是
-`assistant\0<turn>\0<step>`**，两侧从未对齐。修复因此落在投影的键构造上，
-而不是客户端的选择器上。
 
 ## 5. 人机分工与验收闭环
 
@@ -85,30 +78,56 @@ information.
 - 维护者反馈问题时，AI 先**复现并定位**，再动手改；一轮只解决被指出的问题，
   同时报告是否顺带暴露了别的问题。
 
-## 6. 交付清单（每次改动都走完）
+## 6. 开发依据与验收工具
+
+**开发依据：按技能指导进行。** 本项目的插件开发遵循技能
+`cordis-plugin-development`（由 `dsh-plugin-skills` 技能面板管理与调用）。
+
+- 技能正文与随附材料：
+  `@deepseek-ai/dsh-agent-preset/skills/cordis-plugin-development/`，
+  内含 `SKILL.md`、`references/`（host-plugin、ui-plugin、practices、
+  user-actions、verification、mcp-bundle）与 `templates/`（decoration、mcp 等骨架）。
+- 开工前先读技能与对应 reference，再决定扩展点；**不要凭记忆写 API**，
+  用 `cordis_inspect_query` 读实际契约。
+- 技能未出现在当前会话的技能目录时，直接按上述包路径读取原文，不要跳过。
+- 设计与评审类任务**只报告结论**：不改文件、不装 bundle、不动 profile 状态。
+
+**验收工具：`dsh-plugin-check`（必要非充分）。** 每次交付用 `plugin_check`
+自查，并明确它的边界：
+
+- 它检查五类打包问题：`patch-shipped`（声明了 cordis.patch.yml 却未随包发布）、
+  `rows-resolvable`（patch 行引用了安装时无法解析的名字）、
+  `client-half-shipped`（声明了浏览器端却缺 half）、`prebuilt`（只发源码，
+  安装时会在使用者机器上跑构建）、stale range（dsh 依赖区间排除了当前版本）。
+- 它**只读打包元数据、不读代码**：没有报告 ≠ 插件安全或可用。因此它是
+  **必要而非充分的验收环节之一**——通过它不代表验收完成，仍须走 §7 的构建、
+  测试、哈希比对，以及维护者的实机验收（§5）。
+- 未发布到注册表的包只会得到 `not found in the registry`；此时按上述五类
+  在本地逐项复核 tarball（`tar -tzf` 看实装文件、比对 `package.json` 声明）。
+
+## 7. 交付清单（每次改动都走完）
 
 1. `pnpm build` —— 重建客户端 bundle（`build-client.mjs` → `lib/client.js`）。
 2. `node --test "test/*.test.mjs"` —— 全绿；**用显式 glob**，不要依赖目录参数。
 3. 按 §1 调整版本号；同步更新 `CHANGELOG.md`。
-4. `pnpm pack` —— 出 tarball。
-5. 安装到**所有相关 profile**（桌面端与 Web 端都要），安装前备份 profile 的
+4. 用 `dsh-plugin-check` 自查打包元数据（§6）。
+5. `pnpm pack` —— 出 tarball。
+6. 安装到**所有相关 profile**（桌面端与 Web 端都要），安装前备份 profile 的
    `package.json` 并记录备份戳。
-6. **逐文件哈希比对**：构建产物 vs `$DSH_HOME/profiles/<profile>/node_modules/<plugin>`
+7. **逐文件哈希比对**：构建产物 vs `$DSH_HOME/profiles/<profile>/node_modules/<plugin>`
    下实际安装的文件，全部一致才算装成功。
-7. `git add -A && git commit` —— 提交信息说明**改了什么、为什么**（可带版本号）。
-8. 向维护者报告：本次结论、证据（数值/哈希/提交号）、实机验证步骤、已知残留。
-9. push —— 等维护者批准（§2）。
+8. `git add -A && git commit` —— 提交信息说明**改了什么、为什么**（可带版本号）。
+9. 向维护者报告：本次结论、证据（数值/哈希/提交号）、实机验证步骤、已知残留。
+10. push —— 等维护者批准（§2）。
 
-## 7. 已知残留必须公示
+## 8. 已知残留必须公示
 
 - 无法立即解决、或经权衡后**有意接受**的问题，写入 `ROADMAP.md`，
-  标明现象、影响范围与缓解手段，**不得静默丢弃**。
-- 例：R2 的毒化钉死修复留下一个已接受残留——manual-off（无工具调用）叠加特定模型
-  形态时，仍可能钉到 compaction 才释放，已在 ROADMAP 中登记。
+  标明现象、影响范围与缓解手段，**不得静默丢弃**；具体条目以 `ROADMAP.md` 为准。
 - 上游问题与本项目问题要分开定性；确认属上游的，记录结论与证据后结案，
   不要挂在本项目的待办里冒充未完成工作。
 
-## 8. 文档与隐私
+## 9. 文档与隐私
 
 - **面向维护者的报告用中文**；仓库文档遵循既有双语习惯
   （`README.md` / `README.zh.md` / `CONTRIBUTING.md` 均中英并存）。
@@ -120,7 +139,7 @@ information.
   日志与研究草稿）。因此**需要公开追踪的文档放在仓库根目录**，不要放进 `docs/`。
 - 提交前自检：这份文档如果被陌生人看到，会不会暴露维护者的个人信息或本机结构？
 
-## 9. 沟通约定
+## 10. 沟通约定
 
 - **结论先行**：先说结论与影响，再说依据与细节。
 - **数值说话**：版本、提交号、通过数、哈希、耗时，能量化就量化。
