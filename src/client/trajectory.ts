@@ -12,18 +12,33 @@
  *   - message rows:   encodeURIComponent(<assistant message id>)
  *
  * Assistant message rows (data-kind="message") that resolve to an anchor
- * gain a compact caption `provider/model · effort` inline at the start of
- * the row's text — visually right next to the row's kind chip (the purple
- * 助手 badge) — and the row's own text shifts right to make room; tool rows
- * and rows that resolve to nothing stay untouched. Everything is
- * idempotent (rows are keyed, captions carry a marker) and degrades to a
- * no-op outside the trajectory tab or when the host route reports
- * trajectoryAnnotate: false. When the shell URL carries no session id the
- * host route answers with a merged anchor table of the most recent sessions;
- * one visible tool call id travels as `hint` so the host can answer with the
- * on-screen session's OWN table — assistant anchor keys are per-session
- * coordinates and collide across sessions, so a bare merged table can
- * otherwise paint a neighbouring session's capsules (fixed in 0.2.7).
+ * gain a compact caption. Placement (0.2.7-rc.2 redesign): the caption rides
+ * the row's NATIVE request-boundary dot (td.event >
+ * button[data-request-run-index] — the "请求 #N" control that opens the
+ * request summary) as a tiny 9px chip straddling the row boundary right of
+ * the dot, showing `#N · provider/model · effort` with no hover or click
+ * needed; clicking the chip forwards to the dot so the native request
+ * summary still opens. The dot's per-row stacking offset
+ * (--request-boundary-offset) is mirrored onto the chip. Rows whose step
+ * renders no dot (collapsed sections, request-only shells) fall back to the
+ * previous inline caption at the start of the row's text. Tool rows and rows
+ * that resolve to nothing stay untouched. Everything is idempotent (rows are
+ * keyed, captions carry a marker) and degrades to a no-op outside the
+ * trajectory tab or when the host route reports trajectoryAnnotate: false.
+ * When the shell URL carries no session id the host route answers with a
+ * merged anchor table of the most recent sessions; one visible tool call id
+ * travels as `hint` so the host can answer with the on-screen session's OWN
+ * table — assistant anchor keys are per-session coordinates and collide
+ * across sessions, so a bare merged table can otherwise paint a neighbouring
+ * session's capsules (fixed in 0.2.7).
+ *
+ * Session-switch staleness: row keys collide across sessions, and React
+ * REUSES a row element when the next session renders a row with the same
+ * key, so for up to one poll interval the reused rows could show the
+ * previous session's captions. The observer re-reads the route on every
+ * mutation batch; a session change clears every caption and blanks the
+ * cached table synchronously, so rows go bare (never wrong) until the next
+ * poll paints the current session's chips.
  *
  * 0.2.6 performance rewrite (measured ~300 ms to first full caption paint on
  * a busy ledger, now one animation frame):
@@ -147,43 +162,101 @@ export function startTrajectoryDecorator(): () => void {
     return id
   }
 
-  // Mount: INSIDE the content cell's text container (td.content >
-  // span.contentText — display:block holding inline spans). Inserting before
-  // that block container puts the caption on its own line ABOVE the row
-  // text; inserting INTO it keeps the caption on the same line, visually
-  // right of the 【助手】 badge, pushing the row's own text right.
-  const mountCaption = (tr: HTMLElement, caption: HTMLElement) => {
+  // Inline fallback mount: INSIDE the content cell's text container
+  // (td.content > span.contentText — display:block holding inline spans).
+  // Inserting before that block container puts the caption on its own line
+  // ABOVE the row text; inserting INTO it keeps the caption on the same
+  // line, visually right of the 【助手】 badge, pushing the row's own text
+  // right.
+  const mountInline = (tr: HTMLElement, caption: HTMLElement) => {
     const cell = tr.querySelector('td:last-child')
     const target = (cell && cell.firstElementChild) ?? cell ?? tr
     target.insertAdjacentElement('afterbegin', caption)
   }
 
+  /** The row's native request-boundary dot ("请求 #N"), if this row starts
+   * its request group. Lives in the left event cell (the first td). */
+  const requestDotOf = (tr: HTMLElement): HTMLElement | null => {
+    const cell = tr.querySelector('td:first-child')
+    const dot = cell ? cell.querySelector('button[data-request-run-index]') : null
+    return dot === null ? null : (dot as HTMLElement)
+  }
+
+  /** Request number out of the dot's label ("请求 #42" / "Request #42"). */
+  const requestNumberOf = (dot: HTMLElement): string => {
+    const label = dot.getAttribute('data-label') || dot.getAttribute('aria-label') || ''
+    const match = /#(\d+)/.exec(label)
+    return match ? match[1] : ''
+  }
+
+  // Boundary mount: a tiny chip absolutely positioned inside the event cell
+  // (overflow:visible) right of the dot, straddling the row boundary. The
+  // dot's own stacking offset is mirrored so stacked dots shift the chip
+  // too. Clicking the chip forwards to the dot — the native request summary
+  // opens without a second control to learn.
+  const mountBoundary = (tr: HTMLElement, caption: HTMLElement, dot: HTMLElement) => {
+    const offset = dot.style.getPropertyValue('--request-boundary-offset') || '0px'
+    const left = 'calc(30px + ' + offset + ')'
+    if (caption.style.left !== left) caption.style.left = left
+    const cell = tr.querySelector('td:first-child')
+    if (cell && caption.parentElement !== cell) cell.appendChild(caption)
+  }
+
   const decorateRow = (tr: HTMLElement) => {
+    // React may strip our foreign caption when it re-renders the cell that
+    // hosts it; a cached-but-disconnected caption must force a full
+    // re-create, or the DONE marker below would suppress the re-mount.
+    const existing = captions.get(tr)
+    if (existing && !existing.isConnected) {
+      captions.delete(tr)
+      tr.removeAttribute(DONE_ATTR)
+    }
     // Only assistant message rows carry the caption: tool rows are already
-    // attributed to the step that produced them, and the badge belongs next
-    // to the purple 【助手】 chip.
+    // attributed to the step that produced them, and the chip belongs to the
+    // request that produced the assistant step.
     const isAssistantRow = (tr.getAttribute('data-kind') || '') === 'message'
     const anchorId = isAssistantRow ? anchorIdOf(tr) : null
     const anchor = anchorId !== null && anchors.enabled ? anchors.anchors[anchorId] : undefined
     const label = anchor ? labelOf(anchor) : ''
-    if (tr.getAttribute(DONE_ATTR) !== label) {
-      tr.setAttribute(DONE_ATTR, label)
+    const dot = label && isAssistantRow ? requestDotOf(tr) : null
+    const placement = label ? (dot !== null ? 'b' : 'i') : ''
+    const requestNo = dot !== null ? requestNumberOf(dot) : ''
+    const text = placement === 'b' && requestNo !== '' ? '#' + requestNo + ' · ' + label : label
+    const doneValue = placement + '|' + requestNo + '|' + label
+    if (tr.getAttribute(DONE_ATTR) !== doneValue) {
+      tr.setAttribute(DONE_ATTR, doneValue)
       let caption = captions.get(tr)
-      if (!label) {
+      if (!placement) {
         if (caption) {
           caption.remove()
           captions.delete(tr)
         }
       } else {
+        if (caption && caption.getAttribute('data-er-trj-place') !== placement) {
+          caption.remove()
+          captions.delete(tr)
+          caption = undefined
+        }
         if (!caption) {
           caption = document.createElement('span')
           caption.setAttribute(CAPTION_ATTR, '')
-          caption.setAttribute('class', 'er-trj')
+          caption.setAttribute('data-er-trj-place', placement)
           captions.set(tr, caption)
-          mountCaption(tr, caption)
+          if (placement === 'b') {
+            caption.setAttribute('class', 'er-trj-boundary')
+            caption.addEventListener('click', (event) => {
+              event.stopPropagation()
+              const target = requestDotOf(tr)
+              if (target) target.click()
+            })
+          } else {
+            caption.setAttribute('class', 'er-trj')
+          }
         }
-        caption.setAttribute('title', label)
-        if (caption.textContent !== label) caption.textContent = label
+        if (placement === 'b' && dot !== null) mountBoundary(tr, caption, dot)
+        else if (placement === 'i' && !caption.isConnected) mountInline(tr, caption)
+        caption.setAttribute('title', text)
+        if (caption.textContent !== text) caption.textContent = text
       }
     }
     if (label) {
@@ -192,6 +265,33 @@ export function startTrajectoryDecorator(): () => void {
     } else {
       labeledRows.delete(tr)
       unresolvedRows.add(tr)
+    }
+  }
+
+  /** Drop every painted caption and blank the table cache — used when the
+   * route's session changes so reused rows go bare instead of showing the
+   * previous session's chips until the next poll arrives. */
+  const clearAllCaptions = () => {
+    for (const tr of Array.from(labeledRows)) {
+      const caption = captions.get(tr)
+      if (caption) {
+        caption.remove()
+        captions.delete(tr)
+      }
+      tr.removeAttribute(DONE_ATTR)
+      pendingRows.add(tr)
+    }
+    labeledRows.clear()
+    anchors = { enabled: false, anchors: {} }
+    fingerprint = ''
+  }
+
+  /** Sync the tracked session id from the route; clears captions on change. */
+  const syncSessionFromRoute = () => {
+    const current = currentSessionId()
+    if (current !== sessionId) {
+      sessionId = current
+      clearAllCaptions()
     }
   }
 
@@ -229,7 +329,7 @@ export function startTrajectoryDecorator(): () => void {
 
   const tick = async () => {
     if (stopped) return
-    sessionId = currentSessionId()
+    syncSessionFromRoute()
     // Even without a session id in the URL we still poll: the host route then
     // answers with a merged anchor table of the most recent sessions. One
     // visible tool call id goes along as `hint` — assistant anchor keys
@@ -279,7 +379,28 @@ export function startTrajectoryDecorator(): () => void {
 
   const observer = new MutationObserver((mutations) => {
     if (stopped) return
+    // A session switch replaces the ledger en masse; re-read the route now
+    // (not at the next poll) so reused rows shed the old session's captions
+    // within one mutation batch instead of up to one poll interval.
+    syncSessionFromRoute()
     for (const mutation of mutations) {
+      // React reuses a row element when the incoming record carries the same
+      // row key: the key attribute is then the ONLY signal that the row now
+      // shows a different record — drop every cache and re-decorate.
+      if (mutation.type === 'attributes') {
+        const el = mutation.target as HTMLElement
+        if (typeof el.matches === 'function' && el.matches('tr[data-trajectory-row-key]')) {
+          anchorIds.delete(el)
+          const caption = captions.get(el)
+          if (caption) {
+            caption.remove()
+            captions.delete(el)
+          }
+          el.removeAttribute(DONE_ATTR)
+          pendingRows.add(el)
+        }
+        continue
+      }
       for (const node of Array.from(mutation.addedNodes)) {
         if (node.nodeType !== 1) continue
         const el = node as HTMLElement
@@ -316,7 +437,12 @@ export function startTrajectoryDecorator(): () => void {
     scheduleFrame()
   })
   if (typeof document !== 'undefined' && document.body) {
-    observer.observe(document.body, { childList: true, subtree: true })
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-trajectory-row-key'],
+    })
   }
   tick()
 

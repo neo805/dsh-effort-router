@@ -39,6 +39,11 @@ export const CSS = [
   '.er-row-top{align-items:flex-start}',
   '.er-cues{width:220px;max-width:260px;resize:vertical;background:var(--dsw-alias-bg-layer-2,rgba(127,127,127,.08));color:inherit;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));border-radius:6px;padding:4px 8px;font:inherit;font-size:12px;font-family:var(--dsw-mono-font,monospace)}',
   '.er-trj{display:inline-block;margin-right:8px;padding:0 6px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));color:var(--dsw-alias-label-caption,#8b9096);font-size:10px;line-height:15px;white-space:nowrap;vertical-align:1px}',
+  // Trajectory request-boundary chip: rides the native "请求 #N" dot at the
+  // row boundary (td.event is overflow:visible), 9px mono like the dot's own
+  // hover label, solid fill so it reads over the row border.
+  '.er-trj-boundary{position:absolute;top:-7px;z-index:6;display:inline-block;box-sizing:border-box;max-width:190px;padding:0 4px;border-radius:3px;border:.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-secondary,#a2a8b0);font-size:9px;line-height:13px;font-family:var(--dsw-mono-font,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;user-select:none}',
+  '.er-trj-boundary:hover{color:var(--dsw-alias-label-primary,inherit);border-color:var(--dsw-alias-border-l1,rgba(127,127,127,.5))}',
 ].join('')
 
 export function ensureStyles() {

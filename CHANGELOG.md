@@ -4,6 +4,36 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.2] - 2026-10-13
+
+### Fixed
+
+- **Host starved by the merged-anchor fallback (0.2.7-rc.1 regression).**
+  `anchorsOf` materialized anchor projections for EVERY session in the
+  decision store before capping to the most recent ones, and `stateOf()` may
+  replay a session's event log — on busy profiles the 2.5 s trajectory poll
+  stalled the host long enough that history paging (chat and trajectory
+  views) could not load older turns. The route now dedupes, sorts, and caps
+  session candidates WITHOUT touching projections, then folds anchors for
+  the capped few only.
+- **Trajectory capsules moved to the native request dot.** The capsule now
+  rides the ledger's own "请求 #N" request-boundary control as a tiny 9px
+  chip straddling the row boundary — `#N · provider/model · effort` visible
+  without hover, and clicking the chip forwards to the dot so the native
+  request summary still opens. Rows whose step renders no dot keep the
+  previous inline caption. Placement mirrors the host's source contract:
+  step groups open with their assistant record, so the dot always lands on
+  the assistant row our anchors already key (no host package touched).
+- **Cross-session capsule flash (~0.5 s).** Row keys collide across sessions
+  and React reuses row elements for equal keys, so a just-switched ledger
+  could keep the previous session's capsules for up to one poll interval.
+  The decorator now re-reads the route on every mutation batch; a session
+  change clears every caption and blanks the cached table synchronously, so
+  reused rows go bare (never wrong) until the next poll. Row-key attribute
+  changes also invalidate the per-row caches immediately, and a
+  cached-but-disconnected caption now forces a re-mount instead of being
+  suppressed by the idempotence marker.
+
 ## [0.2.7-rc.1] - 2026-10-13
 
 ### Fixed
