@@ -18,6 +18,22 @@ test('entry exports name/inject/Config/DEFAULT_CONFIG/apply', () => {
   assert.equal(resolved.routes.engineering, 'high')
 })
 
+test('DEFAULT_CONFIG stays in lockstep with the Config schema defaults', () => {
+  // The schema is the single source of truth at runtime; DEFAULT_CONFIG is
+  // the plain-object mirror read by liveSnapshot fallbacks. Drift between the
+  // two used to be guarded by hand — pin every key mechanically instead.
+  const resolved = entry.Config({})
+  const read = (value, fallback) => entry.readVolatile(value, fallback)
+  for (const [key, expected] of Object.entries(entry.DEFAULT_CONFIG)) {
+    assert.ok(key in resolved, 'schema is missing DEFAULT_CONFIG key: ' + key)
+    const actual = read(resolved[key], expected)
+    assert.deepEqual(actual, expected, 'default drift on ' + key)
+  }
+  for (const key of Object.keys(resolved)) {
+    assert.ok(key in entry.DEFAULT_CONFIG, 'DEFAULT_CONFIG is missing schema key: ' + key)
+  }
+})
+
 test('apply: schedules an auto request and passes a manual pick through', async () => {
   const listeners = new Map()
   const registered = []

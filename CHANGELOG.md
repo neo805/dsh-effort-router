@@ -4,6 +4,46 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.6] - 2026-10-14
+
+### Fixed
+
+- **Trajectory boundary chip truncated longer captions with "…".** The rc.5
+  fixed `max-width:190px` ellipsized real provider/model ids. The chip is now
+  content-driven: it sizes to its text and only a generous guard
+  (`min(80ch, 70vw)` — beyond any real caption) can still truncate, with the
+  full caption always available in the chip's `title`.
+
+### Added
+
+- **`showBadge` config key** (default `true`, volatile): hides the read-only
+  composer badge when set to `false`. Together with the existing
+  `trajectoryAnnotate`, every GUI surface is now gated by its own config key.
+
+### Removed
+
+- **The settings card (`Settings → Effort Router`) is gone by design.** All
+  user-facing options live in the plugin config file (profile-side, never
+  overwritten by package upgrades) — edit it directly or ask your agent in
+  natural language. The GUI keeps only read-only displays (badge, trajectory
+  chips). The card had also rendered EMPTY in the maintainer's environment,
+  evidence the configForms-bound UI path was already broken in practice.
+- **The llm-pi-ai per-model effort editor** (part of the settings card).
+  Per-model wire-value tables are edited directly in the `llm-pi-ai` config
+  (`reasoningEfforts`, official-schema validated); the automatic,
+  resolution-gated default fill is unchanged. The editor-only helpers
+  (`withModelEfforts`, `validateEffortTable`, `normalizeEffortTable`,
+  `isCustomGateway`) and the settings-card locales/styles went with it.
+- **Dead field `vision`** in the capability resolver — resolved per model but
+  never consumed anywhere.
+
+### Changed
+
+- **Config drift is now pinned by a test**: `DEFAULT_CONFIG` and the `Config`
+  schema defaults are asserted key-by-key (both directions) so the two can no
+  longer diverge silently.
+- Client bundle shrinks to ~19.6 kB (from ~60.7 kB) with the card removed.
+
 ## [0.2.7-rc.5] - 2026-10-13
 
 ### Changed

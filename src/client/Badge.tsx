@@ -13,6 +13,8 @@ import { useEffect, useState } from 'react'
 interface DecisionState {
   ok: boolean
   enabled: boolean
+  /** Config `showBadge`: false hides the pill (display gate, scheduling is unaffected). */
+  showBadge?: boolean
   last: {
     mode?: string
     effort?: string | null
@@ -59,7 +61,7 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
     }
   }, [sessionId])
 
-  if (!state || state.ok !== true || state.enabled !== true) return null
+  if (!state || state.ok !== true || state.enabled !== true || state.showBadge === false) return null
 
   const last = state.last
   const modeKey = last && typeof last.mode === 'string' ? last.mode : 'auto'

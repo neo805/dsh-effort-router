@@ -1,37 +1,19 @@
 /**
- * custom-models.js unit tests — candidate scan, gated fill, per-model edits.
+ * custom-models.js unit tests — candidate scan and gated fill. (The per-model
+ * editor and its helpers were removed in 0.2.7-rc.6 with the settings card:
+ * per-model tables are now edited directly in the llm-pi-ai config.)
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   DEFAULT_EFFORT_TABLE,
   fillCandidates,
-  isCustomGateway,
-  normalizeEffortTable,
-  validateEffortTable,
   withDefaultEfforts,
-  withModelEfforts,
 } from '../lib/custom-models.js'
 
-test('DEFAULT_EFFORT_TABLE passes the pi-ai gate shape (low/high/max, no off rung)', () => {
-  assert.deepEqual(validateEffortTable(DEFAULT_EFFORT_TABLE), [])
+test('DEFAULT_EFFORT_TABLE matches the pi-ai gate shape (low/high/max, no off rung)', () => {
+  assert.deepEqual(DEFAULT_EFFORT_TABLE, { low: 'low', high: 'high', max: 'max' })
   assert.equal('off' in DEFAULT_EFFORT_TABLE, false)
-})
-
-test('normalizeEffortTable: blank off -> null, blank others dropped, values kept', () => {
-  assert.deepEqual(
-    normalizeEffortTable({ off: '', low: 'low', high: '  ', junk: undefined }),
-    { off: null, low: 'low' },
-  )
-})
-
-test('validateEffortTable mirrors the pi-ai gate', () => {
-  assert.deepEqual(validateEffortTable({ off: null, high: 'high' }), [])
-  assert.ok(validateEffortTable({}).length > 0)                    // empty
-  assert.ok(validateEffortTable({ off: null }).length > 0)          // no thinking level
-  assert.ok(validateEffortTable({ high: '' }).length > 0)           // empty string wire
-  assert.ok(validateEffortTable({ high: null }).length > 0)         // null on non-off
-  assert.ok(validateEffortTable({ high: 42 }).length > 0)           // non-string wire
 })
 
 const section = {
@@ -54,14 +36,6 @@ const section = {
     },
   },
 }
-
-test('isCustomGateway', () => {
-  assert.equal(isCustomGateway({ api: 'openai-completions' }), true)
-  assert.equal(isCustomGateway({ baseURL: 'https://gw.corp.example' }), true)
-  assert.equal(isCustomGateway({ baseURL: 'https://api.deepseek.com' }), false)
-  assert.equal(isCustomGateway({}), false)
-  assert.equal(isCustomGateway(undefined), false)
-})
 
 test('fillCandidates enumerates absent-table rows across models[] and modelOverrides', () => {
   assert.deepEqual(fillCandidates(section), [
@@ -98,40 +72,4 @@ test('withDefaultEfforts: empty or unknown targets are identity-stable', () => {
   assert.equal(withDefaultEfforts(section, { targets: ['my-gateway/declared'] }).next, section)
   assert.equal(withDefaultEfforts(section, { targets: ['nope/nope'] }).next, section)
   assert.equal(withDefaultEfforts(undefined, { targets: ['a/b'] }).next, undefined)
-})
-
-test('withModelEfforts rewrites a models[] row by id (normalizing the wire values)', () => {
-  const { next, changed, problems } = withModelEfforts(section, 'my-gateway', 'declared', { off: '', high: 'ultra', max: 'max' })
-  assert.equal(changed, true)
-  assert.deepEqual(problems, [])
-  // empty string for off normalizes to null (pi-ai rejects empty strings)
-  assert.deepEqual(next.providers['my-gateway'].models[1].reasoningEfforts, { off: null, high: 'ultra', max: 'max' })
-  // the row already had a table, and the route is openai-completions: the
-  // compat flag is added because the row did not declare it
-  assert.equal(next.providers['my-gateway'].models[1].compat.supportsReasoningEffort, true)
-  assert.equal(next.providers['my-gateway'].models[0].reasoningEfforts, undefined)
-})
-
-test('withModelEfforts rejects an invalid table with named problems', () => {
-  const r = withModelEfforts(section, 'my-gateway', 'declared', { off: '' })
-  assert.equal(r.changed, false)
-  assert.ok(r.problems.length > 0)
-  // a blank non-off wire value is dropped by normalization -> then invalid
-  const r2 = withModelEfforts(section, 'my-gateway', 'declared', { off: '', high: '  ' })
-  assert.equal(r2.changed, false)
-})
-
-test('withModelEfforts rewrites a modelOverrides entry by key (no compat on catalog routes)', () => {
-  const s = { providers: { cat: { modelOverrides: { 'm-1': { name: 'M One' } } } } }
-  const { next, changed } = withModelEfforts(s, 'cat', 'm-1', { high: 'high' })
-  assert.equal(changed, true)
-  assert.deepEqual(next.providers.cat.modelOverrides['m-1'].reasoningEfforts, { high: 'high' })
-  assert.equal(next.providers.cat.modelOverrides['m-1'].name, 'M One')
-  assert.equal(next.providers.cat.modelOverrides['m-1'].compat, undefined)
-})
-
-test('withModelEfforts: unknown row is a no-op', () => {
-  const { next, changed } = withModelEfforts(section, 'my-gateway', 'nope', { high: 'high' })
-  assert.equal(changed, false)
-  assert.equal(next, section)
 })

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.7-rc.5` · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.7-rc.6` · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
@@ -20,24 +20,30 @@ The host's native model selector already is the per-session effort control. The 
 
 ## Custom models (llm-pi-ai)
 
-Hand-declared custom models often ship no `reasoningEfforts` table, so the composer shows no effort selector at all. On startup and on settings changes the plugin scans the `llm-pi-ai` config and fills the default `{ low, high, max }` table through a **resolution gate**: every table-less user-layer row is resolved with `resolveModelInfo`, and only models that resolve with NO thinking levels are filled — a model inheriting levels from its catalog is skipped, so catalog capability is never shadowed. An explicit table or an explicit `false` is never touched. The table deliberately has **no `off` rung**: an off selection followed by a tool call poisons the conversation for every later thinking-enabled request, and the router never routes to off either (you can still add `off: null` back per model in the editor — explicit intent is never overwritten). Models filled on explicit `openai-completions` routes also gain `compat.supportsReasoningEffort: true`, the switch that protocol needs to actually send the effort.
+Hand-declared custom models often ship no `reasoningEfforts` table, so the composer shows no effort selector at all. On startup and on settings changes the plugin scans the `llm-pi-ai` config and fills the default `{ low, high, max }` table through a **resolution gate**: every table-less user-layer row is resolved with `resolveModelInfo`, and only models that resolve with NO thinking levels are filled — a model inheriting levels from its catalog is skipped, so catalog capability is never shadowed. An explicit table or an explicit `false` is never touched. The table deliberately has **no `off` rung**: an off selection followed by a tool call poisons the conversation for every later thinking-enabled request, and the router never routes to off either (you can still add `off: null` back per model directly in the `llm-pi-ai` config — explicit intent is never overwritten). Models filled on explicit `openai-completions` routes also gain `compat.supportsReasoningEffort: true`, the switch that protocol needs to actually send the effort.
 
-The per-model level → gateway wire-value mapping (e.g. `high → ultra`) is edited under **Settings → Effort Router** and written straight into the `llm-pi-ai` config, gated by the official schema, effective on the next request. pi-ai serializes the table natively; no plugin-side translation layer.
+The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives in the model's `reasoningEfforts` table inside the `llm-pi-ai` config — edit it directly or ask your agent to. The official schema validates it and the next request picks it up. pi-ai serializes the table natively; no plugin-side translation layer.
 
-## Settings
+## Configuration (no settings UI — everything lives in the config file)
 
-**Settings → Effort Router**:
+**The plugin deliberately ships NO settings UI** (since 0.2.7-rc.6): every user-facing option lives in the plugin configuration, stored on the profile side, so **upgrading the plugin package never overwrites it**. Change options by editing the config or by asking your agent in natural language ("hide the badge", "allow max").
 
-- Enabled / default level / subagent default
-- Bounds: allow max (**on by default** since 0.2.0 — hard tasks reach max; opt out here and `maxFallback` applies), max fallback, wish detector, poison recovery, trajectory hoisting, frugal demotion, context-pressure threshold, token budget
-- Class → tier route table (trivial/standard default low, engineering high, hard max)
-- Advanced: downgrade hysteresis, escalation thresholds (apply on plugin reload), custom cue dictionaries (strong / normal / cheap / wish)
-- Custom-model editor: expand a provider, tick levels and enter wire values, or fill missing levels everywhere in one click
+- `enabled`: master switch (off = requests pass through untouched)
+- `defaultLevel`: level when nothing is selected (`auto` or a concrete level)
+- `subagentEffort`: subagent default (`inherit` or a concrete level)
+- `allowMax` / `maxFallback`: automatic routing may reach max (**on by default** since 0.2.0); off collapses max to `maxFallback`
+- `wish` / `poisonRecovery` / `frugalDemote` / `contextPressure` / `sessionTokenBudget`: wish detector, poison recovery, frugal demotion and their thresholds
+- `showBadge`: show the read-only badge left of the composer model selector (default on)
+- `trajectoryAnnotate`: project each step's `provider/model · effort` onto the native trajectory ledger (default on; switch off if it conflicts with another plugin)
+- `fillCustomModels`: auto-fill default effort tables for hand-declared custom models
+- `routes`: class → tier route table (trivial/standard default low, engineering high, hard max)
+- `downAfter` / `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations`: downgrade hysteresis and escalation thresholds
+- `cuesStrong` / `cuesNormal` / `cuesCheap` / `cuesWish`: custom cue dictionaries (merged on top of the built-in ones)
 
 ## In-session visibility
 
-- **Composer badge** (left of the model selector): the mode and effort of the session's last step (`Auto · high`), with class and reason in the tooltip. Read-only — control stays in the native selector.
-- **Trajectory hoisting** (default on): each step's `provider/model · effort` is projected onto the NATIVE trajectory ledger rows (DOM projection anchored on `data-trajectory-row-key` — the assembly-layer route, no host package touched and no new view added). The anchor table is folded host-side from `request/header` + `assistant/message` + `tool/call` events and served on the state route. The chat flow itself stays annotation-free.
+- **Composer badge** (left of the model selector, gated by `showBadge`): the mode and effort of the session's last step (`Auto · high`), with class and reason in the tooltip. Read-only — control stays in the native selector.
+- **Trajectory hoisting** (`trajectoryAnnotate`, default on): each step's `provider/model · effort` is projected onto the NATIVE trajectory ledger rows (DOM projection anchored on `data-trajectory-row-key` — the assembly-layer route, no host package touched and no new view added). The anchor table is folded host-side from `request/header` + `assistant/message` + `tool/call` events and served on the state route. The chat flow itself stays annotation-free.
 
 ## Safety and degradation
 

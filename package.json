@@ -1,10 +1,10 @@
 {
   "name": "dsh-effort-router",
-  "version": "0.2.7-rc.5",
+  "version": "0.2.7-rc.6",
   "publishConfig": {
     "access": "public"
   },
-  "description": "DSH plugin: context-aware per-step reasoning-effort routing. Classifies each step (trivial/standard/engineering/hard) from the task brief and live session evidence, escalates on tool errors, stabilizes with hysteresis, clamps to the target model's advertised efforts, and injects an 'Auto' mask into the native model selector. Ships a settings card that fills default reasoningEfforts for hand-declared llm-pi-ai custom models with per-model gateway wire-value mapping.",
+  "description": "DSH plugin: context-aware per-step reasoning-effort routing. Classifies each step (trivial/standard/engineering/hard) from the task brief and live session evidence, escalates on tool errors, stabilizes with hysteresis, clamps to the target model's advertised efforts, and injects an 'Auto' mask into the native model selector. Fills default reasoningEfforts for hand-declared llm-pi-ai custom models. All user-facing options live in the plugin config file (no settings UI); the GUI surfaces (composer badge, trajectory hoisting) are read-only displays.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -50,7 +50,6 @@
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-model-selection",
         "@deepseek-ai/dsh-client-ui-renderer",
-        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-slots"
       ]
     }
@@ -61,7 +60,6 @@
     "@deepseek-ai/dsh-client-locale": ">=0.2.0-rc.1 <0.2.1-0",
     "@deepseek-ai/dsh-client-ui-model-selection": ">=0.2.0-rc.1 <0.2.1-0",
     "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.0-rc.1 <0.2.1-0",
-    "@deepseek-ai/dsh-client-ui-settings": ">=0.2.0-rc.1 <0.2.1-0",
     "@deepseek-ai/dsh-client-ui-slots": ">=0.2.0-rc.1 <0.2.1-0"
   },
   "peerDependenciesMeta": {
@@ -78,9 +76,6 @@
       "optional": true
     },
     "@deepseek-ai/dsh-client-ui-renderer": {
-      "optional": true
-    },
-    "@deepseek-ai/dsh-client-ui-settings": {
       "optional": true
     },
     "@deepseek-ai/dsh-client-ui-slots": {

@@ -1,16 +1,17 @@
 /**
  * dsh-effort-router — client plugin.
  *
- * Two surfaces plus one DOM projection, no write path of its own beyond the
- * settings scopes:
- *   1. a settings.section card (global scheduler config + the llm-pi-ai
- *      custom-model effort editor) bound through configForms;
- *   2. a read-only composer badge (conversation.input.right) showing the last
- *      scheduled effort of the session;
- *   3. a DOM projection that hoists `provider/model · effort` onto the NATIVE
+ * Two surfaces, no write path of its own:
+ *   1. a read-only composer badge (conversation.input.right) showing the last
+ *      scheduled effort of the session (config `showBadge` gates it);
+ *   2. a DOM projection that hoists `provider/model · effort` onto the NATIVE
  *      trajectory ledger rows (the dsh-trajectory-zh route: assembly-layer
- *      load + MutationObserver; no host package is touched, no new view).
+ *      load + MutationObserver; no host package is touched, no new view;
+ *      config `trajectoryAnnotate` gates it).
  *
+ * There is NO settings card by design (0.2.7-rc.6): every user-facing option
+ * lives in the plugin config file (schema in lib/index.js), edited directly
+ * or by an agent on the user's behalf — the GUI only ever displays state.
  * The chat flow stays clean on purpose (0.2.x review): no chat-flow
  * annotations.
  *
@@ -20,7 +21,6 @@
  */
 import { NS, en, zh } from './locales'
 import { ensureStyles } from './styles'
-import { SettingsCard } from './SettingsCard'
 import { Badge } from './Badge'
 import { startTrajectoryDecorator } from './trajectory'
 
@@ -33,23 +33,7 @@ export function apply(ctx: any) {
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'effort-router: dictionaries')
 
-  // 1. Settings card ----------------------------------------------------------
-  ctx.inject(['configForms'], (scope: any) => {
-    scope.slots.inject('settings.section', () => scope.slots.register({
-      name: 'settings.section',
-      id: 'effort-router',
-      order: 40,
-      label: () => t('section.title'),
-      locale: NS,
-      inject: () => ({
-        scope: ctx.configForms.get('effort-router'),
-        piAiScope: ctx.configForms.get('llm-pi-ai'),
-        t,
-      }),
-    }, SettingsCard))
-  })
-
-  // 2. Composer badge ----------------------------------------------------------
+  // 1. Composer badge ----------------------------------------------------------
   ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
     name: 'conversation.input.right',
     id: 'effort-router:badge',
@@ -58,6 +42,6 @@ export function apply(ctx: any) {
     inject: (sessionId: string) => ({ sessionId, t }),
   }, Badge))
 
-  // 3. Native trajectory hoisting (DOM projection; no host package touched) ----
+  // 2. Native trajectory hoisting (DOM projection; no host package touched) ----
   ctx.effect(() => startTrajectoryDecorator(), 'effort-router: trajectory decorator')
 }

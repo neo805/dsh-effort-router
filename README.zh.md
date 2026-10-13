@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**当前版本：** `0.2.7-rc.5` · [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
+**当前版本：** `0.2.7-rc.6` · [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
 
 DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考档位（reasoning effort）**，并让手写声明的 `llm-pi-ai` 自定义模型也能选档位。
 
@@ -20,24 +20,30 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 
 ## 自定义模型（llm-pi-ai）
 
-手写的自定义模型常常没有 `reasoningEfforts` 声明，选择器里根本没有档位行。本插件在启动与设置变更时扫描 `llm-pi-ai` 配置，并用**解析门控**精确补齐：每个缺表的模型先经 `resolveModelInfo` 解析，只有解析后确实没有思考档位的模型才补 `{ low, high, max }` 默认表——**表内刻意不含 `off`**：选择 off 后再发工具调用会毒化后续所有思考请求，而调度器自身也永不路由到 off（仍可在编辑器里为单个模型手动加回 `off: null`，显式意图永远被尊重）。目录已带档位的模型解析后自带档位，天然跳过，绝不遮蔽目录能力；`false`（非思考模型）与已有表一律尊重。显式 `openai-completions` 路由上补齐的模型还会自动带上 `compat.supportsReasoningEffort: true`（该协议的 effort 需要这个 compat 开关才会上线）。
+手写的自定义模型常常没有 `reasoningEfforts` 声明，选择器里根本没有档位行。本插件在启动与设置变更时扫描 `llm-pi-ai` 配置，并用**解析门控**精确补齐：每个缺表的模型先经 `resolveModelInfo` 解析，只有解析后确实没有思考档位的模型才补 `{ low, high, max }` 默认表——**表内刻意不含 `off`**：选择 off 后再发工具调用会毒化后续所有思考请求，而调度器自身也永不路由到 off（仍可直接在 `llm-pi-ai` 配置里为单个模型加回 `off: null`，显式意图永远被尊重）。目录已带档位的模型解析后自带档位，天然跳过，绝不遮蔽目录能力；`false`（非思考模型）与已有表一律尊重。显式 `openai-completions` 路由上补齐的模型还会自动带上 `compat.supportsReasoningEffort: true`（该协议的 effort 需要这个 compat 开关才会上线）。
 
-每模型的「档位 → 网关线上值」映射在 **设置 → 思考强度路由** 里编辑（如 `high → ultra`），直接写入 `llm-pi-ai` 配置，由官方 schema 校验，下一请求生效。pi-ai 原生按表序列化，无需插件侧翻译。
+每模型的「档位 → 网关线上值」映射（如 `high → ultra`）直接编辑 `llm-pi-ai` 配置中对应模型的 `reasoningEfforts` 表即可（自己改或让 Agent 代改），由官方 schema 校验，下一请求生效。pi-ai 原生按表序列化，无需插件侧翻译。
 
-## 设置页
+## 配置（无设置界面，全部在 config 文件）
 
-**设置 → 思考强度路由**：
+**本插件刻意不提供设置界面**（0.2.7-rc.6 起）：所有可选选项都在插件配置里，保存在 profile 侧，**升级插件包不会覆盖**。改动方式：直接编辑配置，或用自然语言让 Agent 代改（「关掉徽标」「允许 max」）。
 
-- 启用 / 默认档位 / 子代理默认档
-- 调度边界：允许 max（**0.2.0 起默认开**，hard 任务直达 max；在此关闭则回退到 max 回退档）、max 回退、许愿检测、毒化恢复、轨迹提级、节俭降档、上下文压力阈值、token 预算
-- 分类 → 档位路由表（trivial/standard 默认 low，engineering 默认 high，hard 默认 max）
-- 高级：降档迟滞、升档阈值（重启插件生效）、自定义线索词典（strong / normal / cheap / wish）
-- 自定义模型编辑器：按提供方展开模型，勾选档位并填线上值，一键补齐缺失档位
+- `enabled`：总开关（关 = 请求原样通过）
+- `defaultLevel`：无显式选择时的档位（`auto` 或具体档）
+- `subagentEffort`：子代理默认档（`inherit` 或具体档）
+- `allowMax` / `maxFallback`：允许自动升到 max（**0.2.0 起默认开**）；关闭则回退到 maxFallback
+- `wish` / `poisonRecovery` / `frugalDemote` / `contextPressure` / `sessionTokenBudget`：许愿检测、毒化恢复、节俭降档及其阈值
+- `showBadge`：是否显示对话视图模型选择器左侧的徽标（默认开）
+- `trajectoryAnnotate`：是否在原生轨迹视图投影每步的 `provider/model · 档位`（默认开；与其他插件冲突时可关）
+- `fillCustomModels`：是否自动补齐自定义模型默认档位表
+- `routes`：分类 → 档位路由表（trivial/standard 默认 low，engineering 默认 high，hard 默认 max）
+- `downAfter` / `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations`：降档迟滞与升档阈值
+- `cuesStrong` / `cuesNormal` / `cuesCheap` / `cuesWish`：自定义线索词典（追加在内置词典之上）
 
 ## 会话内可见性
 
-- **Composer 徽标**（模型选择器左侧）：当前会话最近一步的模式与档位（`Auto · high`），悬停显示分类与理由。只读——控制永远在原生的模型选择器里。
-- **轨迹提级**（默认开）：每一步的 `provider/model · 档位` 直接投影到**原生轨迹视图**的记录行上（以 `data-trajectory-row-key` 为锚的 DOM 投影——装配层路线，不动任何宿主包、不新增视图）。锚点表由宿主侧折叠 `request/header` + `assistant/message` + `tool/call` 事件生成，经只读路由提供给客户端。会话流本身保持零标注。
+- **Composer 徽标**（模型选择器左侧，`showBadge` 可关）：当前会话最近一步的模式与档位（`Auto · high`），悬停显示分类与理由。只读——控制永远在原生的模型选择器里。
+- **轨迹提级**（`trajectoryAnnotate`，默认开）：每一步的 `provider/model · 档位` 直接投影到**原生轨迹视图**的记录行上（以 `data-trajectory-row-key` 为锚的 DOM 投影——装配层路线，不动任何宿主包、不新增视图）。锚点表由宿主侧折叠 `request/header` + `assistant/message` + `tool/call` 事件生成，经只读路由提供给客户端。会话流本身保持零标注。
 
 ## 安全与降级
 
