@@ -4,6 +4,16 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.5] - 2026-10-13
+
+### Changed
+
+- **Boundary-chip skin settled: `transparent`** (maintainer's pick after the
+  rc.3/rc.4 A/B round). Text only, nothing painted behind it; the rejected
+  `under` / `solid` / `gradient` skins remain commented in
+  `src/client/styles.ts` and the localStorage `er.trj.variant` hook stays
+  wired for any future revisit.
+
 ## [0.2.7-rc.4] - 2026-10-13
 
 ### Fixed

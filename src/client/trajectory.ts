@@ -58,9 +58,12 @@ const POLL_MS = 2500
 const FULL_SWEEP_EVERY = 8
 const CAPTION_ATTR = 'data-er-trj'
 const DONE_ATTR = 'data-er-trj-done'
-/** Boundary-chip skins while we A/B the look (localStorage override). */
-const CHIP_VARIANTS = new Set(['under', 'solid', 'transparent', 'gradient'])
-const CHIP_VARIANT_DEFAULT = 'under'
+/** Boundary-chip skin — settled on "transparent" after the rc.3/rc.4 A/B
+ * round (maintainer's pick). The rejected skins (under / solid / gradient)
+ * remain commented in src/client/styles.ts; the localStorage hook stays so
+ * a future revisit can re-enable a skin without touching this file. */
+const CHIP_VARIANTS = new Set(['transparent'])
+const CHIP_VARIANT_DEFAULT = 'transparent'
 
 /** Active boundary-chip skin: localStorage "er.trj.variant", else default. */
 function chipVariant(): string {
