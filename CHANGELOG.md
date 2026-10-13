@@ -4,6 +4,29 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.7] - 2026-10-14
+
+### Added
+
+- **`chatAnnotate` config key** (DEFAULT `false`, volatile): opts into
+  per-tool-call `provider/model · effort` caption rows in the conversation
+  view — the R1 surface revived on the maintainer's call, now fed by the
+  existing `effortRouterAnchors` session projection (no new host projection).
+  The client reads the flag once at load, so a toggle applies on page reload.
+  Note: the 0.2.0 field note said this registration seam rendered nothing;
+  whether it renders on the current host is open until verified with the flag
+  on (see ROADMAP R1).
+
+### Removed
+
+- **The telemetry score (`scoreOf`) and its ~13 scoring-only weights.** No
+  decision read the number since 0.2.0 (it existed "for one-version
+  debugging", six versions ago); the `reason` array explains every decision
+  better. `decideEffort` no longer returns `score`, and decision records/log
+  lines drop the field. Weights that DO drive classification and escalation
+  (`denseStrong*`, `bulletMinLines`, `toolCallClass`, `trivialTokenCap`,
+  `wishTokenCap`, volume ladders, `toolWindow`) are untouched.
+
 ## [0.2.7-rc.6] - 2026-10-14
 
 ### Fixed

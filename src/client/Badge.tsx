@@ -20,7 +20,6 @@ interface DecisionState {
     effort?: string | null
     tier?: string | null
     stepClass?: string | null
-    score?: number | null
     reason?: string
   } | null
 }

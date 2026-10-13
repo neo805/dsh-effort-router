@@ -9,6 +9,10 @@ export const CSS = [
   '.er-badge-dot{width:6px;height:6px;flex:none;border-radius:50%;background:var(--dsw-alias-label-caption,#8b9096)}',
   '.er-badge[data-on="true"] .er-badge-dot{background:var(--dsw-alias-status-success,#3fb950)}',
   '.er-trj{display:inline-block;margin-right:8px;padding:0 6px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));color:var(--dsw-alias-label-caption,#8b9096);font-size:10px;line-height:15px;white-space:nowrap;vertical-align:1px}',
+  // Chat captions (chatAnnotate opt-in): one compact row under a tool call.
+  '.er-call{display:flex;align-items:center;gap:4px;max-width:100%;padding:0 2px;color:var(--dsw-alias-label-caption,#8b9096);font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+  '.er-call-model{min-width:0;color:var(--dsw-alias-label-secondary,#a2a8b0);overflow:hidden;text-overflow:ellipsis}',
+  '.er-call-eff{flex:none}',
   // Trajectory request-boundary chip: rides the native "请求 #N" dot at the
   // row boundary (td.event is overflow:visible), 9px mono like the dot's own
   // hover label. Skin settled on TRANSPARENT after the rc.3/rc.4 A/B round

@@ -13,6 +13,7 @@ export const zh = {
   'badge.poisoned': '思考关闭',
   'badge.unsupported': '不支持',
   'badge.none': '本会话暂无调度记录',
+  'annotation.default': '默认',
 }
 
 export const en = {
@@ -23,6 +24,7 @@ export const en = {
   'badge.poisoned': 'Thinking off',
   'badge.unsupported': 'Unsupported',
   'badge.none': 'No routing decision in this session yet',
+  'annotation.default': 'default',
 }
 
 export type LocaleKey = keyof typeof zh

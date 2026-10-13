@@ -4,7 +4,7 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
-## R1 — Tool-call captions: retired from the chat flow (DONE, 0.2.1)
+## R1 — Tool-call captions: retired from the chat flow (DONE, 0.2.1; revived as opt-in 0.2.7-rc.7)
 
 **Status quo.** 0.1.x annotated every tool call in the chat flow with the
 `provider/model · effort` the step ran with (client surface 3:
@@ -14,13 +14,23 @@ at all — the registration seam (`uiConversation.events.register` +
 `conversation.chat.node`) apparently no longer anchors the rows, and nobody
 missed them.
 
-**Decision (maintainer).** The captions are NOT wanted back in the chat flow —
-keep the conversation clean. Instead, the per-step assistant effort should be
-visible in the host's **trajectory view** (轨迹视图).
+**Decision (maintainer, 0.2.1).** The captions are NOT wanted back in the chat
+flow — keep the conversation clean.
 
-**Implemented.** Removed the chat-annotation surface: `annotations.ts`,
-surface 3 in `src/client/index.tsx`, the `.er-call*` styles, the
-`annotation.default` locale keys, the host-side `effortRouterRoute`
+**Decision reversed (maintainer, 0.2.7-rc.7).** As part of the
+config-file-only options redesign, the surface came back as `chatAnnotate`
+(DEFAULT OFF): the same event-view + `conversation.chat.node` seam, now fed by
+the existing `effortRouterAnchors` session projection (no new host projection;
+tool/call events anchor on the bare callId). The client reads the flag once at
+load, so a toggle applies on page reload. **Open verification point:** the
+0.2.0 field note said this seam rendered nothing — whether it renders on the
+current host is unverified until the maintainer turns the flag on and checks.
+If it still renders nothing, treat it as a host-seam question, not a plugin
+bug.
+
+**0.2.1 removal (superseded).** Removed the chat-annotation surface:
+`annotations.ts`, surface 3 in `src/client/index.tsx`, the `.er-call*` styles,
+the `annotation.default` locale keys, the host-side `effortRouterRoute`
 projection + its registration (`lib/route-projection.js`), the
 `dsh-client-ui-conversation` inject/peer entries, and the README bullets.
 The per-step effort remains stamped on every `request/header` session event

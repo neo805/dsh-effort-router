@@ -1,6 +1,6 @@
 /**
  * policy.js unit tests — cue pipeline (dictionary/shape/volume), wish floor,
- * loudest-bump escalation, frugal demote, clamps. Score is telemetry only.
+ * loudest-bump escalation, frugal demote, clamps.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -13,7 +13,6 @@ import {
   escalateClass,
   evidenceBumps,
   normalizePolicyConfig,
-  scoreOf,
   stableStringify,
   toolErrorOfMessage,
   toolErrorsOf,
@@ -186,11 +185,6 @@ test('escalateClass/demoteClass ladder', () => {
   assert.equal(escalateClass('standard', 5), 'hard') // capped at ceiling
   assert.equal(demoteClass('hard'), 'engineering')
   assert.equal(demoteClass('trivial'), 'trivial')
-})
-
-test('scoreOf stays in [0,100] and never enters decisions', () => {
-  const { score } = scoreOf({ text: 'x'.repeat(5000), toolCalls: 99 }, cfg)
-  assert.ok(score >= 0 && score <= 100)
 })
 
 test('toolCallWithoutReasoning / toolErrorsOf', () => {
