@@ -58,6 +58,20 @@ const POLL_MS = 2500
 const FULL_SWEEP_EVERY = 8
 const CAPTION_ATTR = 'data-er-trj'
 const DONE_ATTR = 'data-er-trj-done'
+/** Boundary-chip skins while we A/B the look (localStorage override). */
+const CHIP_VARIANTS = new Set(['under', 'solid', 'transparent', 'gradient', 'slim'])
+const CHIP_VARIANT_DEFAULT = 'under'
+
+/** Active boundary-chip skin: localStorage "er.trj.variant", else default. */
+function chipVariant(): string {
+  try {
+    const v = typeof localStorage === 'undefined' ? null : localStorage.getItem('er.trj.variant')
+    if (v !== null && CHIP_VARIANTS.has(v)) return v
+  } catch {
+    // localStorage can throw in hardened contexts; the default skin is fine.
+  }
+  return CHIP_VARIANT_DEFAULT
+}
 
 interface AnchorsState {
   enabled: boolean
@@ -222,7 +236,8 @@ export function startTrajectoryDecorator(): () => void {
     const placement = label ? (dot !== null ? 'b' : 'i') : ''
     const requestNo = dot !== null ? requestNumberOf(dot) : ''
     const text = placement === 'b' && requestNo !== '' ? '#' + requestNo + ' · ' + label : label
-    const doneValue = placement + '|' + requestNo + '|' + label
+    const variant = placement === 'b' ? chipVariant() : ''
+    const doneValue = placement + '|' + requestNo + '|' + label + '|' + variant
     if (tr.getAttribute(DONE_ATTR) !== doneValue) {
       tr.setAttribute(DONE_ATTR, doneValue)
       let caption = captions.get(tr)
@@ -244,6 +259,7 @@ export function startTrajectoryDecorator(): () => void {
           captions.set(tr, caption)
           if (placement === 'b') {
             caption.setAttribute('class', 'er-trj-boundary')
+            caption.setAttribute('data-er-trj-v', variant)
             caption.addEventListener('click', (event) => {
               event.stopPropagation()
               const target = requestDotOf(tr)
@@ -255,6 +271,9 @@ export function startTrajectoryDecorator(): () => void {
         }
         if (placement === 'b' && dot !== null) mountBoundary(tr, caption, dot)
         else if (placement === 'i' && !caption.isConnected) mountInline(tr, caption)
+        if (placement === 'b' && caption.getAttribute('data-er-trj-v') !== variant) {
+          caption.setAttribute('data-er-trj-v', variant)
+        }
         caption.setAttribute('title', text)
         if (caption.textContent !== text) caption.textContent = text
       }

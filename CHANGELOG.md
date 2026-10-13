@@ -4,6 +4,26 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.3] - 2026-10-13
+
+### Changed
+
+- **Boundary-chip skin A/B build (style only).** The rc.2 solid chip
+  straddles the row boundary 15px tall and clips ~1-2px of the neighbouring
+  native kind chips. The skin is now switchable via localStorage
+  `er.trj.variant` (reload to apply), default `under`:
+  - `under` — solid chip painted BELOW the in-flow kind chips (cell-content
+    paint order keeps it above row backgrounds): the native chips keep their
+    edge pixels.
+  - `solid` — the rc.2 look, fully on top (control).
+  - `transparent` — text only, nothing painted behind it.
+  - `gradient` — solid centre fading to transparent at the top/bottom edges:
+    the row separator never strikes the text and the chip covers nothing of
+    the neighbouring chips (one small GPU texture per chip; no measurable
+    repaint cost at ledger scale).
+  - `slim` — 8px font in an 11px box, shrunk into the ~12px boundary zone so
+    it never reaches the kind chips.
+
 ## [0.2.7-rc.2] - 2026-10-13
 
 ### Fixed

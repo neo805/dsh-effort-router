@@ -41,9 +41,28 @@ export const CSS = [
   '.er-trj{display:inline-block;margin-right:8px;padding:0 6px;border-radius:999px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));color:var(--dsw-alias-label-caption,#8b9096);font-size:10px;line-height:15px;white-space:nowrap;vertical-align:1px}',
   // Trajectory request-boundary chip: rides the native "请求 #N" dot at the
   // row boundary (td.event is overflow:visible), 9px mono like the dot's own
-  // hover label, solid fill so it reads over the row border.
-  '.er-trj-boundary{position:absolute;top:-7px;z-index:6;display:inline-block;box-sizing:border-box;max-width:190px;padding:0 4px;border-radius:3px;border:.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.35));background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-secondary,#a2a8b0);font-size:9px;line-height:13px;font-family:var(--dsw-mono-font,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;user-select:none}',
-  '.er-trj-boundary:hover{color:var(--dsw-alias-label-primary,inherit);border-color:var(--dsw-alias-border-l1,rgba(127,127,127,.5))}',
+  // hover label. The boundary zone is only ~6px deep per row side, so the
+  // skin is switchable while we A/B the look: localStorage "er.trj.variant"
+  // = under | solid | transparent | gradient | slim (default under).
+  '.er-trj-boundary{position:absolute;top:-7px;z-index:6;display:inline-block;box-sizing:border-box;max-width:190px;padding:0 4px;border-radius:3px;border:.5px solid transparent;color:var(--dsw-alias-label-secondary,#a2a8b0);font-size:9px;line-height:13px;font-family:var(--dsw-mono-font,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;user-select:none}',
+  '.er-trj-boundary:hover{color:var(--dsw-alias-label-primary,inherit)}',
+  // under: paints below the in-flow kind chips (cell-content paint order)
+  // but still above row/cell backgrounds — the native chips keep their
+  // edge pixels, hover backgrounds never swallow the chip.
+  '.er-trj-boundary[data-er-trj-v="under"]{z-index:-1;background:var(--dsw-alias-bg-layer-1,#fff);border-color:var(--dsw-alias-border-l2,rgba(127,127,127,.35))}',
+  // solid: the rc.2 look, fully on top.
+  '.er-trj-boundary[data-er-trj-v="solid"]{background:var(--dsw-alias-bg-layer-1,#fff);border-color:var(--dsw-alias-border-l2,rgba(127,127,127,.35))}',
+  '.er-trj-boundary[data-er-trj-v="solid"]:hover{border-color:var(--dsw-alias-border-l1,rgba(127,127,127,.5))}',
+  // transparent: text only; the row separator strokes through the glyphs.
+  '.er-trj-boundary[data-er-trj-v="transparent"]{background:transparent}',
+  // gradient: solid centre fading to transparent at the top/bottom edges, so
+  // the separator never strikes the text yet the chip covers nothing of the
+  // neighbouring kind chips. One small GPU texture per chip — no measurable
+  // repaint cost at ledger scale.
+  '.er-trj-boundary[data-er-trj-v="gradient"]{background:linear-gradient(to bottom,transparent 0,var(--dsw-alias-bg-layer-1,#fff) 32%,var(--dsw-alias-bg-layer-1,#fff) 68%,transparent 100%)}',
+  // slim: shrunk into the ~12px boundary zone (8px font, 11px box) — solid
+  // and on top, but short enough to never reach the kind chips.
+  '.er-trj-boundary[data-er-trj-v="slim"]{top:-6px;padding:0 3px;font-size:8px;line-height:11px;background:var(--dsw-alias-bg-layer-1,#fff);border-color:var(--dsw-alias-border-l2,rgba(127,127,127,.35))}',
 ].join('')
 
 export function ensureStyles() {
