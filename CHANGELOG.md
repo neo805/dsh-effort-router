@@ -4,6 +4,23 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.4] - 2026-10-13
+
+### Fixed
+
+- **`under` skin was invisible.** A bare `z-index:-1` sank below the table
+  pane's own background. The event cell now gets `isolation:isolate` (via a
+  version-proof attribute selector, no hashed native class names), so the
+  chip paints at the bottom of the CELL's content stack — below the in-flow
+  kind chips, above the pane background.
+- **`gradient` band retuned.** The solid band now hugs the row separator:
+  ~2px full-solid core with ~1.8px ramps (transparent outside the middle
+  ~4px of the 15px box) instead of the rc.3 wide solid window.
+
+### Removed
+
+- **`slim` skin** (rejected on aesthetics).
+
 ## [0.2.7-rc.3] - 2026-10-13
 
 ### Changed

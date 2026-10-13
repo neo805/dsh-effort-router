@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.7-rc.3` · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.7-rc.4` · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 

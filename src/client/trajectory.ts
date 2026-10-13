@@ -59,7 +59,7 @@ const FULL_SWEEP_EVERY = 8
 const CAPTION_ATTR = 'data-er-trj'
 const DONE_ATTR = 'data-er-trj-done'
 /** Boundary-chip skins while we A/B the look (localStorage override). */
-const CHIP_VARIANTS = new Set(['under', 'solid', 'transparent', 'gradient', 'slim'])
+const CHIP_VARIANTS = new Set(['under', 'solid', 'transparent', 'gradient'])
 const CHIP_VARIANT_DEFAULT = 'under'
 
 /** Active boundary-chip skin: localStorage "er.trj.variant", else default. */
