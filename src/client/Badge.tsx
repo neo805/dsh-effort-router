@@ -2,8 +2,8 @@
  * dsh-effort-router — composer badge (conversation.input.right).
  *
  * One compact pill next to the model selector: the mode and the effort the
- * LAST step of this session ran with, with the scheduler's class/score/reason
- * in the tooltip. Data comes from the read-only host route
+ * LAST step of this session ran with, with the scheduler's step class and
+ * decision reason in the tooltip. Data comes from the read-only host route
  * GET /effort-router/state?sessionId=…, polled only while the tab is visible.
  * The native selector remains the control — this badge is deliberately
  * read-only so the composer never gains a second effort input.

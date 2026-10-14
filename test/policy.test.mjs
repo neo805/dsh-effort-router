@@ -14,6 +14,9 @@ import {
   evidenceBumps,
   normalizePolicyConfig,
   stableStringify,
+  textOfContent,
+  tokenEstimate,
+  tokenEstimateBlocks,
   toolErrorOfMessage,
   toolErrorsOf,
   toolCallWithoutReasoning,
@@ -276,4 +279,105 @@ test('T6 dictionaries (0.2.6, audit R3): migrations and additions', () => {
 test('trivialTokenCap 200 (0.2.6, audit R4.4): trivial pastes keep their class', () => {
   const paste = '翻译一下这句话 ' + 'word '.repeat(150) // ~150 tokens, cheap intent
   assert.equal(classifyStep({ text: paste, toolCalls: 0 }, cfg).stepClass, 'trivial')
+})
+
+// --- token counting (0.2.7 hot-path rework: single pass, block folding) ----
+
+/** The pre-0.2.7 two-pass implementation, kept here as the equivalence oracle. */
+function legacyTokenEstimate(text) {
+  const latin = (text.match(/[A-Za-z0-9_'-]+/g) || []).length
+  let cjk = 0
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text.charCodeAt(i)
+    if ((c >= 0x3400 && c <= 0x9fff) || (c >= 0xf900 && c <= 0xfaff)) cjk += 1
+  }
+  return latin + cjk
+}
+
+/** Deterministic PRNG so a failure prints a reproducible seed. */
+function mulberry32(seed) {
+  let a = seed >>> 0
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+test('tokenEstimate: single-pass rewrite equals the legacy two-pass counter', () => {
+  // targeted edges first
+  const edges = [
+    '', ' ', "don't stop", 'kebab-case_word', "''--__", '一', '文字列テスト',
+    'a一b', '一a二', 'abc123', '123', '-leading', 'trailing-', '中　全角空格',
+    'emoji 😀 mix', '䶿 compat 欄', "rock'n'roll", 'a\u0000b',
+  ]
+  for (const s of edges) {
+    assert.equal(tokenEstimate(s), legacyTokenEstimate(s), JSON.stringify(s))
+  }
+  // then a seeded fuzz over latin/CJK/punct/surrogate soup
+  const rand = mulberry32(20261010)
+  const pools = [
+    () => String.fromCharCode(0x61 + Math.floor(rand() * 26)), // a-z
+    () => String.fromCharCode(0x41 + Math.floor(rand() * 26)), // A-Z
+    () => String.fromCharCode(0x30 + Math.floor(rand() * 10)), // 0-9
+    () => "_'- "[Math.floor(rand() * 4)], // latin-class extras + space
+    () => String.fromCharCode(0x4e00 + Math.floor(rand() * 0x2000)), // CJK
+    () => String.fromCharCode(0xf900 + Math.floor(rand() * 0x100)), // compat
+    () => '，。！？、；：,.!?;: \n\t'[Math.floor(rand() * 16)], // punct
+    () => '😀🎉🚀'[Math.floor(rand() * 6)], // surrogate halves
+  ]
+  for (let iter = 0; iter < 300; iter += 1) {
+    const len = Math.floor(rand() * 120)
+    let s = ''
+    for (let i = 0; i < len; i += 1) s += pools[Math.floor(rand() * pools.length)]()
+    assert.equal(tokenEstimate(s), legacyTokenEstimate(s), 'fuzz #' + iter + ' ' + JSON.stringify(s))
+  }
+})
+
+test('tokenEstimateBlocks: equals tokenEstimate(textOfContent(...)) block for block', () => {
+  const cases = [
+    undefined,
+    null,
+    'plain string content',
+    [],
+    [{ type: 'text', text: 'one block' }],
+    // latin run spanning the block boundary: concat counts "abcdef" once
+    [{ type: 'text', text: 'abc' }, { type: 'text', text: 'def' }],
+    // image placeholder breaks the run: "abc [image] def" -> 3 tokens
+    [{ type: 'text', text: 'abc' }, { type: 'image' }, { type: 'text', text: 'def' }],
+    // nested tool-result recursion, CJK/latin mix
+    [{ type: 'tool-result', content: [{ type: 'text', text: '结果: ok ' }, 'raw piece', 42, null] }],
+    [{ type: 'text', text: 'prefix ' }, { type: 'tool-result', content: 'tail 文字' }],
+    // non-text parts contribute nothing
+    [{ type: 'tool-call', name: 'read', arguments: '{"x":1}' }, { type: 'text' }, null, 'tail'],
+    [{ type: 'text', text: '' }, { type: 'image' }, { type: 'image' }],
+  ]
+  for (const content of cases) {
+    assert.equal(
+      tokenEstimateBlocks(content),
+      tokenEstimate(textOfContent(content)),
+      JSON.stringify(content),
+    )
+  }
+  // and a seeded fuzz over random block lists
+  const rand = mulberry32(81027)
+  const piece = () => {
+    const kind = Math.floor(rand() * 6)
+    if (kind === 0) return null
+    if (kind === 1) return 42
+    if (kind === 2) return 'raw' + Math.floor(rand() * 100)
+    if (kind === 3) return { type: 'text', text: '块' + Math.floor(rand() * 100) + ' abc' }
+    if (kind === 4) return { type: 'image' }
+    return { type: 'tool-result', content: rand() < 0.5 ? 'inner 结果 ' + Math.floor(rand() * 100) : [{ type: 'text', text: 'nested tail' }] }
+  }
+  for (let iter = 0; iter < 200; iter += 1) {
+    const n = Math.floor(rand() * 6)
+    const content = Array.from({ length: n }, piece)
+    assert.equal(
+      tokenEstimateBlocks(content),
+      tokenEstimate(textOfContent(content)),
+      'fuzz #' + iter + ' ' + JSON.stringify(content),
+    )
+  }
 })
