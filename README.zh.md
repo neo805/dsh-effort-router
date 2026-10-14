@@ -2,14 +2,15 @@
 
 [English](README.md) | 中文
 
-**当前版本：** `0.2.7-rc.7` · [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
+**当前版本：** `0.2.8` · [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
 
 DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考档位（reasoning effort）**，并让手写声明的 `llm-pi-ai` 自定义模型也能选档位。
 
-- 任务形态分类：`trivial / standard / engineering / hard`，由任务书本身决定，而不是工具数量
+- **漂移引擎**（0.2.8）：任务始发时只分类一次（`trivial / standard / engineering / hard`，取自用户任务书本身），随后证据驱动档位漂移——`档位 = 始发 + 错误通道 + 信息量通道 − 节俭`
+- 错误通道（6 步短窗，窗内衰减加权）：工具报错、同参重试、todo 刚完成（+1，意味着下一个子任务启动）、上一任务未解失败的延续
+- 信息量通道（32 步长窗）：简报与工具返回 token，经 **gzip 压缩率折扣**（循环重复不是信息量），双斜坡线性分级
+- 暖启动地板：新任务开头几步（默认 3 步）不低于始发档；之后完全交给漂移——激进节省由短窗错误反馈兜底
 - 许愿检测：零线索真空区里的委托式短简报（「帮我…」「can you…」）按 engineering 起步——信息不足的任务给个善意的起跑线
-- 证据升级：工具报错、同参重试、简报文本量、近期工具返回量自动升档（最响信号生效、单任务封顶、32 步滑动窗口）
-- 迟滞稳定：升档立即生效，降档需连续安静两步，防抖动
 - 节俭信号：子代理 / 上下文压力 / token 预算超限时自动降一档
 - 能力钳制：调度结果映射到目标模型**实际支持**的档位词表（含 `ultra` 等网关自定义值取最近档）
 - 手动优先：选择器里选具体档位 = 完全直通；选 Auto = 交给调度器
@@ -38,7 +39,11 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 - `chatAnnotate`：是否在对话视图为每个工具调用加一行 `provider/model · 档位` 小注（**默认关**，客户端加载时读取一次，切换后刷新页面生效）
 - `fillCustomModels`：是否自动补齐自定义模型默认档位表
 - `routes`：分类 → 档位路由表（trivial/standard 默认 low，engineering 默认 high，hard 默认 max）
-- `downAfter` / `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations`：降档迟滞与升档阈值
+- `shortWindow` / `longWindow` / `errorDecay`：错误通道的短/长窗口步数与窗内衰减权重数组（默认 6 / 32 / `1,0.8,0.6,0.5,0.4,0.3`）
+- `briefRamp` / `toolRamp` / `compressDiscount`：信息量线性斜坡（有效 token，默认 `400,1600` / `48000,128000`）与 gzip 压缩率折扣开关
+- `warmUpSteps` / `trivialLiftCap`：始发暖启动地板步长（默认 3）与 trivial 始发允许的总升档数（默认 1）
+- `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations` / `todoBump`：错误通道阈值、通道总封顶与 todo 完成升档
+- `downAfter`：**已废弃**（0.2.8 移除迟滞）——键保留以兼容旧配置文件，值被忽略
 - `cuesStrong` / `cuesNormal` / `cuesCheap` / `cuesWish`：自定义线索词典（追加在内置词典之上）
 - `dictStrong` / `dictNormal` / `dictCheap` / `dictWish`：词典**全量替换**——非空时该列表就是整部词典（内置词全部失效，可增可删），对应的 `cues*` 追加仍叠加生效；留空（默认）= 内置词典。改动前先读 `GET /effort-router/dictionaries` 拿到当前生效全量（含 `builtin` 内置参照），改完写回 `dict*` 即可；让 Agent 代改时说「把 xx 从 strong 词典删掉」即可
 

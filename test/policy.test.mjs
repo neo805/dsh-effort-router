@@ -1,6 +1,7 @@
 /**
- * policy.js unit tests — cue pipeline (dictionary/shape/volume), wish floor,
- * loudest-bump escalation, frugal demote, clamps.
+ * policy.js unit tests — origin cue pipeline (dictionary/shape), wish floor,
+ * drift composition (stacked channels, freshness-aware rungs, linear ramps,
+ * warm-up floor, trivial lift cap), frugal demote, clamps.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -8,11 +9,13 @@ import {
   POLICY_DEFAULTS,
   classifyStep,
   decideEffort,
+  decayThreshold,
   demoteClass,
   errorTextMatches,
   escalateClass,
   evidenceBumps,
   normalizePolicyConfig,
+  rampBumps,
   stableStringify,
   textOfContent,
   tokenEstimate,
@@ -51,8 +54,10 @@ test('classifyStep: dense engineering brief with structure -> hard', () => {
   assert.equal(r.stepClass, 'hard')
 })
 
-test('classifyStep: bare tool loop is not engineering by default', () => {
-  const r = classifyStep({ text: '看一下这个文件', toolCalls: 12 }, cfg)
+test('classifyStep: tool activity is not an input anymore (origin = brief only)', () => {
+  // 0.2.8: classification happens once at the task origin, before any tool
+  // call exists — the old toolCallClass floor is gone with it.
+  const r = classifyStep({ text: '看一下这个文件' }, cfg)
   assert.equal(r.stepClass, 'standard')
 })
 
@@ -88,73 +93,119 @@ test('wish floor: positive cues suppress the detector', () => {
 })
 
 test('decideEffort: routes table drives the tier', () => {
-  assert.equal(decideEffort(cfg, { text: '翻译这句话', toolCalls: 0 }).tier, 'low')
-  assert.equal(decideEffort(cfg, { text: '重构缓存层', toolCalls: 0 }).tier, 'high')
+  assert.equal(decideEffort(cfg, { originClass: 'trivial' }).tier, 'low')
+  assert.equal(decideEffort(cfg, { originClass: 'engineering' }).tier, 'high')
 })
 
 test('decideEffort: hard routes to max by default; opt-out clamps to fallback', () => {
-  const text = '重构 架构 设计 迁移 优化 性能 并发 调试 诊断 实现 集成\n```js\nclass A {}\n```'
-  const d = decideEffort(cfg, { text, toolCalls: 0 })
+  const d = decideEffort(cfg, { originClass: 'hard' })
   assert.equal(d.stepClass, 'hard')
   assert.equal(d.tier, 'max') // allowMax defaults to true (0.2.0)
   const noMax = normalizePolicyConfig({ allowMax: false })
-  const clamped = decideEffort(noMax, { text, toolCalls: 0 })
+  const clamped = decideEffort(noMax, { originClass: 'hard' })
   assert.equal(clamped.tier, 'high')
   assert.ok(clamped.reason.join().includes('max is opt-out'))
 })
 
-test('decideEffort: escalation on evidence lifts the class, capped', () => {
-  const signals = { text: '这个文件有问题', toolCalls: 4, escalations: 2 }
-  const d = decideEffort(cfg, signals)
-  // standard +2 -> hard (capped at hard), tier max (allowMax default)
+test('decideEffort: error-channel evidence lifts the class, capped at the ceiling', () => {
+  // weightedErrors 1.8 = two fresh errors under the default decay -> +2
+  const d = decideEffort(cfg, { originClass: 'standard', weightedErrors: 1.8 })
   assert.equal(d.stepClass, 'hard')
   assert.equal(d.tier, 'max')
+  // the channel cap (maxEscalations) binds evidence + todo + carry together
+  const capped = decideEffort(cfg, { originClass: 'standard', weightedErrors: 9, todoBump: 1, carry: 1 })
+  assert.equal(capped.stepClass, 'hard', 'standard +2 (channel cap) -> hard, not beyond')
+  assert.ok(capped.reason.join().includes('error channel capped'))
 })
 
-test('decideEffort: carry lifts engineering one class', () => {
-  const d = decideEffort(cfg, { text: '重构缓存层', toolCalls: 0, carry: 1, escalations: 0 })
+test('decideEffort: carry lifts the origin one class', () => {
+  const d = decideEffort(cfg, { originClass: 'engineering', carry: 1 })
   assert.equal(d.stepClass, 'hard')
 })
 
-test('decideEffort: volume cues lift on a log ladder, loudest wins, no stacking', () => {
+test('decideEffort: volume reads linear ramps; channels STACK (0.2.8)', () => {
   // brief >400 -> +1: standard -> engineering
-  const brief1 = decideEffort(cfg, { text: '今天天气怎么样', toolCalls: 0, briefTokens: 500 })
+  const brief1 = decideEffort(cfg, { originClass: 'standard', briefVolume: 500 })
   assert.equal(brief1.stepClass, 'engineering')
   assert.ok(brief1.reason.join().includes('brief volume'))
   // brief >1600 -> +2: standard -> hard
-  const brief2 = decideEffort(cfg, { text: '今天天气怎么样', toolCalls: 0, briefTokens: 1700 })
+  const brief2 = decideEffort(cfg, { originClass: 'standard', briefVolume: 1700 })
   assert.equal(brief2.stepClass, 'hard')
   // tool window >48000 -> +1
-  const tool1 = decideEffort(cfg, { text: '今天天气怎么样', toolCalls: 3, toolVolume: 50000 })
+  const tool1 = decideEffort(cfg, { originClass: 'standard', toolVolume: 50000 })
   assert.equal(tool1.stepClass, 'engineering')
-  // evidence +1 AND brief volume +2 -> the louder +2 applies, never +3
-  const loud = decideEffort(cfg, { text: '今天天气怎么样', toolCalls: 0, escalations: 1, briefTokens: 1700 })
-  assert.equal(loud.stepClass, 'hard')
-  // cheap intent is exempt from volume lifts
-  const exempt = decideEffort(cfg, { text: '翻译这句话', toolCalls: 1, briefTokens: 5000, toolVolume: 200000 })
-  assert.equal(exempt.stepClass, 'trivial')
+  // the louder of the two ramps speaks (brief +2 vs tool +1)
+  const louder = decideEffort(cfg, { originClass: 'standard', briefVolume: 1700, toolVolume: 50000 })
+  assert.equal(louder.stepClass, 'hard')
+  // 0.2.8: channels STACK — evidence +2 AND tool volume +2 lift +4 (ceiling hard)
+  const stacked = decideEffort(cfg, { originClass: 'standard', weightedErrors: 1.8, toolVolume: 130000 })
+  assert.equal(stacked.stepClass, 'hard')
+  assert.ok(stacked.reason.join().includes('lift +4'), 'the drift sum is reported: ' + stacked.reason.join())
+  // a trivial origin caps the TOTAL lift at trivialLiftCap (default 1)
+  const cappedLift = decideEffort(cfg, { originClass: 'trivial', briefVolume: 5000, toolVolume: 200000 })
+  assert.equal(cappedLift.stepClass, 'standard')
+  assert.ok(cappedLift.reason.join().includes('trivial origin'))
 })
 
-test('evidenceBumps: error and repeat thresholds', () => {
+test('decideEffort: the warm-up floor holds the origin against frugal', () => {
+  const held = decideEffort(cfg, { originClass: 'engineering', frugal: true, frugalWhy: 'subagent', warmup: true })
+  assert.equal(held.stepClass, 'engineering', 'frugal cannot undercut a fresh task')
+  assert.ok(held.reason.join().includes('warm-up'))
+  const released = decideEffort(cfg, { originClass: 'engineering', frugal: true, frugalWhy: 'subagent', warmup: false })
+  assert.equal(released.stepClass, 'standard', 'after the warm-up, drift owns the level')
+})
+
+test('evidenceBumps: freshness-aware rungs under decay weights (0.2.8)', () => {
   assert.equal(evidenceBumps(0, 0, cfg), 0)
   assert.equal(evidenceBumps(1, 0, cfg), 1) // 0.2.6 (audit R4.1): the FIRST error lifts one class
-  assert.equal(evidenceBumps(2, 0, cfg), 2) // second rung: errors >= onErrors*2
+  assert.equal(evidenceBumps(1.8, 0, cfg), 2) // two FRESH errors reach the +2 rung (1 + 0.8)
+  assert.equal(evidenceBumps(0.8, 0, cfg), 0) // one stale error is discounted away
   assert.equal(evidenceBumps(4, 0, cfg), 2) // capped by maxEscalations
-  assert.equal(evidenceBumps(0, 3, cfg), 1)
+  assert.equal(evidenceBumps(0, 2.4, cfg), 1) // three fresh repeats (1 + 0.8 + 0.6)
+  assert.equal(evidenceBumps(0, 1.8, cfg), 0) // two fresh repeats are not three
   assert.equal(evidenceBumps(9, 9, normalizePolicyConfig({ maxEscalations: 1 })), 1)
+  // flat weights reproduce the pre-0.2.8 thresholds exactly
+  const flat = normalizePolicyConfig({ errorDecay: [1, 1, 1, 1, 1, 1] })
+  assert.equal(evidenceBumps(2, 0, flat), 2)
+  assert.equal(evidenceBumps(0, 3, flat), 1)
+})
+
+test('rampBumps: one bump per rung exceeded', () => {
+  assert.equal(rampBumps(0, [400, 1600]), 0)
+  assert.equal(rampBumps(400, [400, 1600]), 0)
+  assert.equal(rampBumps(401, [400, 1600]), 1)
+  assert.equal(rampBumps(1700, [400, 1600]), 2)
+  assert.equal(rampBumps(99999, []), 0)
+  assert.equal(rampBumps(500, undefined), 0)
+})
+
+test('decayThreshold: the N freshest weights (flat = exactly N)', () => {
+  assert.equal(decayThreshold([1, 0.8, 0.6, 0.5, 0.4, 0.3], 1), 1)
+  assert.equal(decayThreshold([1, 0.8, 0.6, 0.5, 0.4, 0.3], 2), 1.8)
+  assert.equal(decayThreshold([1, 0.8, 0.6, 0.5, 0.4, 0.3], 3), 2.4)
+  assert.equal(decayThreshold([1, 1, 1], 3), 3)
+  assert.equal(decayThreshold([0.5], 3), 1.5, 'ages beyond the array reuse its last value')
+})
+
+test('normalizePolicyConfig: ramp/decay vectors sanitize element-wise', () => {
+  const c = normalizePolicyConfig({ briefRamp: [1600, 400], errorDecay: [1, 'x', 0.5] })
+  assert.deepEqual(c.briefRamp, [400, 1600], 'rungs sort ascending')
+  assert.deepEqual(c.errorDecay, POLICY_DEFAULTS.errorDecay, 'a poisoned vector falls back whole')
+  const bad = normalizePolicyConfig({ toolRamp: [-1, 0] })
+  assert.deepEqual(bad.toolRamp, POLICY_DEFAULTS.toolRamp)
 })
 
 test('decideEffort: frugal signal demotes one class', () => {
-  const d = decideEffort(cfg, { text: '重构缓存层', toolCalls: 0, frugal: true, frugalWhy: 'subagent' })
+  const d = decideEffort(cfg, { originClass: 'engineering', frugal: true, frugalWhy: 'subagent' })
   assert.equal(d.stepClass, 'standard')
   assert.equal(d.tier, 'low')
   assert.ok(d.reason.join().includes('frugal'))
   const off = normalizePolicyConfig({ frugalDemote: false })
-  assert.equal(decideEffort(off, { text: '重构缓存层', toolCalls: 0, frugal: true }).tier, 'high')
+  assert.equal(decideEffort(off, { originClass: 'engineering', frugal: true }).tier, 'high')
 })
 
 test('decideEffort: poisoned history pins off', () => {
-  const d = decideEffort(cfg, { text: '重构缓存层', toolCalls: 1, poisonedHistory: true })
+  const d = decideEffort(cfg, { originClass: 'engineering', poisonedHistory: true })
   assert.equal(d.tier, 'off')
   assert.equal(d.poisoned, true)
 })
@@ -162,7 +213,7 @@ test('decideEffort: poisoned history pins off', () => {
 test('decideEffort: a route of off can never be emitted (rule 4)', () => {
   const weird = normalizePolicyConfig({})
   weird.routes = { trivial: 'off', standard: 'off', engineering: 'off', hard: 'off' }
-  const d = decideEffort(weird, { text: '翻译', toolCalls: 0 })
+  const d = decideEffort(weird, { originClass: 'trivial' })
   assert.equal(d.tier, 'low')
 })
 

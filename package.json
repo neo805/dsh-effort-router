@@ -1,10 +1,10 @@
 {
   "name": "dsh-effort-router",
-  "version": "0.2.7-rc.8",
+  "version": "0.2.8",
   "publishConfig": {
     "access": "public"
   },
-  "description": "DSH plugin: context-aware per-step reasoning-effort routing. Classifies each step (trivial/standard/engineering/hard) from the task brief and live session evidence, escalates on tool errors, stabilizes with hysteresis, clamps to the target model's advertised efforts, and injects an 'Auto' mask into the native model selector. Fills default reasoningEfforts for hand-declared llm-pi-ai custom models. All user-facing options live in the plugin config file (no settings UI); the GUI surfaces (composer badge, trajectory hoisting) are read-only displays.",
+  "description": "DSH plugin: context-aware per-step reasoning-effort routing (the drift engine). Classifies the task origin once (trivial/standard/engineering/hard) from the originating brief, then drifts the class on stacked evidence: a decay-weighted short window of tool errors / repeats / todo completions / failure carry, a long window of gzip-discounted information volume on linear ramps, and real-time frugal signals — no hysteresis. Clamps to the target model's advertised efforts and injects an 'Auto' mask into the native model selector. Fills default reasoningEfforts for hand-declared llm-pi-ai custom models. All user-facing options live in the plugin config file (no settings UI); the GUI surfaces (composer badge, trajectory hoisting) are read-only displays.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

@@ -334,7 +334,7 @@ test('route: sessionId direct, hint resolution, and newest-wins merged order', a
   assert.equal(merged.anchors.call_old.model, 'kimi-k3')
 })
 
-test('apply: poison pin needs shape AND store provenance, and bypasses hysteresis', async () => {
+test('apply: poison pin needs shape AND store provenance, and applies immediately', async () => {
   const listeners = new Map()
   const llm = {
     adapters: new Map(),
@@ -368,8 +368,7 @@ test('apply: poison pin needs shape AND store provenance, and bypasses hysteresi
   }
   onClaimed({ agent, message: { content: '帮我重构这个模块的缓存层', role: 'user' }, turn: 1 })
 
-  // 1. Shape alone never pins: the engineering brief schedules high (and sets
-  //    the hysteresis memory to high).
+  // 1. Shape alone never pins: the engineering brief schedules high.
   const step1 = await onRequest({ agent, turn: 1, step: 1 }, async () => ({
     provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
   }))
@@ -382,17 +381,15 @@ test('apply: poison pin needs shape AND store provenance, and bypasses hysteresi
   }))
   assert.equal(step2.reasoningEffort, 'off')
 
-  // 3. Shape + provenance: pinned off IMMEDIATELY — hysteresis would have held
-  //    'high' for downAfter quiet decisions, so 'off' here also proves the pin
-  //    bypasses hysteresis.
+  // 3. Shape + provenance: pinned off IMMEDIATELY (0.2.8 has no hysteresis
+  //    to bypass — the drift engine applies every decision as computed).
   const step3 = await onRequest({ agent, turn: 1, step: 3 }, async () => ({
     provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
   }))
   assert.equal(step3.reasoningEffort, 'off', 'proven poison pins off at once')
 
   // 4. Compaction removes the offending turn: the projection shrinks, the
-  //    shape flag clears, and scheduling resumes (hysteresis memory was not
-  //    touched by the pin, so high comes straight back).
+  //    shape flag clears, and scheduling resumes.
   agent.session.deriveMessages = () => [{ role: 'user', content: '重构缓存层' }]
   const step4 = await onRequest({ agent, turn: 1, step: 4 }, async () => ({
     provider: 'gw', model: 'thinker', reasoningEffort: 'auto',

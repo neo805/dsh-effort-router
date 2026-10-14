@@ -4,6 +4,28 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
+## Settled by 0.2.8 (the drift engine)
+
+- **R5 (subagent routing) — settled by DESIGN DECISION.** The maintainer
+  ruled: subagents DO get auto-routed; the origin classifies the spawn
+  instruction text, an empty spawn anchors `standard`, and the frugal
+  subagent demotion applies on top. (The R5 observation — subagent seeds
+  arrive with the parent's resolved effort as a concrete pick — remains a
+  host-side provenance question for the echo guard, unchanged.)
+- **R6 (restart replay pollution) — mitigated.** Resumed tasks now resume
+  with the warm-up EXPIRED and the error window shrank to 6 decay-weighted
+  buckets (from 32 flat ones), so the replayed-stale-escalation blast
+  radius is smaller; the residual (a replayed error still weighs 1 on its
+  first bucket) self-heals within the short window.
+- **Audit R4.2 (repeat threshold validity) — re-anchored.** Repeat/error
+  rungs are now freshness-aware (`decayThreshold`): N events reach their
+  rung at full weight only when fresh. The validity question itself moves
+  to the decision log's `weightedErrors`/`weightedRepeats` fields.
+- **Audit R4.3 (volume ladder recalibration) — transformed.** The two-rung
+  log ladders became user-tunable LINEAR ramps (`briefRamp`/`toolRamp`)
+  over gzip-discounted effective tokens; the log keeps raw + discounted
+  pairs so the next calibration cycle can set rungs from data.
+
 ## R1 — Tool-call captions: retired from the chat flow (DONE, 0.2.1; revived as opt-in 0.2.7-rc.7)
 
 **Status quo.** 0.1.x annotated every tool call in the chat flow with the

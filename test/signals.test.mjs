@@ -1,7 +1,8 @@
 /**
- * signals.js tests with a synthetic agent/session: sliding-window evidence,
- * volume cues, plus the full schedule composition (decideEffort -> hysteresis)
- * the host interceptor runs.
+ * signals.js tests with a synthetic agent/session — the 0.2.8 drift engine:
+ * origin anchor (classified once), warm-up floor + merge rule, epoch-scoped
+ * short window (decay-weighted errors/repeats, todo bump, carry), the
+ * long volume window across task boundaries, and the gzip-ratio discount.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -21,8 +22,13 @@ function makeAgent(messages) {
   }
 }
 
-function makeSignals(cfg = {}) {
-  return createSignals({ config: () => normalizePolicyConfig(cfg), logger: silentLogger, projections: undefined })
+function makeSignals(cfg = {}, extra = {}) {
+  return createSignals({
+    config: () => normalizePolicyConfig(cfg),
+    logger: silentLogger,
+    projections: extra.projections,
+    compress: extra.compress,
+  })
 }
 
 const userMsg = (text) => ({ role: 'user', content: [{ type: 'text', text }] })
@@ -34,59 +40,207 @@ const toolResult = (text, isError = false) => ({
   role: 'user',
   content: [{ type: 'tool-result', content: [{ type: 'text', text }], isError }],
 })
+/** DSH v4 shape: first-class role:"tool" message (verified against the host's own construction). */
+const v4ToolResult = (text, isError = false, callId = 'c1') => ({
+  role: 'tool',
+  toolCallId: callId,
+  isError,
+  source: { kind: 'tool', callId },
+  content: [{ type: 'text', text }],
+})
 
-test('collect: claimed brief text is classified', () => {
+/** A script of n failing/clean call+result pairs (v4). */
+function script(pairs) {
+  const out = []
+  let i = 0
+  for (const [name, text, isError] of pairs) {
+    i += 1
+    out.push(assistantCall(name, '{"p":' + i + '}'), v4ToolResult(text, isError, 'c' + i))
+  }
+  return out
+}
+
+// ---- channel ④ origin anchor ------------------------------------------------
+
+test('origin: the claimed brief is classified ONCE and anchors the task', () => {
   const signals = makeSignals()
   const agent = makeAgent([])
   signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
-  const sig = signals.collect(agent, { turn: 1, step: 1 })
-  assert.ok(sig.text.includes('重构'))
+  let sig = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig.originClass, 'engineering')
+  assert.equal(sig.warmup, true, 'a fresh task is inside its warm-up')
   assert.ok(sig.briefTokens > 0, 'brief token estimate is exposed')
+  // Later steps never re-classify: the projection's last user text changes
+  // (a cheap-looking follow-up the claim stream announced long ago), the
+  // origin stays put.
+  agent.session.deriveMessages = () => [userMsg('帮我重构这个模块的缓存'), userMsg('哦')]
+  sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.originClass, 'engineering')
   const d = decideEffort(normalizePolicyConfig({}), sig)
   assert.equal(d.stepClass, 'engineering')
+  assert.equal(d.tier, 'high')
 })
 
-test('collect: falls back to the last user message when no claim seen', () => {
+test('origin: an empty brief (subagent spawn fallback) anchors standard', () => {
   const signals = makeSignals()
-  const agent = makeAgent([userMsg('解释一下这段代码')])
-  const sig = signals.collect(agent, { turn: 3, step: 1 })
-  assert.ok(sig.text.includes('解释'))
+  const agent = makeAgent([])
+  agent.session.header = { delegationDepth: 1 }
+  const sig = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig.originClass, 'standard', 'the approved subagent default')
+  assert.equal(sig.frugal, true)
+  assert.equal(sig.frugalWhy, 'subagent')
 })
 
-test('tool evidence folds into the window and escalates on errors', () => {
+test('origin: a task with work already under it resumes with the warm-up EXPIRED', () => {
+  const signals = makeSignals()
+  // Resumed window: the instruction is followed by the work it triggered —
+  // its age is undatable, so it gets no floor. A bare instruction with no
+  // work yet is, for all the engine knows, fresh and DOES warm up.
+  const agent = makeAgent([userMsg('帮我重构这个模块的缓存'), assistantCall('read', '{"p":"a"}')])
+  const sig = signals.collect(agent, { turn: 3, step: 1 })
+  assert.equal(sig.originClass, 'engineering')
+  assert.equal(sig.warmup, false, 'an undated task gets no floor')
+})
+
+test('warm-up floor: frugal cannot undercut the origin while the task is fresh', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  agent.session.header = { delegationDepth: 1 } // frugal: subagent
+  signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
+  const cfg = normalizePolicyConfig({})
+  // warmUpSteps 3: the first three steps hold the origin class...
+  for (let step = 1; step <= 3; step += 1) {
+    const sig = signals.collect(agent, { turn: 1, step })
+    assert.equal(sig.warmup, true, 'step ' + step + ' is inside the warm-up')
+    const d = decideEffort(cfg, sig)
+    assert.equal(d.stepClass, 'engineering', 'frugal is floored at step ' + step)
+    assert.ok(d.reason.join().includes('warm-up'))
+  }
+  // ...the fourth step drifts below the origin: aggressive saving in action.
+  const sig = signals.collect(agent, { turn: 1, step: 4 })
+  assert.equal(sig.warmup, false)
+  const d = decideEffort(cfg, sig)
+  assert.equal(d.stepClass, 'standard', 'after the warm-up, drift owns the level')
+})
+
+test('merge rule: a follow-up inside the warm-up keeps the STRONGER origin and restarts it', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('今天天气怎么样'), turn: 1 })
+  signals.collect(agent, { turn: 1, step: 1 })
+  // Interjection one step later: same task — the stronger origin wins.
+  signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 2 })
+  let sig = signals.collect(agent, { turn: 2, step: 1 })
+  assert.equal(sig.originClass, 'engineering', 'the merged task takes the stronger origin')
+  assert.equal(sig.warmup, true, 'the warm-up restarted')
+  // A follow-up BEYOND the warm-up opens a new task with its own origin.
+  signals.collect(agent, { turn: 2, step: 2 })
+  signals.collect(agent, { turn: 2, step: 3 })
+  signals.collect(agent, { turn: 2, step: 4 })
+  signals.onClaimed({ agent, message: userMsg('今天天气怎么样'), turn: 3 })
+  sig = signals.collect(agent, { turn: 3, step: 1 })
+  assert.equal(sig.originClass, 'standard', 'a real boundary classifies a fresh origin')
+  assert.equal(sig.carry, 0)
+})
+
+test('an unannounced user message in the projection opens a task synthetically', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('今天天气怎么样'), turn: 1 })
+  signals.collect(agent, { turn: 1, step: 1 })
+  // The host never emitted claimed for this interjection; the projection shows it.
+  agent.session.deriveMessages = () => [userMsg('今天天气怎么样'), userMsg('帮我重构这个模块的缓存')]
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.originClass, 'engineering', 'synthetic claim classified the interjection')
+})
+
+// ---- channel ① short window --------------------------------------------------
+
+test('errors fold into the short window; the FIRST one lifts (0.2.6, audit R4.1)', () => {
   const signals = makeSignals()
   const agent = makeAgent([])
   signals.onClaimed({ agent, message: userMsg('看看这些文件'), turn: 1 })
-  // step 1: no errors yet
-  let sig = signals.collect(agent, { turn: 1, step: 1 })
-  assert.equal(sig.escalations, 0)
-  // one failed tool result: the FIRST error already lifts (0.2.6, audit R4.1)
-  agent.session.messages = [
-    assistantCall('read', '{"p":"a"}'),
-    toolResult('[exit code: 1] boom'),
-  ]
-  agent.session.deriveMessages = () => agent.session.messages
-  sig = signals.collect(agent, { turn: 1, step: 2 })
-  assert.equal(sig.toolCalls, 1)
-  assert.equal(sig.taskErrors, 1)
-  assert.equal(sig.escalations, 1) // >= escalateOnErrors(1) -> 1
-  assert.ok(sig.toolVolume > 0, 'tool-result volume is tracked')
-  // a second failure reaches the +2 rung (errors >= onErrors*2)
-  agent.session.messages = [
-    ...agent.session.messages,
-    assistantCall('read', '{"p":"b"}'),
-    toolResult('[exit code: 2] boom again'),
-  ]
-  sig = signals.collect(agent, { turn: 1, step: 3 })
+  agent.session.deriveMessages = () => script([
+    ['read', '[exit code: 1] boom', true],
+    ['read', '[exit code: 2] boom again', true],
+  ])
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
   assert.equal(sig.toolCalls, 2)
   assert.equal(sig.taskErrors, 2)
-  assert.equal(sig.escalations, 2)
-  // and the schedule reflects it: standard +2 -> hard -> max
+  assert.equal(sig.weightedErrors, 1 + 0.8, 'newest bucket weighs 1, the previous 0.8')
   const d = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(d.stepClass, 'hard')
+  assert.equal(d.stepClass, 'hard', 'standard +2 -> hard')
 })
 
-test('repeated identical tool calls escalate', () => {
+test('decay weights: a stale error alone cannot reach the threshold', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('看看这些文件'), turn: 1 })
+  agent.session.deriveMessages = () => script([
+    ['read', '[exit code: 1] boom', true], // age 1 -> weight 0.8 < escalateOnErrors(1)
+    ['read', 'ok', false],
+  ])
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.taskErrors, 1, 'the raw count still logs')
+  assert.equal(sig.weightedErrors, 0.8)
+  const d = decideEffort(normalizePolicyConfig({}), sig)
+  assert.equal(d.stepClass, 'standard', 'no fresh evidence: no lift')
+})
+
+test('the short window ages evidence out after shortWindow buckets', () => {
+  const signals = makeSignals({ shortWindow: 3 })
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('看看这些文件'), turn: 1 })
+  agent.session.deriveMessages = () => script([
+    ['read', '[exit code: 1] boom', true], // 4 buckets back in a 3-bucket window
+    ['read', 'ok', false],
+    ['read', 'ok', false],
+    ['read', 'ok', false],
+  ])
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.taskErrors, 0, 'the error aged out of the short window')
+  assert.equal(sig.toolCalls, 4, 'the long window still counts every call')
+  assert.ok(sig.toolVolume > 0, 'and still sums the volume')
+})
+
+test('a real task boundary zeroes the short window but carries unresolved errors', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('任务一'), turn: 1 })
+  agent.session.deriveMessages = () => script([
+    ['bash', '[exit code: 9] fail', true],
+    ['bash', '[exit code: 9] fail again', true],
+  ])
+  signals.collect(agent, { turn: 1, step: 2 })
+  // Boundary beyond the warm-up: new epoch.
+  for (let step = 3; step <= 5; step += 1) signals.collect(agent, { turn: 1, step })
+  const volumeBefore = signals.collect(agent, { turn: 1, step: 6 }).toolVolume
+  signals.onClaimed({ agent, message: userMsg('任务二'), turn: 2 })
+  const sig = signals.collect(agent, { turn: 2, step: 1 })
+  assert.equal(sig.taskErrors, 0, 'the new task starts from zero error evidence')
+  assert.equal(sig.carry, 1, 'the unresolved failure of the previous task carries +1')
+  assert.equal(sig.toolVolume, volumeBefore, 'the long volume window spans the boundary')
+  const d = decideEffort(normalizePolicyConfig({}), sig)
+  assert.equal(d.stepClass, 'engineering', 'standard +1 carry -> engineering')
+})
+
+test('carry decays with the short window', () => {
+  const signals = makeSignals({ shortWindow: 3 })
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('任务一'), turn: 1 })
+  agent.session.deriveMessages = () => script([['bash', '[exit code: 9] fail', true]])
+  signals.collect(agent, { turn: 1, step: 2 })
+  for (let step = 3; step <= 5; step += 1) signals.collect(agent, { turn: 1, step })
+  signals.onClaimed({ agent, message: userMsg('任务二'), turn: 2 })
+  let sig = signals.collect(agent, { turn: 2, step: 1 })
+  assert.equal(sig.carry, 1)
+  sig = signals.collect(agent, { turn: 2, step: 2 })
+  sig = signals.collect(agent, { turn: 2, step: 3 })
+  sig = signals.collect(agent, { turn: 2, step: 4 })
+  assert.equal(sig.carry, 0, 'carry is a short-window signal, not a permanent bias')
+})
+
+test('repeated identical tool calls count inside the short window', () => {
   const signals = makeSignals()
   const agent = makeAgent([])
   signals.onClaimed({ agent, message: userMsg('检查'), turn: 1 })
@@ -101,59 +255,91 @@ test('repeated identical tool calls escalate', () => {
   ]
   const sig = signals.collect(agent, { turn: 1, step: 4 })
   assert.equal(sig.taskRepeats, 2)
-  assert.equal(sig.escalations, 0) // 2 repeats < escalateOnRepeats(3)
+  assert.ok(sig.weightedRepeats > 0 && sig.weightedRepeats < 2, 'repeats are decay-weighted too')
 })
 
-test('the sliding window ages old evidence out', () => {
-  // window of 2 step buckets: the first error retires once two newer buckets seal
-  const signals = makeSignals({ scoring: { toolWindow: 2 } })
+test('todo completion bumps +1 inside the short window', () => {
+  let todos = [
+    { status: 'in_progress', content: '实现缓存层' },
+    { status: 'pending', content: '补测试' },
+  ]
+  const projections = { stateOf: (_s, key) => (key === 'todos' ? todos : undefined) }
+  const signals = makeSignals({}, { projections })
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
+  let sig = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig.todoBump, 0, 'the first snapshot only primes the diff')
+  // One completion fires the bump...
+  todos = [
+    { status: 'completed', content: '实现缓存层' },
+    { status: 'in_progress', content: '补测试' },
+  ]
+  sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.todoBump, 1)
+  const d = decideEffort(normalizePolicyConfig({}), sig)
+  assert.equal(d.stepClass, 'hard', 'engineering +1 todo -> hard')
+  // ...two completions in ONE step still fire a single bump...
+  todos = [
+    { status: 'completed', content: '实现缓存层' },
+    { status: 'completed', content: '补测试' },
+  ]
+  sig = signals.collect(agent, { turn: 1, step: 3 })
+  assert.equal(sig.todoBump, 1, 'several completions, one bump')
+})
+
+test('a wholesale todo-list rewrite is NOT a completion (no content lineage)', () => {
+  let todos = [{ status: 'in_progress', content: '实现缓存层' }]
+  const projections = { stateOf: (_s, key) => (key === 'todos' ? todos : undefined) }
+  const signals = makeSignals({}, { projections })
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
+  signals.collect(agent, { turn: 1, step: 1 })
+  // The model rewrote the plan: no content matches, so nothing can have
+  // observably "completed" — the conservative reading is no bump.
+  todos = [{ status: 'completed', content: '全新的事项' }]
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.todoBump, 0, 'a rewritten list proves nothing')
+})
+
+// ---- channel ② long window + compression discount ----------------------------
+
+test('the volume ramps read effective (discounted) tokens', () => {
+  // Fake compressor: everything measures at 20% — repetition-heavy results.
+  const compress = { ratio: (pieces) => (pieces.join('').length >= 256 ? { bytes: 1000, gzBytes: 200, ratio: 0.2 } : null) }
+  const signals = makeSignals({}, { compress })
   const agent = makeAgent([])
   signals.onClaimed({ agent, message: userMsg('看看这些文件'), turn: 1 })
-  agent.session.deriveMessages = () => [
-    assistantCall('read', '{"p":"a"}'),
-    toolResult('[exit code: 1] boom'),     // bucket 1: 1 error — evicted below
-    assistantCall('read', '{"p":"b"}'),
-    toolResult('[exit code: 1] bam'),      // bucket 2: 1 error — kept
-    assistantCall('read', '{"p":"c"}'),
-    toolResult('ok'),                      // bucket 3: clean — kept
-  ]
-  const sig = signals.collect(agent, { turn: 1, step: 4 })
-  assert.equal(sig.toolCalls, 2, 'only the last 2 buckets count their calls')
-  assert.equal(sig.taskErrors, 1, 'the oldest error aged out of the window')
-  assert.equal(sig.escalations, 1, 'the surviving single error still lifts (0.2.6, audit R4.1)')
+  // tokenEstimate counts latin RUNS: vary the words so 5 words x 240
+  // repetitions count ~1200 tokens, not ~240.
+  const big = Array.from({ length: 240 }, (_, i) => 'lorem ipsum dolor sit amet' + i).join(' ')
+  agent.session.deriveMessages = () => script([['read', big, false]])
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.ok(sig.toolVolumeRaw > 1000, 'raw volume reflects the text')
+  assert.ok(sig.toolVolume < sig.toolVolumeRaw / 2, 'the discounted volume is much smaller')
 })
 
-test('a new claim retires the evidence of the previous task', () => {
+test('no compressor wired = raw tokens (the pre-0.2.8 behavior)', () => {
   const signals = makeSignals()
   const agent = makeAgent([])
-  signals.onClaimed({ agent, message: userMsg('任务一'), turn: 1 })
-  agent.session.deriveMessages = () => [
-    assistantCall('bash', '{"c":"x"}'),
-    toolResult('[exit code: 9] fail'),
-    assistantCall('bash', '{"c":"y"}'),
-    toolResult('[exit code: 9] fail again'),
-  ]
-  signals.collect(agent, { turn: 1, step: 2 })
-  signals.onClaimed({ agent, message: userMsg('任务二'), turn: 2 })
+  signals.onClaimed({ agent, message: userMsg('看看这些文件'), turn: 1 })
+  agent.session.deriveMessages = () => script([['read', 'x'.repeat(4000), false]])
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.toolVolume, sig.toolVolumeRaw)
+})
+
+test('brief entries accumulate over the long window into the brief ramp', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('翻译 ' + 'word '.repeat(250)), turn: 1 })
+  signals.collect(agent, { turn: 1, step: 1 })
+  // A merged follow-up adds MORE brief information to the same window.
+  signals.onClaimed({ agent, message: userMsg('还有 ' + 'word '.repeat(250)), turn: 2 })
   const sig = signals.collect(agent, { turn: 2, step: 1 })
-  assert.equal(sig.taskErrors, 0)
-  assert.equal(sig.carry, 1) // previous task ended on unresolved failure
+  assert.ok(sig.briefVolume > 400, 'both briefs sum into the long window')
+  assert.ok(sig.briefVolumeRaw >= sig.briefVolume)
 })
 
-test('hysteresis holds a downgrade for downAfter quiet decisions', () => {
-  const signals = makeSignals()
-  const agent = makeAgent([])
-  const cfg = normalizePolicyConfig({})
-  // raise first (immediate)
-  let s = signals.stabilizeEffort(agent, 'high', cfg.downAfter)
-  assert.equal(s.tier, 'high')
-  // quieter desired: held once, applied on the second
-  s = signals.stabilizeEffort(agent, 'low', cfg.downAfter)
-  assert.equal(s.tier, 'high')
-  assert.equal(s.held, true)
-  s = signals.stabilizeEffort(agent, 'low', cfg.downAfter)
-  assert.equal(s.tier, 'low')
-})
+// ---- the rest of the collector contract --------------------------------------
 
 test('off-shape history is detected and cleared after a shrink (shape fact, not poison)', () => {
   const signals = makeSignals()
@@ -196,7 +382,7 @@ test('loud degradation: missing deriveMessages warns once and still classifies t
   signals.onClaimed({ agent, message: userMsg('重构缓存'), turn: 1 })
   const sig = signals.collect(agent, { turn: 1, step: 1 })
   assert.equal(sig.toolCalls, 0)
-  assert.ok(sig.text.includes('重构')) // brief still drives classification
+  assert.equal(sig.originClass, 'engineering') // brief still drives the origin
   signals.collect(agent, { turn: 1, step: 2 })
   assert.equal(warnings.filter((w) => w.includes('deriveMessages')).length, 1) // warned exactly once
 })
@@ -205,7 +391,6 @@ test('projection signals: pressure above threshold marks frugal', () => {
   const projections = {
     stateOf: (_session, key) => {
       if (key === 'contextPressure') return { contextWindow: 100, pressureTokens: 90 }
-      if (key === 'todos') return [{ status: 'in_progress', content: '实现缓存层' }]
       return undefined
     },
   }
@@ -218,26 +403,6 @@ test('projection signals: pressure above threshold marks frugal', () => {
   const sig = signals.collect(agent, { turn: 1, step: 1 })
   assert.equal(sig.frugal, true)
   assert.ok(sig.frugalWhy.includes('context pressure'))
-  assert.ok(sig.text.includes('实现缓存层')) // todo folded into the brief
-})
-
-test('delegationDepth from the session header marks subagents frugal', () => {
-  const signals = makeSignals()
-  const agent = makeAgent([])
-  agent.session.header = { delegationDepth: 1 }
-  const sig = signals.collect(agent, { turn: 1, step: 1 })
-  assert.equal(sig.delegationDepth, 1)
-  assert.equal(sig.frugal, true)
-  assert.equal(sig.frugalWhy, 'subagent')
-})
-
-/** DSH v4 shape: first-class role:"tool" message (verified against the host's own construction). */
-const v4ToolResult = (text, isError = false, callId = 'c1') => ({
-  role: 'tool',
-  toolCallId: callId,
-  isError,
-  source: { kind: 'tool', callId },
-  content: [{ type: 'text', text }],
 })
 
 test('v4 tool channel: message-level isError folds into the window (audit R1)', () => {
@@ -251,7 +416,7 @@ test('v4 tool channel: message-level isError folds into the window (audit R1)', 
   const sig = signals.collect(agent, { turn: 1, step: 2 })
   assert.equal(sig.toolCalls, 1)
   assert.equal(sig.taskErrors, 1, 'v4 message-level isError counts')
-  assert.equal(sig.escalations, 1, 'the v4 error reaches escalateOnErrors(1)')
+  assert.equal(sig.weightedErrors, 1, 'the newest bucket weighs 1')
   assert.ok(sig.toolVolume > 0, 'v4 text blocks count toward result volume')
 })
 

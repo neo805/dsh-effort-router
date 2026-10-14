@@ -2,14 +2,15 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.7-rc.7` · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.8` · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
-- Task-shape classification: `trivial / standard / engineering / hard` from the brief itself, not from tool-call counts
+- **The drift engine** (0.2.8): the task ORIGIN is classified once from the brief the user sent (`trivial / standard / engineering / hard`); evidence then drifts the class — `level = origin + error channel + volume channel − frugal`
+- Error channel (short 6-step window, decay-weighted): tool errors, identical-argument retries, a just-completed todo (+1 — the next subtask is starting), and a carry from the previous task's unresolved failure
+- Volume channel (long 32-step window): brief and tool-result tokens, **gzip-ratio discounted** (repetition is not information), graded by two linear ramps
+- Warm-up floor: a fresh task never routes below its origin for the first steps (default 3); afterwards drift owns the level — aggressive saving, with the short error window as the feedback loop
 - Wish detector: a short delegation-style brief in the cue vacuum zone (`帮我…`, `can you…`) starts at the engineering floor — underspecified tasks get the benefit of the doubt
-- Evidence escalation: tool errors, identical-argument retries, brief text volume, and recent tool-result volume lift the class (loudest signal wins, capped per task, sliding 32-step window)
-- Hysteresis: upgrades apply immediately, downgrades wait for two consecutive quiet decisions
 - Frugal signals: subagents, context pressure, or a session token budget demote one class
 - Capability clamp: the scheduled tier maps onto the target model's advertised vocabulary (nearest rank, so gateway vocabularies like `ultra` work)
 - Manual wins: a concrete level in the selector passes through verbatim; Auto hands the step to the scheduler
@@ -38,7 +39,11 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives
 - `chatAnnotate`: add a `provider/model · effort` caption row under each tool call in the conversation view (**default off**; read once at client load, so a toggle applies on page reload)
 - `fillCustomModels`: auto-fill default effort tables for hand-declared custom models
 - `routes`: class → tier route table (trivial/standard default low, engineering high, hard max)
-- `downAfter` / `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations`: downgrade hysteresis and escalation thresholds
+- `shortWindow` / `longWindow` / `errorDecay`: window sizes and the per-bucket decay weights of the error channel (defaults 6 / 32 / `1,0.8,0.6,0.5,0.4,0.3`)
+- `briefRamp` / `toolRamp` / `compressDiscount`: linear volume ramps in effective tokens (defaults `400,1600` / `48000,128000`) and the gzip-ratio discount switch
+- `warmUpSteps` / `trivialLiftCap`: origin warm-up floor length (default 3) and the total lift a trivial origin allows (default 1)
+- `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations` / `todoBump`: error-channel thresholds, its total cap, and the todo-completion bump
+- `downAfter`: **deprecated** (0.2.8 retired hysteresis) — kept so old config files still validate; ignored
 - `cuesStrong` / `cuesNormal` / `cuesCheap` / `cuesWish`: custom cue dictionaries (merged on top of the built-in ones)
 - `dictStrong` / `dictNormal` / `dictCheap` / `dictWish`: **full dictionary replacement** — when non-blank, this list IS the whole dictionary (the shipped list is dropped; additions AND deletions both work), while the matching `cues*` additions still merge on top. Blank (default) = shipped dictionary. Read the effective lists from `GET /effort-router/dictionaries` (with the `builtin` reference) before editing, then write the result back to `dict*`; or just tell the agent "remove xx from the strong dictionary"
 

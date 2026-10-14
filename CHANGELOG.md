@@ -4,6 +4,78 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.8] - 2026-10-15
+
+The drift engine. The per-step re-classification of 0.2.x is replaced by an
+origin anchor plus four evidence channels; every window/weight/floor ships
+as a user-tunable config key (the maintainer's design philosophy: defaults
+are shipped, freedom is kept).
+
+### Added
+
+- **Channel ④ task origin, classified ONCE per task** (`lib/signals.js`
+  `openTask`): the originating brief runs through the dictionary/shape/
+  plan-like cue pipeline and anchors the class; later steps never
+  re-classify. Interjections and question answers open a task too —
+  unless they land inside the previous task's warm-up, in which case the
+  STRONGER origin wins and the warm-up restarts. Unannounced user texts in
+  the projection open a task synthetically (resumed windows; a message
+  followed by assistant/tool work resumes with the warm-up EXPIRED).
+  Subagent fallback: spawn text classifies, empty text anchors `standard`.
+- **Channel ① short window** (`shortWindow`, default 6 tool batches) with
+  per-bucket **decay weights** (`errorDecay`, default `1,0.8,0.6,0.5,0.4,0.3`,
+  newest first): tool errors and identical-argument repeats fold as
+  weighted sums; the evidence rungs are freshness-aware (`decayThreshold`
+  sums the N freshest weights, so N fresh events always reach their rung
+  and staleness only discounts). New **todo-completion bump** (`todoBump`,
+  default on): a status transition to completed in the todos projection
+  adds +1 while inside the window (content-matched, so a rewritten list
+  fires nothing; several completions in one step fire once). The
+  unresolved-failure **carry** now decays with the short window.
+- **Channel ② long window** (`longWindow`, default 32) of **gzip-discounted
+  effective tokens** (`compressDiscount`, default on; `lib/compress.js`,
+  native `zlib` level 1, <256 B never discounted, ratio clamped ≤ 1 — a
+  loop log is not information). Graded by two **linear ramps** read
+  separately, the louder speaks: `briefRamp` (default `400,1600`) and
+  `toolRamp` (default `48000,128000`), one bump per rung, user-extensible.
+- **Warm-up floor** (`warmUpSteps`, default 3): a fresh task never routes
+  below its origin; afterwards drift owns the level — aggressive saving is
+  safe because the short error window is the feedback loop. A trivial
+  origin caps the total lift at `trivialLiftCap` (default 1).
+- **Observation fields in the decision log**: `originClass`, `warmup`,
+  `briefEffective`, `briefVolume`, `briefVolumeRaw`, `toolVolumeRaw`,
+  `weightedErrors`, `weightedRepeats`, `todoBump`, `carry` ride alongside
+  the existing raw counters for the next calibration cycle.
+- `test/compress.test.mjs`; drift-engine suites in `test/signals.test.mjs`
+  (102 tests total).
+
+### Changed
+
+- **Channels STACK** (`level = clamp(origin + ① + ② − ③)`): the 0.2.x
+  "loudest evidence wins, bumps never stack" rule is retired.
+- `escalateOnErrors` / `escalateOnRepeats` thresholds now read the
+  decay-weighted sums through freshness-aware rungs (flat weights reproduce
+  the 0.2.x thresholds exactly).
+- The long volume window spans task boundaries (context pressure does not
+  reset on a new command); the short error window is epoch-scoped (a new
+  task starts from zero error evidence; `carry` is the cross-task channel).
+
+### Removed
+
+- **Hysteresis** (`stabilize`, `stabilizeEffort`): with a 6-step decaying
+  window the evidence itself ages out fast enough. The `downAfter` config
+  key stays in the schema so old config files still validate; its value is
+  ignored.
+- **Todo text as classification evidence** (`activeTodoText`, the
+  `todosSignal` knob): a todo list is only a rearrangement of the origin
+  brief, not independent evidence. The todo COMPLETION event remains as a
+  channel-① bump.
+- The `toolCallClass` scoring branch: classification happens at the origin,
+  before any tool call exists.
+- The `briefVolumeAt`/`briefVolumeBig`/`toolVolumeAt`/`toolVolumeBig`/
+  `toolWindow` scoring keys: superseded by `briefRamp`/`toolRamp`/
+  `longWindow`.
+
 ## [0.2.7-rc.8] - 2026-10-14
 
 ### Added

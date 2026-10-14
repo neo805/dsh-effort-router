@@ -1,14 +1,13 @@
 /**
- * routing.js unit tests — tier mapping, hysteresis, projection readers.
+ * routing.js unit tests — tier mapping, projection readers.
+ * (stabilize/activeTodoText retired in 0.2.8 with the drift engine.)
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  activeTodoText,
   contextPressureRatio,
   mapEffort,
   sessionTokensOf,
-  stabilize,
 } from '../lib/routing.js'
 
 test('mapEffort: exact id wins', () => {
@@ -35,38 +34,6 @@ test('mapEffort: custom gateway vocabulary (ultra)', () => {
 test('mapEffort: no advertised efforts -> undefined', () => {
   assert.equal(mapEffort('high', []), undefined)
   assert.equal(mapEffort('high', undefined), undefined)
-})
-
-test('stabilize: raises apply immediately', () => {
-  const r = stabilize('high', 'low', 0, 2)
-  assert.equal(r.value, 'high')
-  assert.equal(r.streak, 0)
-})
-
-test('stabilize: downgrades wait for downAfter quiet decisions', () => {
-  let s = { value: 'high', streak: 0 }
-  s = stabilize('low', s.value, s.streak, 2) // 1st quieter: held
-  assert.equal(s.value, 'high')
-  assert.equal(s.streak, 1)
-  s = stabilize('low', s.value, s.streak, 2) // 2nd quieter: applies
-  assert.equal(s.value, 'low')
-  assert.equal(s.streak, 0)
-})
-
-test('stabilize: a louder step resets the quiet streak', () => {
-  let s = stabilize('low', 'high', 0, 2) // held, streak 1
-  s = stabilize('max', s.value, s.streak, 2) // raise applies, streak reset
-  assert.equal(s.value, 'max')
-  assert.equal(s.streak, 0)
-})
-
-test('activeTodoText prefers the in_progress item', () => {
-  const todos = [
-    { status: 'completed', content: 'done' },
-    { status: 'in_progress', content: 'doing' },
-  ]
-  assert.equal(activeTodoText(todos), 'doing')
-  assert.equal(activeTodoText(undefined), '')
 })
 
 test('contextPressureRatio / sessionTokensOf', () => {
