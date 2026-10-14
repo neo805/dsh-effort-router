@@ -40,6 +40,7 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 - `routes`：分类 → 档位路由表（trivial/standard 默认 low，engineering 默认 high，hard 默认 max）
 - `downAfter` / `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations`：降档迟滞与升档阈值
 - `cuesStrong` / `cuesNormal` / `cuesCheap` / `cuesWish`：自定义线索词典（追加在内置词典之上）
+- `dictStrong` / `dictNormal` / `dictCheap` / `dictWish`：词典**全量替换**——非空时该列表就是整部词典（内置词全部失效，可增可删），对应的 `cues*` 追加仍叠加生效；留空（默认）= 内置词典。改动前先读 `GET /effort-router/dictionaries` 拿到当前生效全量（含 `builtin` 内置参照），改完写回 `dict*` 即可；让 Agent 代改时说「把 xx 从 strong 词典删掉」即可
 
 ## 会话内可见性
 

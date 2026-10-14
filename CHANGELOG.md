@@ -4,6 +4,24 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.7-rc.8] - 2026-10-14
+
+### Added
+
+- **Full dictionary replacement: `dictStrong` / `dictNormal` / `dictCheap` /
+  `dictWish` config keys** (strings, one cue per line or comma-separated,
+  remount on change). When non-blank, the list IS the whole dictionary — the
+  shipped list is dropped, so users can REMOVE cues as well as add them; the
+  matching `cues*` additions still merge on top. Blank (default) keeps the
+  shipped dictionary, so existing configs are unaffected. Flows through a new
+  `input.dictionaries` channel in `normalizePolicyConfig` (dodging the
+  `input.wish` boolean/array name clash) with cue matchers recompiled only on
+  actual change (the snapshot memo already covers the new keys).
+- **`GET /effort-router/dictionaries` read-only route**: per list, the
+  `effective` cues scheduling actually matches, the `builtin` reference, the
+  active `override` (dict* replacement or null), and the `additions` (cues*).
+  Read this before editing a `dict*` key.
+
 ## [0.2.7-rc.7] - 2026-10-14
 
 ### Added

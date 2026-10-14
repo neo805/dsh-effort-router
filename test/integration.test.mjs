@@ -118,3 +118,29 @@ test('fill → capability refresh → auto schedules the previously-bare custom 
   }))
   assert.equal(cheap2Out.reasoningEffort, 'low')
 })
+
+test('dictStrong full replacement reaches the scheduler through apply()', async () => {
+  const { ctx, listeners } = makeHost()
+  entry.apply(ctx, entry.Config({ dictStrong: 'myowncue' }))
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  const onRequest = listeners.get('agent/request')
+  const onClaimed = listeners.get('agent/inbox/claimed')
+  const mk = (id) => ({ sessionId: id, session: { id, header: {}, deriveMessages: () => [] } })
+
+  // The shipped strong cue 重构 no longer counts: the replacement IS the
+  // whole dictionary, so the same brief drops to standard -> low.
+  const replaced = mk('s-dict-1')
+  onClaimed({ agent: replaced, message: { content: '重构这个模块', role: 'user' }, turn: 1 })
+  const outReplaced = await onRequest({ agent: replaced, turn: 1, step: 1 }, async () => ({
+    provider: 'catalog-blessed', model: 'thinking-model', reasoningEffort: 'auto',
+  }))
+  assert.equal(outReplaced.reasoningEffort, 'low', 'full replacement drops shipped cues (deletion works)')
+
+  // The replacement cue classifies engineering -> high.
+  const own = mk('s-dict-2')
+  onClaimed({ agent: own, message: { content: 'myowncue 这个模块', role: 'user' }, turn: 1 })
+  const outOwn = await onRequest({ agent: own, turn: 1, step: 1 }, async () => ({
+    provider: 'catalog-blessed', model: 'thinking-model', reasoningEffort: 'auto',
+  }))
+  assert.equal(outOwn.reasoningEffort, 'high', 'replacement cue drives engineering -> high')
+})

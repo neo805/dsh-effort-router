@@ -180,6 +180,30 @@ test('normalizePolicyConfig: user cues merge on top of the shipped dictionaries'
   assert.equal(classifyStep({ text: '重构这个模块', toolCalls: 0 }, replaced).stepClass, 'standard')
 })
 
+test('normalizePolicyConfig: dictionaries channel replaces the shipped list, additions still merge', () => {
+  // Full replacement through the config-file channel: the user's list IS the
+  // dictionary — a shipped cue no longer matches (deletion works)...
+  const replaced = normalizePolicyConfig({ dictionaries: { strong: ['myowncue'] } })
+  assert.deepEqual(replaced.strong, ['myowncue'])
+  assert.equal(classifyStep({ text: 'myowncue the parser', toolCalls: 0 }, replaced).stepClass, 'engineering')
+  assert.equal(classifyStep({ text: '重构这个模块', toolCalls: 0 }, replaced).stepClass, 'standard')
+  // ...while cues* additions merge ON TOP of the replacement, like they do on
+  // top of the shipped list.
+  const composed = normalizePolicyConfig({
+    dictionaries: { strong: ['myowncue'] },
+    extraCues: { strong: ['blorf'] },
+  })
+  assert.deepEqual(composed.strong, ['myowncue', 'blorf'])
+  // Untouched lists keep the shipped dictionary.
+  assert.ok(composed.normal.length > 1)
+  // The wish boolean flag survives a dictionary replacement (name clash guard).
+  const wishOff = normalizePolicyConfig({ wish: false, dictionaries: { wish: ['琢磨琢磨'] } })
+  assert.equal(wishOff.wishEnabled, false)
+  assert.deepEqual(wishOff.wish, ['琢磨琢磨'])
+  const wishOn = normalizePolicyConfig({ dictionaries: { wish: ['琢磨琢磨'] } })
+  assert.equal(wishOn.wishEnabled, true)
+})
+
 test('escalateClass/demoteClass ladder', () => {
   assert.equal(escalateClass('trivial', 1), 'standard')
   assert.equal(escalateClass('standard', 5), 'hard') // capped at ceiling

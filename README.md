@@ -40,6 +40,7 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives
 - `routes`: class → tier route table (trivial/standard default low, engineering high, hard max)
 - `downAfter` / `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations`: downgrade hysteresis and escalation thresholds
 - `cuesStrong` / `cuesNormal` / `cuesCheap` / `cuesWish`: custom cue dictionaries (merged on top of the built-in ones)
+- `dictStrong` / `dictNormal` / `dictCheap` / `dictWish`: **full dictionary replacement** — when non-blank, this list IS the whole dictionary (the shipped list is dropped; additions AND deletions both work), while the matching `cues*` additions still merge on top. Blank (default) = shipped dictionary. Read the effective lists from `GET /effort-router/dictionaries` (with the `builtin` reference) before editing, then write the result back to `dict*`; or just tell the agent "remove xx from the strong dictionary"
 
 ## In-session visibility
 
