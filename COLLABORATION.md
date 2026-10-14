@@ -110,18 +110,26 @@ It intentionally contains no personal or machine‑specific information.
 
 ## 7. 交付清单（每次改动都走完）
 
-1. `pnpm build` —— 重建客户端 bundle（`build-client.mjs` → `lib/client.js`）。
-2. `node --test "test/*.test.mjs"` —— 全绿；**用显式 glob**，不要依赖目录参数。
-3. 按 §1 调整版本号；同步更新 `CHANGELOG.md`。
-4. 用 `dsh-plugin-check` 自查打包元数据（§6）。
-5. `pnpm pack` —— 出 tarball。
-6. 安装到**所有相关 profile**（桌面端与 Web 端都要），安装前备份 profile 的
+1. **改动过依赖声明时**（`package.json` 的 `dependencies` / `devDependencies` /
+   `peerDependencies` / `optionalDependencies` / `dsh.client.inject`）：先
+   `pnpm install --lockfile-only` 同步 `pnpm-lock.yaml`，再
+   `pnpm install --frozen-lockfile --ignore-scripts` 复现 CI 的安装检查，**必须通过**。
+   CI 默认冻结锁文件，声明与锁文件不一致会直接
+   `ERR_PNPM_OUTDATED_LOCKFILE` 失败（rc.6 换 `ui-settings`、rc.7 加
+   `ui-conversation` 时漏更新锁文件，导致 rc.7 推送后 CI 红；修复见提交 `4125487`）。
+   依赖声明没动时跳过本步。
+2. `pnpm build` —— 重建客户端 bundle（`build-client.mjs` → `lib/client.js`）。
+3. `node --test "test/*.test.mjs"` —— 全绿；**用显式 glob**，不要依赖目录参数。
+4. 按 §1 调整版本号；同步更新 `CHANGELOG.md`。
+5. 用 `dsh-plugin-check` 自查打包元数据（§6）。
+6. `pnpm pack` —— 出 tarball。
+7. 安装到**所有相关 profile**（桌面端与 Web 端都要），安装前备份 profile 的
    `package.json` 并记录备份戳。
-7. **逐文件哈希比对**：构建产物 vs `$DSH_HOME/profiles/<profile>/node_modules/<plugin>`
+8. **逐文件哈希比对**：构建产物 vs `$DSH_HOME/profiles/<profile>/node_modules/<plugin>`
    下实际安装的文件，全部一致才算装成功。
-8. `git add -A && git commit` —— 提交信息说明**改了什么、为什么**（可带版本号）。
-9. 向维护者报告：本次结论、证据（数值/哈希/提交号）、实机验证步骤、已知残留。
-10. push —— 等维护者批准（§2）。
+9. `git add -A && git commit` —— 提交信息说明**改了什么、为什么**（可带版本号）。
+10. 向维护者报告：本次结论、证据（数值/哈希/提交号）、实机验证步骤、已知残留。
+11. push —— 等维护者批准（§2）。
 
 ## 8. 已知残留必须公示
 
