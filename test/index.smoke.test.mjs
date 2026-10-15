@@ -189,6 +189,112 @@ test('apply: a selection echo is proven by OUR decision store and rescheduled', 
   )
 })
 
+test('apply: our own pending=auto stamp never locks the session manual (phantom-manual regression)', async () => {
+  const logs = []
+  const listeners = new Map()
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+    },
+  }
+  // DYNAMIC projection, mirroring the real host: model/selection sets
+  // pending (applyModelSelectionProjection). The 0.2.x bug: our step-1
+  // markAutoPending stamp made pending non-null, the old guard read that
+  // as "a durable human pick", and step 2's mirrored 'low' seed recorded
+  // manual — locking every later step the same way.
+  const projection = { pending: null, lastUsed: null }
+  const sessionProjections = {
+    stateOf: (_session, key) => (key === 'modelSelection' ? projection : undefined),
+  }
+  const ctx = {
+    logger: () => ({ info: (m) => logs.push(m), warn() {} }),
+    get(name) {
+      if (name === 'llm') return llm
+      if (name === 'sessionProjections') return sessionProjections
+      throw new Error('no service ' + name)
+    },
+    on(event, handler) { listeners.set(event, handler); return () => {} },
+    inject() { return () => {} },
+  }
+  entry.apply(ctx, entry.Config({}))
+  const onRequest = listeners.get('agent/request')
+  const onClaimed = listeners.get('agent/inbox/claimed')
+  const appends = []
+  const agent = {
+    sessionId: 's-phantom',
+    session: {
+      id: 's-phantom',
+      header: {},
+      deriveMessages: () => [],
+      append: (type, data) => {
+        appends.push({ type, data })
+        if (type === 'model/selection') projection.pending = data
+      },
+    },
+  }
+  onClaimed({ agent, message: { content: '翻译这句话', role: 'user' }, turn: 1 })
+  const step1 = await onRequest({ agent, turn: 1, step: 1 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
+  }))
+  assert.equal(step1.reasoningEffort, 'low')
+  assert.equal(projection.pending?.reasoningEffort, 'auto', 'step 1 stamped pending=auto')
+  // steps 2..4: the host mirrors the stamped header back as concrete seeds.
+  for (const step of [2, 3, 4]) {
+    const out = await onRequest({ agent, turn: 1, step }, async () => ({
+      provider: 'gw', model: 'thinker', reasoningEffort: 'low',
+    }))
+    assert.equal(out.reasoningEffort, 'low')
+  }
+  assert.equal(
+    logs.filter((m) => m.includes('class trivial')).length,
+    4,
+    'every mirrored step stayed in the scheduler (no phantom manual lock)',
+  )
+  assert.equal(appends.length, 1, 'the auto stamp is idempotent (one append total)')
+})
+
+test('apply: a UI Auto pick (pending=auto) keeps concrete seeds in the scheduler', async () => {
+  const logs = []
+  const listeners = new Map()
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+    },
+  }
+  // The user explicitly picked Auto: durable intent 'auto' from the start.
+  // A concrete seed on the same route is the header mirror, not a pick.
+  const sessionProjections = {
+    stateOf: (_session, key) => (key === 'modelSelection'
+      ? { pending: { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }, lastUsed: null }
+      : undefined),
+  }
+  const ctx = {
+    logger: () => ({ info: (m) => logs.push(m), warn() {} }),
+    get(name) {
+      if (name === 'llm') return llm
+      if (name === 'sessionProjections') return sessionProjections
+      throw new Error('no service ' + name)
+    },
+    on(event, handler) { listeners.set(event, handler); return () => {} },
+    inject() { return () => {} },
+  }
+  entry.apply(ctx, entry.Config({}))
+  const onRequest = listeners.get('agent/request')
+  const onClaimed = listeners.get('agent/inbox/claimed')
+  const agent = {
+    sessionId: 's-uiauto',
+    session: { id: 's-uiauto', header: {}, deriveMessages: () => [], append: () => {} },
+  }
+  onClaimed({ agent, message: { content: '翻译这句话', role: 'user' }, turn: 1 })
+  const out = await onRequest({ agent, turn: 1, step: 1 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'high',
+  }))
+  assert.equal(out.reasoningEffort, 'low', 'the mirrored concrete seed is rescheduled')
+  assert.ok(logs.some((m) => m.includes('class trivial')), 'the scheduler ran despite pending=auto')
+})
+
 test('apply: a consumed explicit pick stays manual (store witness says mode manual)', async () => {
   const logs = []
   const listeners = new Map()

@@ -47,7 +47,7 @@ are shipped, freedom is kept).
   `weightedErrors`, `weightedRepeats`, `todoBump`, `carry` ride alongside
   the existing raw counters for the next calibration cycle.
 - `test/compress.test.mjs`; drift-engine suites in `test/signals.test.mjs`
-  (102 tests total).
+  (104 tests total).
 
 ### Changed
 
@@ -75,6 +75,24 @@ are shipped, freedom is kept).
 - The `briefVolumeAt`/`briefVolumeBig`/`toolVolumeAt`/`toolVolumeBig`/
   `toolWindow` scoring keys: superseded by `briefRamp`/`toolRamp`/
   `longWindow`.
+
+### Fixed
+
+- **The phantom-manual lock** (present since 0.2.0; 103 locked sessions in
+  the field log): the selection-echo guard read ANY non-null
+  `modelSelection.pending` as "a durable human pick" — including this
+  plugin's OWN `markAutoPending` 'auto' stamp — so from step 2 onward the
+  host's mirrored concrete seed (confirmed host semantics: the in-memory
+  request selection follows the last stamped header; `pending` holds the
+  durable intent) was recorded `manual`, and every later step inherited
+  the lock. The badge showed 手动 while the selector showed Auto and the
+  scheduler was bypassed entirely. The guard now reads three pending
+  states: a CONCRETE effort is a real pick (never an echo); `'auto'` is
+  durable AUTO intent (a UI Auto pick or our stamp) and any concrete seed
+  on the same route is definitionally the mirror; `null` falls back to
+  the decision-store witness as before. Locked sessions un-break on the
+  next step (their pending persisted `'auto'`), and the auto stamp is now
+  idempotent.
 
 ## [0.2.7-rc.8] - 2026-10-14
 
