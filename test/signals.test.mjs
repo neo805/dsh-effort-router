@@ -301,6 +301,74 @@ test('a wholesale todo-list rewrite is NOT a completion (no content lineage)', (
   assert.equal(sig.todoBump, 0, 'a rewritten list proves nothing')
 })
 
+// ---- channel ① event bumps: subagent return + compaction (0.2.9) --------------
+
+test('a subagent return bumps +1 inside the short window, then decays', () => {
+  const signals = makeSignals()
+  const messages = []
+  const agent = makeAgent(messages)
+  signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
+  let sig = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig.subagentReturn, 0)
+  // The assistant fans a task out; the child's result lands in the parent.
+  messages.push(assistantCall('subagent', '{"task":"a"}'), v4ToolResult('child done', false, 'c1'))
+  sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.subagentReturn, 1, 'the integrating step reads the return')
+  const d = decideEffort(normalizePolicyConfig({}), sig)
+  assert.equal(d.stepClass, 'hard', 'engineering +1 subagent return -> hard')
+  // The bump ages out with the short window (event tick 1, shortWindow 6:
+  // holds while tick - 1 < 6, i.e. through step 6, gone from step 7).
+  for (let step = 3; step <= 6; step += 1) {
+    sig = signals.collect(agent, { turn: 1, step })
+    assert.equal(sig.subagentReturn, 1, 'still inside the window at step ' + step)
+  }
+  sig = signals.collect(agent, { turn: 1, step: 7 })
+  assert.equal(sig.subagentReturn, 0, 'aged out beyond the window')
+})
+
+test('a plain tool result is NOT a subagent return', () => {
+  const signals = makeSignals()
+  const messages = []
+  const agent = makeAgent(messages)
+  signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
+  signals.collect(agent, { turn: 1, step: 1 })
+  messages.push(assistantCall('read', '{"p":"a"}'), v4ToolResult('file body', false, 'c1'))
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.subagentReturn, 0)
+})
+
+test('a compaction checkpoint bumps +1 (snapshotEvents scan, engine-agnostic)', () => {
+  const signals = makeSignals()
+  const events = []
+  const agent = makeAgent([])
+  agent.session.snapshotEvents = () => events
+  signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
+  let sig = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig.compaction, 0)
+  // An unrelated user/message event is not a checkpoint.
+  events.push({ type: 'user/message', data: { source: { plugin: 'acp-nudge' } } })
+  sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.compaction, 0)
+  // The shared checkpoint marker (compaction-basic AND ACP land this shape).
+  events.push({ type: 'user/message', data: { source: { plugin: 'compact', compactionId: 'k1' } } })
+  sig = signals.collect(agent, { turn: 1, step: 3 })
+  assert.equal(sig.compaction, 1)
+  const d = decideEffort(normalizePolicyConfig({}), sig)
+  assert.equal(d.stepClass, 'hard', 'engineering +1 compaction -> hard')
+  // The lifecycle event fires too (kind variant also matches).
+  events.push({ type: 'compaction/end', data: { compactionId: 'k2' } })
+  sig = signals.collect(agent, { turn: 1, step: 4 })
+  assert.equal(sig.compaction, 1)
+})
+
+test('no snapshotEvents surface: the compaction channel degrades silently', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([]) // session without snapshotEvents (design rule 1)
+  signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
+  const sig = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig.compaction, 0, 'a missing event surface reads as no signal, never a crash')
+})
+
 // ---- channel ② long window + compression discount ----------------------------
 
 test('the volume ramps read effective (discounted) tokens', () => {

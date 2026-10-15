@@ -123,6 +123,21 @@ test('decideEffort: carry lifts the origin one class', () => {
   assert.equal(d.stepClass, 'hard')
 })
 
+test('decideEffort: subagent/compaction events stack in channel ① and share its cap (0.2.9)', () => {
+  const sub = decideEffort(cfg, { originClass: 'engineering', subagentReturn: 1 })
+  assert.equal(sub.stepClass, 'hard')
+  assert.ok(sub.reason.join().includes('subagent returned +1'))
+  const comp = decideEffort(cfg, { originClass: 'standard', compaction: 1 })
+  assert.equal(comp.stepClass, 'engineering')
+  assert.ok(comp.reason.join().includes('context compacted +1'))
+  // All three events + evidence together still stop at maxEscalations.
+  const capped = decideEffort(cfg, {
+    originClass: 'standard', weightedErrors: 9, subagentReturn: 1, compaction: 1, todoBump: 1,
+  })
+  assert.equal(capped.stepClass, 'hard', 'standard +2 (channel cap) -> hard, not beyond')
+  assert.ok(capped.reason.join().includes('error channel capped'))
+})
+
 test('decideEffort: volume reads linear ramps; channels STACK (0.2.8)', () => {
   // brief >400 -> +1: standard -> engineering
   const brief1 = decideEffort(cfg, { originClass: 'standard', briefVolume: 500 })

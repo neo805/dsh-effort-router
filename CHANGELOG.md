@@ -4,6 +4,39 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.9] - 2026-10-15
+
+Two more channel-① event bumps, approved alongside the todo-completion
+bump: orchestration returns and compaction checkpoints. Both fire +1
+inside the short window, once per step no matter how many landed, and
+share the error channel's `maxEscalations` cap.
+
+### Added
+
+- **`subagentReturnBump`** (default on): a sealed step bucket whose calls
+  included `subagent` / `subagent_fork` / `workflow` marks an
+  orchestration return — the parent must now integrate the result and
+  decide the next move. The information itself stays priced by channel ②
+  (gzip-discounted volume); this bump prices the EVENT. Detection is a
+  tool-name check on the fold that already runs, so the hot path pays
+  nothing. Foreground runs and background settles landing as the original
+  call's tool result are both covered.
+- **`compactionBump`** (default on): a compaction checkpoint just
+  replaced the working map — the steps after it run on the least
+  reliable context (summary read as complete truth, lost threads, redone
+  work), which is exactly where reasoning depth pays most. Detection is
+  engine-agnostic: a watermark scan of `session.snapshotEvents()` for the
+  shared checkpoint marker (`user/message` with `source.plugin ===
+  'compact'` or `source.kind === 'compact-checkpoint'`, or the
+  `compaction/end` lifecycle event) — verified in the host asar against
+  `@deepseek-ai/dsh-compaction` and the ACP engine, which land through
+  the same primitives. The event list is NOT cleared at task boundaries
+  (the lossy map is still the map). `snapshotEvents` is read behind
+  guards only — `session.events` remains forbidden (design rule 1) — and
+  a host without the surface degrades silently to "no signal".
+- Decision-log observation fields `subagentReturn` / `compaction` for the
+  next calibration cycle.
+
 ## [0.2.8] - 2026-10-15
 
 The drift engine. The per-step re-classification of 0.2.x is replaced by an

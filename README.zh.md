@@ -42,7 +42,8 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 - `shortWindow` / `longWindow` / `errorDecay`：错误通道的短/长窗口步数与窗内衰减权重数组（默认 6 / 32 / `1,0.8,0.6,0.5,0.4,0.3`）
 - `briefRamp` / `toolRamp` / `compressDiscount`：信息量线性斜坡（有效 token，默认 `400,1600` / `48000,128000`）与 gzip 压缩率折扣开关
 - `warmUpSteps` / `trivialLiftCap`：始发暖启动地板步长（默认 3）与 trivial 始发允许的总升档数（默认 1）
-- `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations` / `todoBump`：错误通道阈值、通道总封顶与 todo 完成升档
+- `escalateOnErrors` / `escalateOnRepeats` / `maxEscalations`：错误通道阈值与通道总封顶
+- `todoBump` / `subagentReturnBump` / `compactionBump`：通道①事件升档（短窗内 +1，每步合并触发一次）：todo 完成、子代理/workflow 结果落地（整合时刻）、压缩检查点落地（地图保真度风险峰值）
 - `downAfter`：**已废弃**（0.2.8 移除迟滞）——键保留以兼容旧配置文件，值被忽略
 - `cuesStrong` / `cuesNormal` / `cuesCheap` / `cuesWish`：自定义线索词典（追加在内置词典之上）
 - `dictStrong` / `dictNormal` / `dictCheap` / `dictWish`：词典**全量替换**——非空时该列表就是整部词典（内置词全部失效，可增可删），对应的 `cues*` 追加仍叠加生效；留空（默认）= 内置词典。改动前先读 `GET /effort-router/dictionaries` 拿到当前生效全量（含 `builtin` 内置参照），改完写回 `dict*` 即可；让 Agent 代改时说「把 xx 从 strong 词典删掉」即可
