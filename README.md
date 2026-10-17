@@ -2,12 +2,12 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.8` · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.10` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
 - **The drift engine** (0.2.8): the task ORIGIN is classified once from the brief the user sent (`trivial / standard / engineering / hard`); evidence then drifts the class — `level = origin + error channel + volume channel − frugal`
-- Error channel (short 6-step window, decay-weighted): tool errors, identical-argument retries, a just-completed todo (+1 — the next subtask is starting), and a carry from the previous task's unresolved failure
+- Error channel (short 6-step window, decay-weighted): tool errors, identical-argument retries, event bumps (a just-completed todo, an orchestration return, a compaction checkpoint — each +1 once per step), and a carry from the previous task's unresolved failure
 - Volume channel (long 32-step window): brief and tool-result tokens, **gzip-ratio discounted** (repetition is not information), graded by two linear ramps
 - Warm-up floor: a fresh task never routes below its origin for the first steps (default 3); afterwards drift owns the level — aggressive saving, with the short error window as the feedback loop
 - Wish detector: a short delegation-style brief in the cue vacuum zone (`帮我…`, `can you…`) starts at the engineering floor — underspecified tasks get the benefit of the doubt
@@ -21,7 +21,7 @@ The host's native model selector already is the per-session effort control. The 
 
 ## Custom models (llm-pi-ai)
 
-Hand-declared custom models often ship no `reasoningEfforts` table, so the composer shows no effort selector at all. On startup and on settings changes the plugin scans the `llm-pi-ai` config and fills the default `{ low, high, max }` table through a **resolution gate**: every table-less user-layer row is resolved with `resolveModelInfo`, and only models that resolve with NO thinking levels are filled — a model inheriting levels from its catalog is skipped, so catalog capability is never shadowed. An explicit table or an explicit `false` is never touched. The table deliberately has **no `off` rung**: an off selection followed by a tool call poisons the conversation for every later thinking-enabled request, and the router never routes to off either (you can still add `off: null` back per model directly in the `llm-pi-ai` config — explicit intent is never overwritten). Models filled on explicit `openai-completions` routes also gain `compat.supportsReasoningEffort: true`, the switch that protocol needs to actually send the effort.
+**Since DSH 0.2.1 the Models page can declare reasoning levels per custom model in the UI** (a switch plus one row per level), so editing the config file is no longer required. The plugin's auto-fill therefore narrows to **models declared in the profile layer that the settings user layer has never touched**: once a model appears in the user layer (edited in the UI) it is treated as user-owned — the UI's switch stores OFF by REMOVING the field, so re-filling it would silently undo that choice, and the fill skips it. Catalog models that already inherit levels resolve WITH levels and are skipped, so catalog capability is never shadowed; an explicit table or an explicit `false` is never touched. The filled table is `{ low, high, max }`, deliberately with **no `off` rung**: an off selection followed by a tool call poisons the conversation for every later thinking-enabled request, and the router never routes to off either. Models filled on explicit `openai-completions` routes also gain `compat.supportsReasoningEffort: true`, the switch that protocol needs to actually send the effort. Set `fillCustomModels: false` to let the Models page own every declaration.
 
 The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives in the model's `reasoningEfforts` table inside the `llm-pi-ai` config — edit it directly or ask your agent to. The official schema validates it and the next request picks it up. pi-ai serializes the table natively; no plugin-side translation layer.
 
@@ -63,7 +63,7 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives
 
 ## Authorship & maintenance
 
-- **Author**: kimi-k3 (an AI model, designing and coding through DeepSeek Harness).
+- **Authors**: kimi-k3 and DeepSeek-V4.1-Flash-1017 (AI models, co-designing and co-coding through DeepSeek Harness).
 - **Producer / repository owner**: KEI.NEO (@neo805) — the human publisher responsible for this repository.
 - **Maintenance scope**: a personal hobby (vibe-coding) project, published for sharing. **No maintenance or updates are promised in response to external demand.**
 - **Contribution policy**: this repository has **Issues disabled and does not accept Pull Requests**. Forks are welcome under the MIT license.

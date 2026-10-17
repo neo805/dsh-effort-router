@@ -301,6 +301,72 @@ test('a wholesale todo-list rewrite is NOT a completion (no content lineage)', (
   assert.equal(sig.todoBump, 0, 'a rewritten list proves nothing')
 })
 
+// ---- synthetic user-role inserts are NOT briefs (0.2.1) ----------------------
+
+const sourcedUser = (text, source) => ({ role: 'user', content: [{ type: 'text', text }], source })
+
+test('a runtime-context snapshot neither opens a task nor restarts the warm-up', () => {
+  const signals = makeSignals()
+  const messages = [sourcedUser('帮我重构这个模块的缓存', { kind: 'user' })]
+  const agent = makeAgent(messages)
+  const sig1 = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig1.originClass, 'engineering')
+  assert.equal(sig1.warmup, true)
+  // 0.2.1 inserts this as a user-role message; it must not be read as a brief.
+  messages.push(sourcedUser(
+    'Current runtime context. This snapshot supersedes earlier runtime-context snapshots. '
+    + '工具调用 文件 仓库 测试 重构',
+    { kind: 'runtime-context', form: 'snapshot' },
+  ))
+  signals.collect(agent, { turn: 1, step: 2 }) // tick 2: still inside the window
+  signals.collect(agent, { turn: 1, step: 3 }) // tick 3
+  const sig4 = signals.collect(agent, { turn: 1, step: 4 }) // tick 4 = past it
+  assert.equal(sig4.originClass, 'engineering', 'the origin anchor survives the snapshot')
+  assert.equal(sig4.warmup, false, 'no warm-up restart: tick 4 is past the fresh-task window')
+  // With the phantom-task bug this collect would still be warming up (the
+  // snapshot at tick 2 would have restarted the window: 4 - 2 <= 3).
+})
+
+test('a checkpoint / skill catalog / model-switch notice is not a brief either', () => {
+  const signals = makeSignals()
+  const messages = [sourcedUser('翻译这句话', { kind: 'user' })]
+  const agent = makeAgent(messages)
+  const sig1 = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig1.originClass, 'trivial')
+  messages.push(
+    sourcedUser('[Model-written summary] 全部重构完成，工程改造已落地', { kind: 'compact-checkpoint' }),
+    sourcedUser('Skill catalog: skill-a skill-b', { kind: 'skill-catalog', form: 'catalog' }),
+    sourcedUser('[model changed: kimi-k3 → deepseek-flash]', { kind: 'model-selection', form: 'notice' }),
+  )
+  const sig2 = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig2.originClass, 'trivial', 'notices never re-classify the origin')
+})
+
+test('a settlement notice counts as the orchestration RETURN (0.2.9 channel ①)', () => {
+  const signals = makeSignals()
+  const messages = [sourcedUser('帮我重构这个模块的缓存', { kind: 'user' })]
+  const agent = makeAgent(messages)
+  const sig1 = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig1.subagentReturn, 0)
+  messages.push(sourcedUser(
+    'Background subagent 123 finished. Its closing message: 工程改造完成',
+    { kind: 'subagent-settled', form: 'notice' },
+  ))
+  const sig3 = signals.collect(agent, { turn: 1, step: 3 })
+  assert.equal(sig3.subagentReturn, 1, 'the parent integrates the returned result')
+  assert.equal(sig3.originClass, 'engineering', 'and the notice did not become a brief')
+})
+
+test('a sourceless legacy user message still opens a task (v0/v3 replays)', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  const sig1 = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig1.originClass, 'standard', 'empty session anchors standard')
+  agent.session.deriveMessages = () => [userMsg('帮我重构这个模块的缓存')]
+  const sig2 = signals.collect(agent, { turn: 2, step: 1 })
+  assert.equal(sig2.originClass, 'engineering', 'no source marker = accepted as a brief')
+})
+
 // ---- channel ① event bumps: subagent return + compaction (0.2.9) --------------
 
 test('a subagent return bumps +1 inside the short window, then decays', () => {

@@ -4,6 +4,51 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.10] - 2026-10-18
+
+DSH 0.2.1-rc.2 support. The host now judges third-party plugins by
+`engines.dsh` first, so the ranges widen; the 0.2.1 feature that lets the
+Models page declare per-model reasoning levels in the UI changes what the
+custom-model fill may touch; and the new unified subagent settlement notices
+needed both a detection path and a protection rule.
+
+### Added
+
+- **DSH 0.2.1 compatibility declarations**: `engines.dsh` and every peer
+  range widen from `<0.2.1-0` to `<0.3.0-0`; the `dsh.client.inject` list
+  drops `@deepseek-ai/dsh-client-ui-slots` (the package no longer exists in
+  0.2.1 — the slot service ships inside the renderer).
+- **Subagent settlement detection** (channel ①): 0.2.1 unified delegation —
+  the tool returns a child id immediately and the RESULT arrives later as a
+  `user/message` with `source.kind === 'subagent-settled'` (or an
+  `agent-message` relay). Both now raise the `subagentReturnBump` event, so
+  the bump fires when the parent actually integrates the result instead of
+  only at the dispatch moment.
+- **Settings layer split in the custom-model fill** (`lib/custom-models.js`
+  `planFill` / `userOwnsModel`): 0.2.1's `settings.describe()` exposes
+  `base` (profile layer), `user` (settings-document edits) and `value`.
+  Candidates now come from `base`; a row the user layer owns is skipped,
+  because the Models page's reasoning-effort switch stores OFF by REMOVING
+  the field — re-filling it would silently undo an explicit choice. The
+  write only carries the providers it touched (settings.update merges).
+
+### Fixed
+
+- **Synthetic user-role messages are no longer briefs** (present since
+  0.2.8, amplified by 0.2.1's unified notices): runtime-context snapshots,
+  skill catalogs, compaction checkpoints, ACP nudges, adjacent-agent
+  relays, settlement notices, model-switch and approval notices all derive
+  as `role: "user"` messages. The synthetic-task path treated every one as
+  an unannounced brief — opening a phantom task (resetting the origin
+  anchor, the error epoch, the carry and the warm-up) and charging its text
+  to the volume channel (skill catalogs alone run thousands of
+  characters). The brief path now accepts only `source.kind === 'user'`
+  (sourceless legacy projections still accepted), and `lastUserText` uses
+  the same filter.
+- `test/integration.test.mjs` now models the real layered `describe()`
+  (base/user/value); the fill assertion checks that untouched providers are
+  absent from the write instead of being rewritten.
+
 ## [0.2.9] - 2026-10-15
 
 Two more channel-① event bumps, approved alongside the todo-completion

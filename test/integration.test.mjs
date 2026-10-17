@@ -22,12 +22,15 @@ function makeHost() {
     },
   }
   const writes = []
-  // Mirror the REAL @deepseek-ai/dsh-settings seam: describe() returns volatile
-  // field projections keyed by ns (with a revision); update(ns, patch,
-  // expectedRevision) merges and persists. There is NO get(ns) — 0.1.0–0.1.2
-  // guarded on one, so the fill silently never ran.
+  // Mirror the REAL 0.2.1 @deepseek-ai/dsh-settings seam: describe() returns
+  // volatile field projections keyed by ns (with a revision) and the LAYER
+  // split — base (profile/bundle config), user (settings-document edits),
+  // value (effective). The fill reads candidates from base, writes into the
+  // user layer, and never touches a row the user layer owns.
+  // There is NO get(ns) — 0.1.0–0.1.2 guarded on one, so the fill silently
+  // never ran.
   const settings = {
-    describe: () => [{ ns: 'llm-pi-ai', user: section, value: section, revision: 7 }],
+    describe: () => [{ ns: 'llm-pi-ai', base: section, user: {}, value: section, revision: 7 }],
     update: async (ns, patch, expectedRevision) => { writes.push({ ns, patch, expectedRevision }) },
   }
   const llm = {
@@ -72,8 +75,9 @@ test('fill → capability refresh → auto schedules the previously-bare custom 
   assert.deepEqual(lite.reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
   const pro = providers['acme-gateway'].models.find((m) => m.id === 'think-pro')
   assert.deepEqual(pro.reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
-  // the catalog-blessed model was never touched
-  assert.equal(providers['catalog-blessed'].models[0].reasoningEfforts, undefined)
+  // the catalog-blessed provider is not in the write at all: the fill only
+  // carries the providers it touched (settings.update merges the patch).
+  assert.equal(providers['catalog-blessed'], undefined)
 
   // Now the interceptor schedules think-lite (auto mask from the selector).
   const onRequest = listeners.get('agent/request')

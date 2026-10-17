@@ -1,10 +1,10 @@
 {
   "name": "dsh-effort-router",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "publishConfig": {
     "access": "public"
   },
-  "description": "DSH plugin: context-aware per-step reasoning-effort routing (the drift engine). Classifies the task origin once (trivial/standard/engineering/hard) from the originating brief, then drifts the class on stacked evidence: a decay-weighted short window of tool errors / repeats / todo completions / failure carry, a long window of gzip-discounted information volume on linear ramps, and real-time frugal signals — no hysteresis. Clamps to the target model's advertised efforts and injects an 'Auto' mask into the native model selector. Fills default reasoningEfforts for hand-declared llm-pi-ai custom models. All user-facing options live in the plugin config file (no settings UI); the GUI surfaces (composer badge, trajectory hoisting) are read-only displays.",
+  "description": "DSH plugin: context-aware per-step reasoning-effort routing (the drift engine). Classifies the task origin once (trivial/standard/engineering/hard) from the originating brief, then drifts the class on stacked evidence: a decay-weighted short window of tool errors / repeats / todo completions / orchestration returns / compaction checkpoints / failure carry, a long window of gzip-discounted information volume on linear ramps, and real-time frugal signals — no hysteresis. Clamps to the target model's advertised efforts and injects an 'Auto' mask into the native model selector. Fills default reasoningEfforts for profile-declared llm-pi-ai custom models the Models page has not configured (0.2.1-aware). All user-facing options live in the plugin config file (no settings UI); the GUI surfaces (composer badge, trajectory hoisting) are read-only displays.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -35,7 +35,7 @@
   },
   "engines": {
     "node": ">=22.19.0 || >=24.0.0",
-    "dsh": ">=0.2.0-rc.1 <0.2.1-0"
+    "dsh": ">=0.2.0-rc.1 <0.3.0-0"
   },
   "dsh": {
     "manifestVersion": 1,
@@ -50,19 +50,17 @@
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-model-selection",
-        "@deepseek-ai/dsh-client-ui-renderer",
-        "@deepseek-ai/dsh-client-ui-slots"
+        "@deepseek-ai/dsh-client-ui-renderer"
       ]
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-api-remotes": ">=0.2.0-rc.1 <0.2.1-0",
-    "@deepseek-ai/dsh-api-session-controller": ">=0.2.0-rc.1 <0.2.1-0",
-    "@deepseek-ai/dsh-client-locale": ">=0.2.0-rc.1 <0.2.1-0",
-    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.0-rc.1 <0.2.1-0",
-    "@deepseek-ai/dsh-client-ui-model-selection": ">=0.2.0-rc.1 <0.2.1-0",
-    "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.0-rc.1 <0.2.1-0",
-    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.0-rc.1 <0.2.1-0"
+    "@deepseek-ai/dsh-api-remotes": ">=0.2.0-rc.1 <0.3.0-0",
+    "@deepseek-ai/dsh-api-session-controller": ">=0.2.0-rc.1 <0.3.0-0",
+    "@deepseek-ai/dsh-client-locale": ">=0.2.0-rc.1 <0.3.0-0",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.0-rc.1 <0.3.0-0",
+    "@deepseek-ai/dsh-client-ui-model-selection": ">=0.2.0-rc.1 <0.3.0-0",
+    "@deepseek-ai/dsh-client-ui-renderer": ">=0.2.0-rc.1 <0.3.0-0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-api-remotes": {
@@ -82,9 +80,6 @@
     },
     "@deepseek-ai/dsh-client-ui-renderer": {
       "optional": true
-    },
-    "@deepseek-ai/dsh-client-ui-slots": {
-      "optional": true
     }
   },
   "keywords": [
@@ -100,7 +95,7 @@
     "auto-effort"
   ],
   "license": "MIT",
-  "author": "kimi-k3 (AI author), produced by KEI.NEO (@neo805)",
+  "author": "kimi-k3、DeepSeek-V4.1-Flash-1017 (AI co-authors), produced by KEI.NEO (@neo805)",
   "packageManager": "pnpm@11.18.0",
   "repository": {
     "type": "git",
