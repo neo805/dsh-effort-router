@@ -6,13 +6,11 @@ up.
 
 ## Settled by 0.2.8 (the drift engine)
 
-- **R5 (subagent routing) — DIRECTION SET, NOT IMPLEMENTED.** See the R5
-  section: the maintainer's ruling is that subagents SHOULD be auto-routed
-  (the origin classifies the spawn instruction text, an empty spawn anchors
-  `standard`, and the frugal subagent demotion applies on top). Re-measured
-  2026-10-18 on DSH 0.2.1-rc.2, the implementation is still missing — a live
-  subagent's steps record `mode: manual`, i.e. the parent's resolved level
-  arrives as a concrete seed and is passed straight through. Low priority.
+- **R5 (subagent routing) — IMPLEMENTED (0.2.15-rc.1).** The producer's ruling
+  was that a parent on Auto gives its children Auto (scheduled from their own
+  spawn brief) while a parent on a concrete level gives them that level
+  verbatim. The R5 section records the provenance rule, the live evidence and
+  the accepted residuals.
 - **R6 (restart replay pollution) — mitigated.** Resumed tasks now resume
   with the warm-up EXPIRED, and the error window is the `shortWindow`
   parameter (default 6) instead of a flat 32-bucket window, so the
@@ -147,41 +145,59 @@ The READMEs said the composer badge sits right of the model selector; it
 actually sits left. Doc-only fix, applied to `README.md` and `README.zh.md`
 in the 0.2.0 review pass.
 
-## R5 — Subagent auto-routing (NOT IMPLEMENTED; direction: do it, low priority)
+## R5 — Subagent auto-routing (IMPLEMENTED, 0.2.15-rc.1)
 
-**Status.** Planned, accepted as the direction, not scheduled, not built.
-Until it lands, a subagent request inherits whatever level the parent's step
-carried: the plugin passes it through as if a human had picked it. Do not read
-that as the ruling — the ruling is that subagents SHOULD be auto-routed.
+**Status.** Shipped. The producer's ruling — "parent on a manual level => child
+inherits it; parent on Auto => child is auto-routed" — is what the
+implementation does.
 
-**Evidence (re-measured 2026-10-18, DSH 0.2.1-rc.2).** A live subagent spawn
-recorded `mode: manual, effort: low, tier: null` on every step. The parent's
-resolved `low` arrives as a concrete seed; a fresh subagent session has no
-decision-store history, so the echo guard has nothing to compare against, and
-the concrete level reads as a human pick and is passed through verbatim.
-Consequences on 0.2.1-rc.2:
+**How it decides (provenance, not inference).** The host gives a child its
+parent's LATEST REQUEST HEADER (`provider` / `model` / `reasoningEffort`, i.e.
+the level this plugin stamped there) and persists `parentSession`,
+`origin: "subagent"` and `delegationDepth` on the child's session header —
+verified in `dsh-subagent/lib/types/child-agent.js` and on a live child log. The
+interceptor therefore classifies a concrete child seed against OUR OWN decision
+log: when the parent's last recorded decision was `auto` or `subagent` and its
+level and route match the seed, the seed is our inheritance and the child is
+scheduled from its own spawn brief (origin classification + warm-up floor +
+frugal subagent demotion). Everything else passes through verbatim: a manual
+pick, a pinned `defaultLevel`, a seed that does not match the parent's record, a
+missing parent record, and any inherited `off` (a lineage safety pin is never
+re-enabled).
 
-- `subagentEffort` never fires (it only fills a request with NO effort);
-- the frugal "subagent" demotion never fires (the interceptor returns at the
-  manual pass-through before the signal collector runs);
-- `subagentPreferCheap` was removed from the policy in the cleanup pass — it
-  never had a config key, so the branch was unconditionally on and unreachable
-  anyway.
+**Evidence.** Six unit tests in `test/index.smoke.test.mjs` cover both halves and
+every conservative fallback. One live spawn on 0.2.15-rc.1 recorded
+`mode: auto, effort: high, stepClass: engineering` with the reason
+"subagent inherited the parent's scheduled level; scheduled from its own brief";
+the inherited seed was `max`, so the level changed — proof it was re-decided, not
+copied.
 
-**Candidate fixes (pick one when this is scheduled):**
+**Live matrix (0.2.15-rc.2, Web host, sessions created over the session-controller
+RPC — both halves verified, not just unit-tested):**
 
-(a) provenance heuristic — treat a concrete seed as an echo when
-    `header.delegationDepth > 0` AND the decision store proves the level
-    equals the parent's last scheduled effort (the child knows its parent via
-    `agent.parentAgent`); then schedule normally and let the frugal subagent
-    demotion apply. This is an inference, which is exactly what this project
-    otherwise avoids, so it needs a tight condition and a test.
-(b) host-side delegation provenance — an explicit marker on subagent seeds.
-    Clean, upstream, not ours to land.
+- parent pinned `max` (manual) -> child `manual/max`: inherited verbatim.
+- parent on Auto -> child `auto/high` with the reason "subagent inherited the
+  parent's scheduled level; scheduled from its own brief".
 
-**When it lands:** expose `subagentPreferCheap` as a real config key, and add
-the missing test (the subagent branch is currently covered only for a request
-that carries NO effort).
+**Non-blocking delegation (found and fixed in 0.2.15-rc.2).** 0.2.1's
+`subagent` tool returns immediately, so the parent stamps its NEXT step — with a
+possibly different level — before the child's first request arrives (measured:
+parent `auto/high` then `auto/max`, child seed `high`, child recorded
+`manual/high`). rc.1 compared the seed against the parent's NEWEST decision
+only, so the comparison missed. The rule now requires the parent's newest
+decision to be `auto`/`subagent` (i.e. the parent is on our schedule right now)
+AND the seed to match ANY recent scheduled level on that route.
+
+**Residual (accepted, 0.2.15-rc.2).**
+
+- Provenance reads the decision store's last 20 entries per session / 200
+  sessions; an aged-out or cross-host parent record degrades to "inherit
+  verbatim" — the safe direction, never an override of a possible human pick.
+- A child spawned with an explicit effort override (a level the parent never
+  scheduled on that route) is passed through, not rescheduled: the rule only
+  claims levels it can find in the parent's own log.
+- `subagentPreferCheap` remains a fixed policy (subagents always read cheap).
+  It was never a config key; expose it if the demotion ever needs an opt-out.
 
 ## R6 — Evidence-window pollution after a host restart (mitigated; residual accepted)
 

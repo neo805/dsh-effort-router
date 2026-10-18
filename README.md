@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.14` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.15-rc.2` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
@@ -14,6 +14,7 @@ A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routi
 - Frugal signals: subagents, context pressure, or a session token budget demote one class
 - Capability clamp: the scheduled tier maps onto the target model's advertised vocabulary (nearest rank, so gateway vocabularies like `ultra` work)
 - Manual wins: a concrete level in the selector passes through verbatim; Auto hands the step to the scheduler
+- Subagent inheritance (0.2.15): a child started from a parent running **Auto** is scheduled from its own spawn brief (origin classification, warm-up floor, frugal demotion); a child started from a parent on a **concrete level** inherits that level verbatim. The seed is classified by provenance — the parent's recorded decision plus the host's `parentSession` lineage — so a human pick is never mistaken for a schedule
 
 ## Why an Auto mask instead of a panel
 

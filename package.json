@@ -1,6 +1,6 @@
 {
   "name": "dsh-effort-router",
-  "version": "0.2.14",
+  "version": "0.2.15-rc.2",
   "publishConfig": {
     "access": "public"
   },

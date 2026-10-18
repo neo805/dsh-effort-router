@@ -4,6 +4,60 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.15-rc.2] - 2026-10-18
+
+### Fixed
+
+- **A subagent spawned from an Auto parent could still inherit its parent's
+  level as a manual pick.** 0.2.1 delegation is NON-BLOCKING: the parent stamps
+  its next step before the child's first request lands, and that step can carry
+  a different level (measured live on the Web host: parent `auto/high` then
+  `auto/max`, child seed `high`, child recorded `manual/high`). rc.1 required
+  the seed to equal the parent's NEWEST decision, so the comparison missed and
+  the child fell back to inherit. The rule now requires the parent to be on our
+  schedule right now (its newest decision is `auto` / `subagent`) AND the seed
+  to match ANY recent scheduled level on that route. A parent whose newest
+  decision is a manual pick or a pinned default still hands its children that
+  level verbatim.
+
+## [0.2.15-rc.1] - 2026-10-18
+
+Subagent routing (ROADMAP R5) plus an internal cleanup pass.
+
+### Added
+
+- **Subagents are auto-routed when their parent ran on Auto.** Until now a
+  child inherited its parent's level as a concrete seed that read exactly like a
+  human pick, so `subagentEffort` and the subagent frugal demotion never ran.
+  The child's seed is now classified by PROVENANCE, not by guessing: the host
+  gives a child its parent's latest request header (the effort this plugin
+  stamped) and persists `parentSession` / `origin: "subagent"` /
+  `delegationDepth` on the child session. If the parent's last recorded decision
+  was one of OUR schedules (`auto` or `subagent`) and it matches the seed's
+  level and route, the child is scheduled from its own spawn brief (origin
+  classification + warm-up floor + frugal subagent demotion, as designed).
+- `MAINTAINER-TESTS.md`: the standing list of checks only the producer can run
+  in a real client (how to enable, expected result, failure judgement,
+  rollback), re-checked once per major version rather than per release.
+
+### Changed
+
+- **A parent's MANUAL pick is still inherited verbatim** — that is the half of
+  R5 that must never regress. Same for a pinned `defaultLevel`, a seed that
+  does not match the parent's recorded decision, a child whose parent record is
+  gone, and an inherited `off` (a lineage safety pin is never re-enabled).
+- Internal cleanup, no other user-visible behaviour change: the production-dead
+  `withDefaultEfforts` transform and the never-configurable
+  `subagentPreferCheap` policy default are gone; both tool-result folds share
+  one helper; the compaction event scan is skipped whole while `compactionBump`
+  is off (re-enabling re-anchors instead of replaying); a step reads the
+  volatile config snapshot once instead of twice; the trajectory chip skin is
+  read once per decorator instead of per row.
+- ROADMAP R5 rewritten as "direction set, not implemented" (it was wrongly
+  recorded as settled) and now updated with the shipped design; R6 rewritten to
+  describe window lengths as config parameters rather than fixed numbers; a
+  "Deferred calibration" section records the audit's next-cycle work.
+
 ## [0.2.14] - 2026-10-18
 
 Root cause of the empty history captions: the fallback called

@@ -787,3 +787,196 @@ test('route: a throwing anchors projection degrades to the stored fallback, neve
   assert.equal(body.anchors, null)
   assert.match(String(body.anchorsError), /sessionQuery service unavailable/)
 })
+
+// ---- R5: subagent routing (parent auto -> auto, parent manual -> manual) -----
+//
+// Host contract (dsh-subagent/lib/types/child-agent.js, verified 0.2.1-rc.2):
+// `parentAgentOptionsForDelegation` gives the child the parent's LATEST REQUEST
+// HEADER — provider, model and reasoningEffort — and `childSessionMeta` persists
+// `parentSession`, `origin: "subagent"` and `delegationDepth` on the child
+// header. So an inherited concrete effort is provoledge: it is either the level
+// a human pinned in the parent, or the level WE scheduled there.
+
+/** Fake host ctx for R5 tests; returns the listeners plus the decision trace. */
+function r5Ctx(config = entry.Config({})) {
+  const listeners = new Map()
+  const logs = []
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+    },
+  }
+  // A readable `modelSelection` with no pending pick is what a subagent session
+  // actually has: markAutoPending skips delegation children, so their own
+  // scheduled headers come back as plain echoes for the store to prove.
+  const projections = { stateOf: (_session, key) => (key === 'modelSelection' ? { pending: null } : undefined) }
+  const ctx = {
+    logger: () => ({ info: (m) => logs.push(m), warn: (m) => logs.push(m) }),
+    get(name) {
+      if (name === 'llm') return llm
+      if (name === 'sessionProjections') return projections
+      throw new Error('no service ' + name)
+    },
+    on(event, handler) { listeners.set(event, handler); return () => {} },
+    inject() { return () => {} },
+  }
+  entry.apply(ctx, config)
+  return { onRequest: listeners.get('agent/request'), onClaimed: listeners.get('agent/inbox/claimed'), logs }
+}
+
+const parentAgent = (id = 's-parent') => ({
+  sessionId: id,
+  session: { id, header: {}, deriveMessages: () => [] },
+})
+
+const childAgent = (parentId = 's-parent', id = 's-child') => ({
+  sessionId: id,
+  session: {
+    id,
+    header: { delegationDepth: 1, parentSession: parentId, origin: 'subagent', isSeeded: false },
+    deriveMessages: () => [],
+  },
+})
+
+/** Run one request through the interceptor. */
+async function request(onRequest, agent, seed, turn = 1, step = 1) {
+  return onRequest({ agent, turn, step }, async () => ({ ...seed }))
+}
+
+test('R5: a subagent inherits an AUTO parent as auto, not as a manual pick', async () => {
+  const { onRequest, onClaimed, logs } = r5Ctx(entry.Config({ frugalDemote: false }))
+  const parent = parentAgent()
+  onClaimed({ agent: parent, message: { content: '翻译这句话', role: 'user' }, turn: 1 })
+  const parentOut = await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' })
+  assert.equal(parentOut.reasoningEffort, 'low', 'the parent step was scheduled to low')
+
+  // The child starts with the parent's stamped level as its seed (host contract)
+  // but must be SCHEDULED from its own spawn brief.
+  const child = childAgent()
+  onClaimed({ agent: child, message: { content: '帮我重构这个模块的缓存层', role: 'user' }, turn: 1 })
+  const childOut = await request(onRequest, child, { provider: 'gw', model: 'thinker', reasoningEffort: 'low' })
+  assert.equal(childOut.reasoningEffort, 'high', 'the spawn brief (engineering) schedules high')
+  assert.ok(
+    logs.some((m) => m.includes('s-child') && m.includes('class engineering')),
+    'the child ran through the scheduler',
+  )
+})
+
+test('R5: the subagent frugal demotion applies once the warm-up floor expires', async () => {
+  const { onRequest, onClaimed, logs } = r5Ctx()
+  const parent = parentAgent('s-parent-f')
+  onClaimed({ agent: parent, message: { content: '翻译这句话', role: 'user' }, turn: 1 })
+  await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' })
+
+  const child = childAgent('s-parent-f', 's-child-f')
+  onClaimed({ agent: child, message: { content: '帮我重构这个模块的缓存层', role: 'user' }, turn: 1 })
+  // The origin floor holds engineering for warmUpSteps (3) steps, so the
+  // demotion is computed but does not move the level yet; it takes over on the
+  // first step past the floor. Every seed is the child's OWN previous schedule.
+  let effort = 'low'
+  const seen = []
+  for (let step = 1; step <= 5; step += 1) {
+    const out = await onRequest({ agent: child, turn: 1, step }, async () => ({
+      provider: 'gw', model: 'thinker', reasoningEffort: effort,
+    }))
+    effort = out.reasoningEffort
+    seen.push(effort)
+  }
+  assert.deepEqual(seen, ['high', 'high', 'high', 'low', 'low'], 'warm-up floor first, demotion after it')
+  assert.ok(logs.some((m) => m.includes('s-child-f') && m.includes('frugal: subagent')), 'demotion is logged')
+})
+
+test('R5: a MANUAL parent level is inherited verbatim, never rescheduled', async () => {
+  const { onRequest, onClaimed, logs } = r5Ctx()
+  const parent = parentAgent('s-parent-m')
+  const pick = await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'max' })
+  assert.equal(pick.reasoningEffort, 'max', 'the human pick passes through')
+
+  const child = childAgent('s-parent-m', 's-child-m')
+  onClaimed({ agent: child, message: { content: '帮我重构这个模块的缓存层', role: 'user' }, turn: 1 })
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'max' }
+  const out = await onRequest({ agent: child, turn: 1, step: 1 }, async () => seed)
+  assert.equal(out, seed, 'inherited manual stays manual (same object, untouched)')
+  assert.ok(!logs.some((m) => m.includes('s-child-m') && m.includes('class ')), 'no scheduling for the child')
+})
+
+test('R5: an unknown parent keeps the inherited level (conservative)', async () => {
+  const { onRequest } = r5Ctx()
+  const child = childAgent('s-parent-gone', 's-child-orphan')
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'low' }
+  const out = await onRequest({ agent: child, turn: 1, step: 1 }, async () => seed)
+  assert.equal(out, seed, 'without provenance the inherited level is left alone')
+})
+
+test('R5: an inherited off is never re-enabled on a poisoned lineage', async () => {
+  const { onRequest, onClaimed } = r5Ctx()
+  const parent = parentAgent('s-parent-p')
+  // Prove a manual-off step in the parent, then the poison pin fires there.
+  const suspect = { role: 'assistant', content: [{ type: 'tool-call', name: 'calculator', arguments: '{}' }] }
+  parent.session.deriveMessages = () => [{ role: 'user', content: '重构缓存层' }, suspect]
+  onClaimed({ agent: parent, message: { content: '帮我重构这个模块的缓存层', role: 'user' }, turn: 1 })
+  await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'off' })
+  const pinned = await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }, 1, 2)
+  assert.equal(pinned.reasoningEffort, 'off', 'the parent is pinned off')
+
+  const child = childAgent('s-parent-p', 's-child-p')
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'off' }
+  const out = await onRequest({ agent: child, turn: 1, step: 1 }, async () => seed)
+  assert.equal(out, seed, 'off is a lineage safety pin: it is never overridden')
+})
+
+test('R5: a child whose seed does not match the parent decision is passed through', async () => {
+  const { onRequest, onClaimed } = r5Ctx()
+  const parent = parentAgent('s-parent-x')
+  await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'max' })
+  const child = childAgent('s-parent-x', 's-child-x')
+  // The seed claims a level the parent never scheduled (e.g. the user changed
+  // the model between the decision and the spawn): not OUR inheritance.
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'low' }
+  const out = await onRequest({ agent: child, turn: 1, step: 1 }, async () => seed)
+  assert.equal(out, seed)
+})
+
+test('R5: non-blocking delegation — the parent advances past the spawn step and still routes the child', async () => {
+  // 0.2.1 delegation returns immediately, so the parent stamps its NEXT step (with
+  // a possibly different level) before the child's first request lands. Measured
+  // live: parent auto/high -> auto/max, child seed high, child recorded manual.
+  // The rule must accept any recent SCHEDULED level on the same route, not only
+  // the newest decision.
+  const { onRequest, onClaimed, logs } = r5Ctx(entry.Config({ frugalDemote: false }))
+  const parent = parentAgent('s-parent-nb')
+  onClaimed({ agent: parent, message: { content: '帮我重构这个模块的缓存层', role: 'user' }, turn: 1 })
+  const step1 = await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' })
+  assert.equal(step1.reasoningEffort, 'high', 'parent step 1: engineering -> high')
+  // A tool error lifts the parent's next step to hard/max, so its newest decision
+  // no longer carries the level the child inherited.
+  parent.session.deriveMessages = () => [
+    { role: 'user', content: [{ type: 'text', text: '帮我重构这个模块的缓存层' }] },
+    { role: 'tool', isError: true, content: [{ type: 'text', text: '[exit code: 1]' }] },
+  ]
+  const step2 = await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'high' }, 1, 2)
+  assert.equal(step2.reasoningEffort, 'max', 'parent step 2: evidence lift -> max')
+
+  const child = childAgent('s-parent-nb', 's-child-nb')
+  onClaimed({ agent: child, message: { content: '帮我重构这个模块的缓存层', role: 'user' }, turn: 1 })
+  const out = await request(onRequest, child, { provider: 'gw', model: 'thinker', reasoningEffort: 'high' })
+  assert.equal(out.reasoningEffort, 'high', 'the one-step-behind seed is still OUR schedule')
+  assert.ok(logs.some((m) => m.includes('s-child-nb') && m.includes('subagent inherited')), 'logged as inheritance')
+})
+
+test('R5: a parent that has moved to a MANUAL pick stops routing its children', async () => {
+  const { onRequest, onClaimed } = r5Ctx()
+  const parent = parentAgent('s-parent-m2')
+  onClaimed({ agent: parent, message: { content: '翻译这句话', role: 'user' }, turn: 1 })
+  await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' })
+  // The human now picks max by hand — a level we did NOT schedule, so the echo
+  // guard cannot explain it away and the newest decision becomes manual.
+  const pick = await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'max' }, 1, 2)
+  assert.equal(pick.reasoningEffort, 'max')
+
+  const child = childAgent('s-parent-m2', 's-child-m2')
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'max' }
+  const out = await onRequest({ agent: child, turn: 1, step: 1 }, async () => seed)
+  assert.equal(out, seed, 'the parent is manual now: the child inherits verbatim')
+})
