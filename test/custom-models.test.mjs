@@ -15,7 +15,6 @@ import {
   fillCandidates,
   planFill,
   userOwnsModel,
-  withDefaultEfforts,
 } from '../lib/custom-models.js'
 
 test('DEFAULT_EFFORT_TABLE matches the pi-ai gate shape (low/high/max, no off rung)', () => {
@@ -54,32 +53,10 @@ test('fillCandidates enumerates absent-table rows across models[] and modelOverr
   assert.deepEqual(fillCandidates({}), [])
 })
 
-test('withDefaultEfforts fills exactly the target set (models[] and modelOverrides)', () => {
-  const { next, filled } = withDefaultEfforts(section, {
-    targets: ['my-gateway/thinker', 'catalog-route/other-model'],
-  })
-  assert.deepEqual(filled, ['my-gateway/thinker', 'catalog-route/other-model'])
-  // 0.2.0 default table: low/high/max, no off rung (thinking stays on)
-  assert.deepEqual(next.providers['my-gateway'].models[0].reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
-  assert.deepEqual(next.providers['catalog-route'].modelOverrides['other-model'].reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
-  assert.equal(next.providers['catalog-route'].modelOverrides['other-model'].name, 'Override')
-  // compat flag added on the explicit openai-completions route only
-  assert.equal(next.providers['my-gateway'].models[0].compat.supportsReasoningEffort, true)
-  assert.equal(next.providers['catalog-route'].modelOverrides['other-model'].compat, undefined)
-  // untouched
-  assert.equal(next.providers['catalog-route'].models[0].reasoningEfforts, undefined)
-  assert.equal(next.providers['my-gateway'].models[1].reasoningEfforts.high, 'ultra')
-  assert.equal(next.providers['my-gateway'].models[2].reasoningEfforts, false)
-  // input not mutated
-  assert.equal(section.providers['my-gateway'].models[0].reasoningEfforts, undefined)
-})
-
-test('withDefaultEfforts: empty or unknown targets are identity-stable', () => {
-  assert.equal(withDefaultEfforts(section, { targets: [] }).next, section)
-  assert.equal(withDefaultEfforts(section, { targets: ['my-gateway/declared'] }).next, section)
-  assert.equal(withDefaultEfforts(section, { targets: ['nope/nope'] }).next, section)
-  assert.equal(withDefaultEfforts(undefined, { targets: ['a/b'] }).next, undefined)
-})
+// The withDefaultEfforts transform was deleted in the cleanup pass: planFill has been the
+// production path since 0.2.10 and covers the same fills, so its tests below
+// also carry the two invariants the old transform's tests pinned — the compat
+// flag stays off on non-openai-completions routes, and the input is not mutated.
 
 // ---- 0.2.1 user-layer ownership + planFill ------------------------------------
 
@@ -145,4 +122,16 @@ test('planFill: fills modelOverrides from the base layer when the user has none'
   assert.deepEqual(filled, ['r/extra'])
   assert.deepEqual(providers.r.modelOverrides.extra.reasoningEfforts, DEFAULT_EFFORT_TABLE)
   assert.equal(providers.r.modelOverrides.extra.name, 'gateway extra')
+})
+
+test('planFill: compat flag only on openai-completions routes; inputs are never mutated', () => {
+  // A route that declares no api: the compat gate is per-protocol, so the fill
+  // must NOT add supportsReasoningEffort (unknown fields are rejected there).
+  const base = { providers: { 'plain-route': { models: [{ id: 'm1' }] } } }
+  const { providers, filled } = planFill(base, {}, ['plain-route/m1'])
+  assert.deepEqual(filled, ['plain-route/m1'])
+  assert.deepEqual(providers['plain-route'].models[0].reasoningEfforts, DEFAULT_EFFORT_TABLE)
+  assert.equal(providers['plain-route'].models[0].compat, undefined)
+  // The base section is read-only input: filling must not mutate it in place.
+  assert.equal(base.providers['plain-route'].models[0].reasoningEfforts, undefined)
 })

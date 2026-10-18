@@ -9,8 +9,17 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fillCandidates, withDefaultEfforts } from '../lib/custom-models.js'
+import { fillCandidates, planFill } from '../lib/custom-models.js'
 import { resolveFillTargets } from '../lib/index.js'
+
+/** The host's settings merge: objects merge per provider, arrays replace whole. */
+function mergeUserLayer(base, patch) {
+  const providers = { ...(base.providers || {}) }
+  for (const [providerId, profile] of Object.entries(patch.providers || {})) {
+    providers[providerId] = { ...(providers[providerId] || {}), ...profile }
+  }
+  return { ...base, providers }
+}
 
 /** A realistic section shape (fictional provider/model ids). */
 const productionSection = {
@@ -69,8 +78,9 @@ test('resolution gate: only models resolving with NO thinking levels are filled'
     'globex-go/vendor-v4-pro',
   ])
 
-  const { next, filled } = withDefaultEfforts(productionSection, { targets })
-  assert.equal(filled.length, 6)
+  const patch = planFill(productionSection, {}, targets)
+  assert.equal(patch.filled.length, 6)
+  const next = mergeUserLayer(productionSection, patch)
   const thinker = next.providers['globex-go'].models.find((m) => m.id === 'thinker-k3')
   assert.deepEqual(thinker.reasoningEfforts, { low: 'low', high: 'high', max: 'max' })
   // untouched: catalog-inheriting model, failed-resolution model, and the input itself
@@ -79,16 +89,18 @@ test('resolution gate: only models resolving with NO thinking levels are filled'
   const chat = next.providers['globex-go'].models.find((m) => m.id === 'chat-53-flash')
   assert.equal(chat.reasoningEfforts, undefined)
   assert.equal(productionSection.providers['globex-go'].models[3].reasoningEfforts, undefined)
+  // Providers with no fill target stay out of the write entirely.
+  assert.equal(patch.providers['globex-go'].models.length, 5, 'the models list is materialized whole')
 })
 
 test('idempotence: a second fill run over the filled section is a no-op', async () => {
   const llm = { async resolveModelInfo() { return {} } }
   const candidates = fillCandidates(productionSection)
   const targets = await resolveFillTargets(llm, candidates)
-  const first = withDefaultEfforts(productionSection, { targets })
+  const patch = planFill(productionSection, {}, targets)
+  const first = mergeUserLayer(productionSection, patch)
   // After the write, every row has a table: no candidates remain.
-  assert.deepEqual(fillCandidates(first.next), [])
-  const second = withDefaultEfforts(first.next, { targets: [] })
-  assert.equal(second.next, first.next)
-  assert.deepEqual(second.filled, [])
+  assert.deepEqual(fillCandidates(first), [])
+  const second = planFill(first, {}, [])
+  assert.deepEqual(second, { providers: null, filled: [] })
 })

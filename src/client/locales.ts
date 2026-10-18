@@ -1,7 +1,9 @@
 /**
  * dsh-effort-router client dictionaries. zh is the key-set source of truth.
- * Badge keys only — the settings card (and its card.* keys) was removed in
- * 0.2.7-rc.6: every user-facing option lives in the plugin config file.
+ * Badge keys plus the one caption fallback: the settings card (and its card.*
+ * keys) was removed in 0.2.7-rc.6 — every user-facing option lives in the
+ * plugin config file — while `annotation.default` still labels the optional
+ * chat caption for a step with no stamped effort (chatAnnotate).
  */
 export const NS = 'effort-router'
 

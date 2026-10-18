@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createStore, resolveStoreFile } from '../lib/store.js'
@@ -44,4 +44,24 @@ test('createStore: record flushes to disk and reloads', async () => {
   const corrupt = join(dir, 'corrupt.json')
   const bad = createStore(corrupt, { info() {}, warn() {} })
   assert.equal(bad.last('nope'), undefined)
+})
+
+test('createStore: an unwritable path warns ONCE and keeps serving in memory', () => {
+  // A plain FILE where the store needs a directory: mkdirSync fails with
+  // ENOTDIR, which is the "profile dir is not writable" class of failure.
+  const dir = mkdtempSync(join(tmpdir(), 'er-store-blocked-'))
+  const blocker = join(dir, 'blocker')
+  writeFileSync(blocker, 'not a directory')
+  const warns = []
+  const store = createStore(join(blocker, 'state.json'), { info() {}, warn: (m) => warns.push(m) })
+  store.record('s1', { at: 1, turn: 1, step: 1, mode: 'auto', effort: 'low' })
+  store.flush()
+  assert.equal(warns.length, 1, 'a permanently unwritable store must be visible')
+  assert.match(warns[0], /decision store is not writable/)
+  // In-memory state still answers, and the warning is not repeated every flush.
+  assert.equal(store.last('s1').effort, 'low')
+  store.record('s1', { at: 2, turn: 1, step: 2, mode: 'auto', effort: 'high' })
+  store.flush()
+  assert.equal(warns.length, 1, 'the warning fires once per run, not per write')
+  assert.equal(store.last('s1').effort, 'high')
 })

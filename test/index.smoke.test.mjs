@@ -6,6 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as entry from '../lib/index.js'
+import { POLICY_DEFAULTS } from '../lib/policy.js'
 
 test('entry exports name/inject/Config/DEFAULT_CONFIG/apply', () => {
   assert.equal(entry.name, 'dsh-effort-router')
@@ -531,4 +532,258 @@ test('apply: poison pin needs shape AND store provenance, and applies immediatel
     provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
   }))
   assert.equal(step4.reasoningEffort, 'high', 'the pin lifts with compaction')
+})
+
+// ---- cleanup-pass coverage: interceptor branches that had no test ------------
+
+/** Minimal host ctx for one interceptor test. */
+function interceptorCtx(options = {}) {
+  const listeners = new Map()
+  const logs = []
+  const llm = options.llm ?? {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+    },
+  }
+  const ctx = {
+    logger: () => ({ info: (m) => logs.push(m), warn: (m) => logs.push(m) }),
+    get(name) {
+      if (name === 'llm') return llm
+      throw new Error('no service ' + name)
+    },
+    on(event, handler) { listeners.set(event, handler); return () => {} },
+    inject() { return () => {} },
+  }
+  entry.apply(ctx, options.config ?? entry.Config({}))
+  return { onRequest: listeners.get('agent/request'), logs }
+}
+
+const plainAgent = (id = 's1', header = {}) => ({
+  sessionId: id,
+  session: { id, header, deriveMessages: () => [] },
+})
+
+test('apply: a pinned defaultLevel fills an unselected request instead of scheduling', async () => {
+  const { onRequest, logs } = interceptorCtx({ config: entry.Config({ defaultLevel: 'high' }) })
+  const out = await onRequest({ agent: plainAgent('s-def'), turn: 1, step: 1 }, async () => ({
+    provider: 'gw', model: 'thinker',
+  }))
+  assert.equal(out.reasoningEffort, 'high', 'the pinned level is mapped onto the model vocabulary')
+  assert.ok(!logs.some((m) => m.includes('class ')), 'no scheduling happened for a pinned default')
+})
+
+test('apply: subagentEffort fills a subagent request that carries no level', async () => {
+  const { onRequest } = interceptorCtx({ config: entry.Config({ subagentEffort: 'high' }) })
+  const agent = plainAgent('s-sub', { delegationDepth: 1 })
+  const out = await onRequest({ agent, turn: 1, step: 1 }, async () => ({ provider: 'gw', model: 'thinker' }))
+  assert.equal(out.reasoningEffort, 'high')
+  // An explicit parent level still wins: the subagent default only fills blanks.
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'low' }
+  const manual = await onRequest({ agent, turn: 1, step: 2 }, async () => seed)
+  assert.equal(manual, seed)
+})
+
+test('apply: a level the model does not advertise is stripped, never clamped', async () => {
+  const { onRequest } = interceptorCtx()
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'xhigh' }
+  const out = await onRequest({ agent: plainAgent('s-strip'), turn: 1, step: 1 }, async () => seed)
+  assert.notEqual(out, seed, 'a copy is returned, the seed is left alone')
+  assert.equal(out.reasoningEffort, undefined, 'an unadvertised explicit pick is dropped, not approximated')
+})
+
+test('apply: the interceptor fails OPEN — a broken config still passes the request through', async () => {
+  // A config whose volatile read throws: the interceptor's outer try/catch must
+  // return the seed untouched (README: degradation is "no opinion", never a
+  // broken request).
+  const hostile = Object.defineProperty({}, 'enabled', {
+    get() { throw new Error('boom') },
+  })
+  const { onRequest, logs } = interceptorCtx({ config: hostile })
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }
+  const out = await onRequest({ agent: plainAgent('s-boom'), turn: 1, step: 1 }, async () => seed)
+  assert.equal(out, seed, 'the request is returned by reference')
+  assert.ok(
+    logs.some((m) => m.includes('interceptor failed; passing the request through')),
+    'the failure is reported, not swallowed silently',
+  )
+})
+
+// ---- cleanup-pass coverage: the read-only routes -----------------------------
+
+/** Minimal host ctx exposing the web routes for direct handler calls. */
+function routeHarness(config, services = {}) {
+  const routes = []
+  const webServer = { register: (route) => { routes.push(route); return () => {} } }
+  const projections = services.projections ?? {
+    stateOf: () => undefined,
+    register: () => () => {},
+  }
+  const ctx = {
+    logger: () => ({ info() {}, warn() {} }),
+    get(name) {
+      if (name === 'webServer') return webServer
+      if (name === 'sessionProjections') return projections
+      if (name === 'sessions') return services.sessions
+      if (name === 'sessionQuery') return services.sessionQuery
+      throw new Error('no service ' + name)
+    },
+    on() { return () => {} },
+    inject(_names, fn) {
+      fn({ webServer, sessionProjections: projections, effect: (run) => { run(); return () => {} } })
+      return () => {}
+    },
+  }
+  entry.apply(ctx, config)
+  const asJson = async (path, query = '') => {
+    const route = routes.find((r) => r.path === path)
+    assert.ok(route, 'route registered: ' + path)
+    const res = {
+      status: 0,
+      body: '',
+      writeHead(status) { this.status = status },
+      end(text) { this.body = text },
+    }
+    await route.handler({ url: path + query }, res)
+    assert.equal(res.status, 200)
+    return JSON.parse(res.body)
+  }
+  return { routes, asJson }
+}
+
+test('route: /effort-router/dictionaries reports effective, builtin, override, additions', async () => {
+  const plain = routeHarness(entry.Config({}))
+  const builtin = await plain.asJson('/effort-router/dictionaries')
+  assert.equal(builtin.ok, true)
+  assert.deepEqual(builtin.dictionaries.strong.effective, POLICY_DEFAULTS.strong)
+  assert.equal(builtin.dictionaries.strong.override, null)
+  assert.deepEqual(builtin.dictionaries.strong.additions, [])
+  assert.deepEqual(builtin.dictionaries.strong.builtin, POLICY_DEFAULTS.strong)
+
+  // Additive cues merge ON TOP of the shipped list.
+  const edited = routeHarness(entry.Config({ cuesStrong: 'zed, 繁体字' }))
+  const added = await edited.asJson('/effort-router/dictionaries')
+  assert.deepEqual(added.dictionaries.strong.additions, ['zed', '繁体字'])
+  assert.deepEqual(added.dictionaries.strong.effective, [...POLICY_DEFAULTS.strong, 'zed', '繁体字'])
+  assert.equal(added.dictionaries.strong.override, null)
+
+  // dict* REPLACES the list whole (deletions included).
+  const replaced = routeHarness(entry.Config({ dictStrong: 'only-this' }))
+  const full = await replaced.asJson('/effort-router/dictionaries')
+  assert.deepEqual(full.dictionaries.strong.override, ['only-this'])
+  assert.deepEqual(full.dictionaries.strong.effective, ['only-this'])
+})
+
+test('route: a history session reads through observeSession when readSession is absent', async () => {
+  const events = [
+    { type: 'request/header', data: { header: { config: { provider: 'gw', model: 'thinker', reasoningEffort: 'high' } } } },
+    { type: 'tool/call', data: { callId: 'call_x' } },
+  ]
+  let disposed = 0
+  const harness = routeHarness(entry.Config({}), {
+    sessionQuery: {
+      // This host exposes the lease-based observation only (0.2.1 shape when
+      // readSession is missing): the route must still serve the stored table.
+      async observeSession(id) {
+        if (id !== 's-history') throw new Error('session "' + id + '" not found')
+        return {
+          events,
+          [Symbol.dispose]() { disposed += 1 },
+          close() { disposed += 1 },
+        }
+      },
+    },
+  })
+  const body = await harness.asJson('/effort-router/state', '?sessionId=s-history')
+  assert.equal(body.anchorsResolved, 'stored')
+  assert.equal(body.anchors.call_x.effort, 'high', 'the fold runs over the observed events')
+  assert.equal(disposed, 1, 'the observation is released after the fold')
+  assert.equal(body.anchorsError, null, 'a successful read clears the diagnosis field')
+})
+
+// ---- cleanup-pass coverage: the stored-read diagnosis paths ------------------
+
+const storedEvents = [
+  { type: 'request/header', data: { header: { config: { provider: 'gw', model: 'thinker', reasoningEffort: 'low' } } } },
+  { type: 'tool/call', data: { callId: 'call_cached' } },
+]
+
+test('route: an unreadable history session reports WHY instead of painting nothing', async () => {
+  // Neither public read API present.
+  const blind = routeHarness(entry.Config({}), { sessionQuery: {} })
+  const noApi = await blind.asJson('/effort-router/state', '?sessionId=s-noread')
+  assert.equal(noApi.anchors, null)
+  assert.match(noApi.anchorsError, /neither readSession nor observeSession/)
+
+  // The API answered, but the log carries no events.
+  const empty = routeHarness(entry.Config({}), {
+    sessionQuery: { readSession: async () => ({ events: [] }) },
+  })
+  const noEvents = await empty.asJson('/effort-router/state', '?sessionId=s-empty')
+  assert.equal(noEvents.anchors, null)
+  assert.match(noEvents.anchorsError, /returned no events/)
+})
+
+test('route: the stored anchor table is cached per session across polls', async () => {
+  let reads = 0
+  const harness = routeHarness(entry.Config({}), {
+    sessionQuery: {
+      async readSession() {
+        reads += 1
+        return { events: storedEvents }
+      },
+    },
+  })
+  const first = await harness.asJson('/effort-router/state', '?sessionId=s-cached')
+  assert.equal(first.anchorsResolved, 'stored')
+  assert.equal(first.anchors.call_cached.provider, 'gw')
+  assert.equal(reads, 1)
+  // The client polls every 2.5 s; a finished log must cost one read, not one
+  // read per poll (an LRU hit also refreshes the entry's position).
+  const second = await harness.asJson('/effort-router/state', '?sessionId=s-cached')
+  assert.equal(second.anchorsResolved, 'stored')
+  assert.deepEqual(second.anchors, first.anchors)
+  assert.equal(reads, 1, 'the second poll is served from the cache')
+})
+
+test('apply: an unreadable selection projection is never read as "no pick" (safe direction)', async () => {
+  const logs = []
+  const listeners = new Map()
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+    },
+  }
+  const ctx = {
+    logger: () => ({ info: (m) => logs.push(m), warn() {} }),
+    get(name) {
+      if (name === 'llm') return llm
+      if (name === 'sessionProjections') return { stateOf() { throw new Error('projection unavailable') } }
+      throw new Error('no service ' + name)
+    },
+    on(event, handler) { listeners.set(event, handler); return () => {} },
+    inject() { return () => {} },
+  }
+  entry.apply(ctx, entry.Config({}))
+  const onRequest = listeners.get('agent/request')
+  const agent = plainAgent('s-unreadable')
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'max' }
+  const out = await onRequest({ agent, turn: 1, step: 1 }, async () => seed)
+  assert.equal(out, seed, 'an unknowable selection is left alone, never rescheduled over')
+  assert.ok(!logs.some((m) => m.includes('class ')), 'no scheduling happened on an unreadable projection')
+})
+
+test('route: a throwing anchors projection degrades to the stored fallback, never a 500', async () => {
+  const harness = routeHarness(entry.Config({}), {
+    projections: {
+      stateOf(_session, key) { if (key === 'effortRouterAnchors') throw new Error('poisoned state'); return undefined },
+      register: () => () => {},
+    },
+    sessions: { get: (id) => ({ id }), list: () => [] },
+  })
+  const body = await harness.asJson('/effort-router/state', '?sessionId=s-throw')
+  assert.equal(body.ok, true, 'the route still answers')
+  assert.equal(body.anchors, null)
+  assert.match(String(body.anchorsError), /sessionQuery service unavailable/)
 })

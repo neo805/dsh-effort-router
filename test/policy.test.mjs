@@ -14,6 +14,7 @@ import {
   errorTextMatches,
   escalateClass,
   evidenceBumps,
+  isPlanLike,
   normalizePolicyConfig,
   rampBumps,
   stableStringify,
@@ -446,4 +447,32 @@ test('tokenEstimateBlocks: equals tokenEstimate(textOfContent(...)) block for bl
       'fuzz #' + iter + ' ' + JSON.stringify(content),
     )
   }
+})
+
+// ---- cleanup-pass coverage: plan-like shape and the classifier hard branches --
+
+test('isPlanLike: phrase, bullet list, and numbered steps all read as a plan', () => {
+  assert.equal(isPlanLike('step by step please', 'Step by step please'), true)
+  assert.equal(isPlanLike('步骤', '步骤'), true)
+  const bullets = '- a\n- b\n- c\n- d'
+  assert.equal(isPlanLike(bullets.toLowerCase(), bullets), true, 'bulletMinLines reached')
+  assert.equal(isPlanLike('- a\n- b', '- a\n- b'), false, 'two bullets are not a plan')
+  const numbered = '1) open\n2) edit\n3) close'
+  assert.equal(isPlanLike(numbered.toLowerCase(), numbered), true)
+  assert.equal(isPlanLike('plain prose', 'plain prose'), false)
+})
+
+test('classifyStep: a dense brief and a structured spec both reach hard', () => {
+  // denseStrongBig (>= 10 strong cues) -> hard without any shape
+  const dense = normalizePolicyConfig({})
+  const denseText = '重构 架构 设计 规划 迁移 优化 性能 并发 并行 调试 诊断 排查'
+  assert.equal(classifyStep({ text: denseText }, dense).stepClass, 'hard')
+  // denseStrongThreshold (>= 5) + plan shape -> hard
+  const spec = '1) 重构\n2) 迁移\n3) 优化\n4) 调试\n5) 部署'
+  const structured = classifyStep({ text: spec }, dense)
+  assert.equal(structured.stepClass, 'hard')
+  assert.match(structured.reason.join(' '), /structured engineering spec|dense engineering brief/)
+  // A classifier called WITHOUT precompiled matchers still works (direct callers).
+  const lazy = classifyStep({ text: '重构缓存层' }, { scoring: POLICY_DEFAULTS.scoring, strong: ['重构'], normal: [], cheap: [], wish: [] })
+  assert.equal(lazy.stepClass, 'engineering')
 })

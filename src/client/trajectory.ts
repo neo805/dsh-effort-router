@@ -66,7 +66,10 @@ const DONE_ATTR = 'data-er-trj-done'
 /** Boundary-chip skin — settled on "transparent" after the rc.3/rc.4 A/B
  * round (maintainer's pick). The rejected skins (under / solid / gradient)
  * remain commented in src/client/styles.ts; the localStorage hook stays so
- * a future revisit can re-enable a skin without touching this file. */
+ * a future revisit can re-enable a skin without touching the decoration code.
+ * Read ONCE at decorator start: it used to be re-read per decorated
+ * row, i.e. several localStorage hits per repaint for a value that only needs
+ * a reload to change. */
 const CHIP_VARIANTS = new Set(['transparent'])
 const CHIP_VARIANT_DEFAULT = 'transparent'
 
@@ -187,6 +190,8 @@ export function startTrajectoryDecorator(): () => void {
   const anchorIds = new WeakMap<HTMLElement, string | null>()
   const captions = new WeakMap<HTMLElement, HTMLElement>()
   let rafId: number | undefined
+  /** Boundary-chip skin, resolved once per decorator lifetime. */
+  const variant = chipVariant()
 
   const labelOf = (anchor: { provider: string | null; model: string | null; effort: string | null }) => {
     const provider = anchor.provider ? String(anchor.provider) : ''
@@ -267,8 +272,8 @@ export function startTrajectoryDecorator(): () => void {
     const placement = label ? (dot !== null ? 'b' : 'i') : ''
     const requestNo = dot !== null ? requestNumberOf(dot) : ''
     const text = placement === 'b' && requestNo !== '' ? '#' + requestNo + ' · ' + label : label
-    const variant = placement === 'b' ? chipVariant() : ''
-    const doneValue = placement + '|' + requestNo + '|' + label + '|' + variant
+    const skin = placement === 'b' ? variant : ''
+    const doneValue = placement + '|' + requestNo + '|' + label + '|' + skin
     if (tr.getAttribute(DONE_ATTR) !== doneValue) {
       tr.setAttribute(DONE_ATTR, doneValue)
       let caption = captions.get(tr)
@@ -290,7 +295,7 @@ export function startTrajectoryDecorator(): () => void {
           captions.set(tr, caption)
           if (placement === 'b') {
             caption.setAttribute('class', 'er-trj-boundary')
-            caption.setAttribute('data-er-trj-v', variant)
+            caption.setAttribute('data-er-trj-v', skin)
             caption.addEventListener('click', (event) => {
               event.stopPropagation()
               const target = requestDotOf(tr)
@@ -302,8 +307,8 @@ export function startTrajectoryDecorator(): () => void {
         }
         if (placement === 'b' && dot !== null) mountBoundary(tr, caption, dot)
         else if (placement === 'i' && !caption.isConnected) mountInline(tr, caption)
-        if (placement === 'b' && caption.getAttribute('data-er-trj-v') !== variant) {
-          caption.setAttribute('data-er-trj-v', variant)
+        if (placement === 'b' && caption.getAttribute('data-er-trj-v') !== skin) {
+          caption.setAttribute('data-er-trj-v', skin)
         }
         caption.setAttribute('title', text)
         if (caption.textContent !== text) caption.textContent = text

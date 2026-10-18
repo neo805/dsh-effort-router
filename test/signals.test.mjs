@@ -599,3 +599,69 @@ test('consecSameTool observes the trailing identical-tool run (no decision use)'
   const sig = signals.collect(agent, { turn: 1, step: 4 })
   assert.equal(sig.consecSameTool, 1, 'last call was pwsh, breaking the read run')
 })
+
+// ---- cleanup-pass coverage: resumed-window anchor, budget, disabled channel --
+
+test('origin: a resumed window anchors on the last GENUINE user text (notices are skipped)', () => {
+  const signals = makeSignals()
+  const messages = [
+    // The projection opens mid-task: a tool result, then a synthetic notice.
+    { role: 'user', content: [{ type: 'tool-result', content: [{ type: 'text', text: '翻译这句话' }] }] },
+    { role: 'user', content: [{ type: 'text', text: '帮我重构整个分布式架构' }], source: { form: 'notice', kind: 'runtime-context' } },
+  ]
+  const sig = signals.collect(makeAgent(messages), { turn: 1, step: 1 })
+  assert.equal(sig.originClass, 'trivial', 'the notice text is not a brief — the tool-result text anchors instead')
+  assert.equal(sig.warmup, false, 'a resumed task starts with its warm-up already expired')
+})
+
+test('frugal: the session token budget fires once the projection total crosses it', () => {
+  const projections = {
+    stateOf: (_session, key) => (key === 'tokenUsage' ? { totals: { input: 900, output: 200 } } : undefined),
+  }
+  const over = makeSignals({ sessionTokenBudget: 1000 }, { projections })
+  const sig = over.collect(makeAgent([]), { turn: 1, step: 1 })
+  assert.equal(sig.frugal, true)
+  assert.equal(sig.frugalWhy, 'session token budget')
+
+  // 0 means off; a total below the budget is not frugal either.
+  const off = makeSignals({ sessionTokenBudget: 0 }, { projections })
+  assert.equal(off.collect(makeAgent([]), { turn: 1, step: 1 }).frugal, false)
+  const under = makeSignals({ sessionTokenBudget: 5000 }, { projections })
+  assert.equal(under.collect(makeAgent([]), { turn: 1, step: 1 }).frugal, false)
+})
+
+test('compactionBump=false never materializes the event log; re-enabling re-anchors', () => {
+  let cfg = normalizePolicyConfig({ compactionBump: false })
+  let scans = 0
+  const events = []
+  const agent = makeAgent([])
+  agent.session.snapshotEvents = () => { scans += 1; return events }
+  const signals = createSignals({ config: () => cfg, logger: silentLogger })
+
+  assert.equal(signals.collect(agent, { turn: 1, step: 1 }).compaction, 0)
+  assert.equal(scans, 0, 'a disabled channel pays nothing per step')
+
+  // A checkpoint lands while the channel is off: enabling it again must adopt
+  // the current log as the BASELINE, not replay it as fresh evidence.
+  events.push({ type: 'compaction/end', data: {} })
+  cfg = normalizePolicyConfig({ compactionBump: true })
+  assert.equal(signals.collect(agent, { turn: 1, step: 2 }).compaction, 0)
+  assert.equal(scans, 1, 'the scan resumes with the channel')
+
+  // A checkpoint AFTER the baseline is real evidence again.
+  events.push({ type: 'compaction/end', data: {} })
+  assert.equal(signals.collect(agent, { turn: 1, step: 3 }).compaction, 1)
+})
+
+test('the long window is a bounded ring: aged buckets leave every counter', () => {
+  // 10 identical calls into a 4-bucket ring: the oldest buckets are evicted, so
+  // both the call count and the repeat memory must reflect only what is kept.
+  const signals = makeSignals({ longWindow: 4, shortWindow: 4 })
+  const messages = []
+  for (let i = 0; i < 10; i += 1) {
+    messages.push(assistantCall('same-tool', '{"p":1}'), v4ToolResult('ok', false, 'c' + i))
+  }
+  const sig = signals.collect(makeAgent(messages), { turn: 1, step: 1 })
+  assert.equal(sig.toolCalls, 4, 'only the newest longWindow buckets are retained')
+  assert.equal(sig.taskRepeats, 4, 'the newest 4 buckets each saw the key before, the evicted ones do not count')
+})

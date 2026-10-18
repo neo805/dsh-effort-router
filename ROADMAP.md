@@ -6,17 +6,19 @@ up.
 
 ## Settled by 0.2.8 (the drift engine)
 
-- **R5 (subagent routing) — settled by DESIGN DECISION.** The maintainer
-  ruled: subagents DO get auto-routed; the origin classifies the spawn
-  instruction text, an empty spawn anchors `standard`, and the frugal
-  subagent demotion applies on top. (The R5 observation — subagent seeds
-  arrive with the parent's resolved effort as a concrete pick — remains a
-  host-side provenance question for the echo guard, unchanged.)
+- **R5 (subagent routing) — DIRECTION SET, NOT IMPLEMENTED.** See the R5
+  section: the maintainer's ruling is that subagents SHOULD be auto-routed
+  (the origin classifies the spawn instruction text, an empty spawn anchors
+  `standard`, and the frugal subagent demotion applies on top). Re-measured
+  2026-10-18 on DSH 0.2.1-rc.2, the implementation is still missing — a live
+  subagent's steps record `mode: manual`, i.e. the parent's resolved level
+  arrives as a concrete seed and is passed straight through. Low priority.
 - **R6 (restart replay pollution) — mitigated.** Resumed tasks now resume
-  with the warm-up EXPIRED and the error window shrank to 6 decay-weighted
-  buckets (from 32 flat ones), so the replayed-stale-escalation blast
-  radius is smaller; the residual (a replayed error still weighs 1 on its
-  first bucket) self-heals within the short window.
+  with the warm-up EXPIRED, and the error window is the `shortWindow`
+  parameter (default 6) instead of a flat 32-bucket window, so the
+  replayed-stale-escalation blast radius is much smaller; the residual (a
+  replayed error still weighs 1 on its first bucket) self-heals within
+  `shortWindow` new steps. See the R6 section.
 - **Audit R4.2 (repeat threshold validity) — re-anchored.** Repeat/error
   rungs are now freshness-aware (`decayThreshold`): N events reach their
   rung at full weight only when fresh. The validity question itself moves
@@ -24,7 +26,8 @@ up.
 - **Audit R4.3 (volume ladder recalibration) — transformed.** The two-rung
   log ladders became user-tunable LINEAR ramps (`briefRamp`/`toolRamp`)
   over gzip-discounted effective tokens; the log keeps raw + discounted
-  pairs so the next calibration cycle can set rungs from data.
+  pairs so the next calibration cycle can set rungs from data. That
+  calibration has NOT been run yet — see "Deferred calibration" below.
 
 ## R1 — Tool-call captions: retired from the chat flow (DONE, 0.2.1; revived as opt-in 0.2.7-rc.7)
 
@@ -45,10 +48,16 @@ config-file-only options redesign, the surface came back as `chatAnnotate`
 the existing `effortRouterAnchors` session projection (no new host projection;
 tool/call events anchor on the bare callId). The client reads the flag once at
 load, so a toggle applies on page reload. **Open verification point:** the
-0.2.0 field note said this seam rendered nothing — whether it renders on the
-current host is unverified until the maintainer turns the flag on and checks.
-If it still renders nothing, treat it as a host-seam question, not a plugin
-bug.
+0.2.0 field note said this seam rendered nothing. It was tested once around
+0.2.7 and produced no rows. Static check 2026-10-18 against the running host
+(0.2.1-rc.2): the `conversation.chat.node` slot DOES exist — 61 hits in
+`dsh-client-ui-chat/lib/client.js`, and the registration shape this plugin uses
+(`slots.inject` + `slots.register({ name, key, locale })`) matches the host's
+own node views; `useProjection` is a `ChatView` prop. So the surface is
+plausible and worth ONE manual look — it is not re-tested every release. If it
+renders nothing, treat it as a host-seam question, not a plugin bug. Tracked in
+`MAINTAINER-TESTS.md`, which is the running list of things only the maintainer
+can confirm on a major upgrade.
 
 **0.2.1 removal (superseded).** Removed the chat-annotation surface:
 `annotations.ts`, surface 3 in `src/client/index.tsx`, the `.er-call*` styles,
@@ -138,30 +147,85 @@ The READMEs said the composer badge sits right of the model selector; it
 actually sits left. Doc-only fix, applied to `README.md` and `README.zh.md`
 in the 0.2.0 review pass.
 
-## R5 — Subagent sessions never reach the auto scheduler (candidate, observed 2026-10-13)
+## R5 — Subagent auto-routing (NOT IMPLEMENTED; direction: do it, low priority)
 
-**Observation (evidence).** A subagent spawned for a controlled experiment
-(session `daebe1cc`, 3 steps) recorded `mode: 'manual', effort: 'max'` on
-every step: subagent requests arrive carrying the parent's RESOLVED effort as
-a concrete seed, and the echo guard cannot reclassify it — a fresh subagent
-session has no decision-store history, so `isSelectionEcho` stays false and
-the inherited level is indistinguishable from a human pick. Consequence:
-`subagentPreferCheap` / `subagentEffort` never fire on the current host;
-frugal demotion is dead code in practice. Fixing it needs host-side
-delegation provenance (e.g. an explicit marker on subagent seeds) or a
-plugin-side heuristic we have explicitly avoided so far (provenance over
-inference). Parked until the maintainer weighs in on whether subagents
-SHOULD be auto-routed at all.
+**Status.** Planned, accepted as the direction, not scheduled, not built.
+Until it lands, a subagent request inherits whatever level the parent's step
+carried: the plugin passes it through as if a human had picked it. Do not read
+that as the ruling — the ruling is that subagents SHOULD be auto-routed.
 
-## R6 — Evidence-window pollution after a host restart (candidate, observed 2026-10-13)
+**Evidence (re-measured 2026-10-18, DSH 0.2.1-rc.2).** A live subagent spawn
+recorded `mode: manual, effort: low, tier: null` on every step. The parent's
+resolved `low` arrives as a concrete seed; a fresh subagent session has no
+decision-store history, so the echo guard has nothing to compare against, and
+the concrete level reads as a human pick and is passed through verbatim.
+Consequences on 0.2.1-rc.2:
 
-**Observation (evidence).** After a DSH restart, the in-memory per-agent
-signal state is empty; the first collect of a resumed session replays the
-whole projection from watermark 0, folding historical tool errors into the
-sliding window. A resumed session's first steps therefore carry stale
-escalations (measured: `windowErrors=5 → escalated on evidence x2` on the
-first post-restart steps of session `53eaf0fb`, all from pre-restart
-failures). The window ages out after 32 new buckets, so the blast radius is
-the first few steps of a resumed session. Options: persist the watermark
-with the decision store, or stamp evidence with wall-clock age and discount
-old buckets. Not urgent — the lift is capped and self-heals.
+- `subagentEffort` never fires (it only fills a request with NO effort);
+- the frugal "subagent" demotion never fires (the interceptor returns at the
+  manual pass-through before the signal collector runs);
+- `subagentPreferCheap` was removed from the policy in the cleanup pass — it
+  never had a config key, so the branch was unconditionally on and unreachable
+  anyway.
+
+**Candidate fixes (pick one when this is scheduled):**
+
+(a) provenance heuristic — treat a concrete seed as an echo when
+    `header.delegationDepth > 0` AND the decision store proves the level
+    equals the parent's last scheduled effort (the child knows its parent via
+    `agent.parentAgent`); then schedule normally and let the frugal subagent
+    demotion apply. This is an inference, which is exactly what this project
+    otherwise avoids, so it needs a tight condition and a test.
+(b) host-side delegation provenance — an explicit marker on subagent seeds.
+    Clean, upstream, not ours to land.
+
+**When it lands:** expose `subagentPreferCheap` as a real config key, and add
+the missing test (the subagent branch is currently covered only for a request
+that carries NO effort).
+
+## R6 — Evidence-window pollution after a host restart (mitigated; residual accepted)
+
+**Observation (evidence, 2026-10-13, pre-0.2.8 engine).** After a DSH restart
+the in-memory per-agent signal state is empty; the first collect of a resumed
+session replays the whole projection from watermark 0, folding historical tool
+errors into the sliding window. A resumed session's first steps therefore
+carry stale escalations (measured then: `windowErrors=5 → escalated on
+evidence x2` on the first post-restart steps of session `53eaf0fb`, all from
+pre-restart failures).
+
+**Current shape (0.2.8+).** The window lengths are CONFIG PARAMETERS, not
+constants: `shortWindow` (default 6) decay-weighted error buckets under
+`errorDecay`, `longWindow` (default 32) for the volume channel, and
+`warmUpSteps` (default 3) for the origin floor. Mitigations in place: a
+resumed task opens with its warm-up EXPIRED, and the short window keeps only
+`shortWindow` buckets instead of the old flat 32 — a replayed error reaches
+one bucket, weighs 1, and ages out within `shortWindow` new steps. The
+compaction channel's own scan reads `session.snapshotEvents()` and is skipped
+whole while `compactionBump` is off (cleanup pass), which also bounds the
+per-step cost of a long log.
+
+**Residual (accepted).** A replayed error still weighs 1 in its first bucket,
+so the first steps after a restart can sit one class high. Options if it ever
+matters: persist the watermark with the decision store, or stamp evidence with
+wall-clock age and discount old buckets.
+
+## Deferred calibration (the "next cycle" work, still open)
+
+The audit research (`T4`/`T6`, machine-local notes under `docs/`) deferred two
+things to "the next cycle"; neither has been run. The decision log has carried
+the fields needed since 0.2.8, so both are executable whenever picked up:
+
+- **Volume-ramp re-anchoring (audit R4.3/R4.7).** `briefRamp` and `toolRamp`
+  were left at their provisional values pending real runtime distribution.
+  A first look at the local decision log (2026-10-18, 453 samples carrying the
+  observation fields): `briefVolume` p50≈123 / p95≈7,079 (rung 1 `>400` fires
+  23.3%, rung 2 `>1600` fires 6.3%), while `toolVolume` p50≈3,114 / p99≈23,726
+  / max≈23,816 — i.e. `toolRamp: 48000,128000` NEVER fires (0.0% at both
+  rungs), so half of channel ② is inert in practice. Decide: lower the tool
+  rungs toward the observed range, or keep them deliberately for the big-result
+  tail and say so.
+- **Dictionary change shadow run (T6 §6.1).** The 0.2.6/0.2.7 dictionary moves
+  were applied directly; the agreed "shadow first, review flip rates after one
+  cycle" step was never run, and the observation list (方法/具体/参考/读取/
+  资料/获取/项目/你是/代理) plus the zero-hit pruning rule still await a ruling.
+  See `docs/ops/t6-dictionary-full-recommendations.md` §6.

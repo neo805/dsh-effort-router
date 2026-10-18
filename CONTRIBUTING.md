@@ -11,4 +11,6 @@ and evolve your own copy — that is the intended collaboration channel.
 
 本项目在「维护者 + AI 协作者」的结对模式下开发，双方的协作约定见
 [COLLABORATION.md](COLLABORATION.md)（版本号治理、push 授权、实证优先、
-追根因、交付清单、已知残留公示、隐私边界）。
+追根因、交付清单、已知残留公示、隐私边界）。自动化测试覆盖不到的宿主缝与
+渲染项，登记在 [MAINTAINER-TESTS.md](MAINTAINER-TESTS.md)，由维护者在大版本
+号升级时集中实机确认。

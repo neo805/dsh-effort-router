@@ -63,3 +63,13 @@ test('anchors beyond the limit evict the oldest first', () => {
   assert.equal(state.anchors.call_4, undefined)
   assert.ok(state.anchors.call_5, 'the 501st newest is kept')
 })
+
+test('the registry-facing schemas are identity parsers (clone-safe wire contract)', () => {
+  const state = projection.apply(projection.init(), header('p', 'm', 'low'))
+  assert.equal(projection.stateSchema.parse(state), state)
+  const view = projection.wire.view(state)
+  assert.equal(projection.wire.viewSchema.parse(view), view)
+  // The registry structuredClones the state for checkpointing and replays it,
+  // so the served view must survive a JSON round trip unchanged.
+  assert.deepEqual(JSON.parse(JSON.stringify(view)), view)
+})
