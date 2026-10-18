@@ -4,6 +4,29 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.15-rc.3] - 2026-10-18
+
+### Fixed
+
+- **A subagent session's trajectory view lost its per-step capsules** (reported
+  2026-10-18 on a live child session: no `#1 · provider/model · effort` chip, or
+  a chip carrying a NEIGHBOURING session's provider). An agent session created
+  through the agent service carries a BARE uuid (`b653563f-…`), while an
+  ordinary conversation session is `session-<uuid>`. The decorator's identity
+  check only accepted the prefixed shape, so a subagent pane read as "no
+  session id", fell through to the merged anchor table, and that table's
+  per-session `assistant\0<turn>\0<step>` keys collide by construction — the
+  ambiguity-safe merge then dropped the key (no caption) or a single-candidate
+  table painted the wrong provider.
+- The fix accepts both id shapes and is verified from the host side: the state
+  route already answers correctly for a bare agent id (`resolved=stored`, the
+  child's own `assistant\0 1 \0 1` → `deepseek-account/deepseek-flash · high`),
+  so only the client's identity gate was wrong.
+- The identity and row-key contract moved out of the TSX-adjacent TS into
+  `src/client/ids.js` (plain ESM, bundled by esbuild like the rest) so it is
+  unit-testable: `test/client-ids.test.mjs` pins both id shapes and the
+  tool/assistant row-key decoding, including the malformed-key cases.
+
 ## [0.2.15-rc.2] - 2026-10-18
 
 ### Fixed

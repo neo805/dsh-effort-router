@@ -68,7 +68,7 @@ personal or machine-specific information.
 
 ## 2. 版本号治理
 
-版本号形如 `X.X.X-rc.X`。**本项目当前版本 `0.2.15-rc.2`；此后所有版本号都必须
+版本号形如 `X.X.X-rc.X`。**本项目当前版本 `0.2.15-rc.3`；此后所有版本号都必须
 带 `rc` 后缀**（`package.json`、`CHANGELOG.md` 标题、README 首屏、git tag 一律
 一致）。
 
@@ -217,12 +217,12 @@ personal or machine-specific information.
    替换"推断。
 9. 安装到 **Desktop profile**：同样备份 → 安装 → 哈希比对（Desktop 通常可热
    生效）。
-10. 向出品人报告：结论、证据（数值/哈希/会话 id）、Desktop 验收步骤、已知残留、
+10. `git add -A && git commit` —— **本机提交，不需要出品人验收**：提交信息说明
+    **改了什么、为什么**（可带版本号）。工作区不长期挂着一堆未提交改动。
+11. 向出品人报告：结论、证据（数值/哈希/会话 id）、Desktop 验收步骤、已知残留、
     下一版本候选内容。
-11. 出品人验收通过后 `git add -A && git commit` —— 提交信息说明**改了什么、
-    为什么**（可带版本号）。
-12. **push 与打 tag 必须等出品人批准**（§10）。推送前跑 `dsh-plugin-check` 与
-    全量测试，把数字写进批准请求里。
+12. **push 与打 tag 等出品人验收通过后批准**（§10）。推送前跑 `dsh-plugin-check`
+    与全量测试，把数字写进批准请求里。
 
 ## 9. 已知残留必须公示
 
@@ -236,8 +236,8 @@ personal or machine-specific information.
 - **`git push` 必须先问。** 本机已与出品人的 GitHub 仓库
   `neo805/dsh-effort-router` 建立链接并授予 AI 通过 `git` CLI 直接操作推送的
   权限；权限存在**不等于**可以自行推送。提交（commit）可自行完成并保持本地
-  领先，但**按 §8 的顺序，commit 发生在出品人验收通过之后**；推送、打 tag、
-  改远程属于对外动作，须经出品人明确批准。
+  领先（按 §8 第 10 步，装到 Desktop 之后即提交，**无需出品人验收**）；推送、
+  打 tag、改远程属于对外动作，须经出品人明确批准。
 - **不得**：未经批准 push、自行升大版本号、静默丢弃已知问题、把未验证的事说成
   已完成、在会话内直接替换正在运行的宿主或自身。
 - 仓库**不开启 Issues、不接受 Pull Requests**（见 CONTRIBUTING）。

@@ -58,6 +58,8 @@
  *     updates re-resolve just the rows that have no caption yet.
  */
 
+import { SESSION_ID_IN_URL_RE, TOOL_ROW_PREFIX, anchorOfRowKey, isSessionId } from './ids.js'
+
 const POLL_MS = 2500
 /** Every Nth successful poll forces a full re-registration (safety net). */
 const FULL_SWEEP_EVERY = 8
@@ -89,14 +91,10 @@ interface AnchorsState {
   anchors: Record<string, { provider: string | null; model: string | null; effort: string | null }>
 }
 
-const SESSION_ID_RE = /^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 /** The session id the web client is currently showing, from the route. */
 function currentSessionId(): string | null {
   if (typeof location === 'undefined') return null
-  const match = /session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(
-    location.href,
-  )
+  const match = SESSION_ID_IN_URL_RE.exec(location.href)
   return match ? match[0] : null
 }
 
@@ -118,20 +116,12 @@ function domSessionId(): string | null {
     ? row.closest('[data-conversation-session]')
     : document.querySelector('[data-conversation-session]')
   const id = root ? root.getAttribute('data-conversation-session') : null
-  return id !== null && SESSION_ID_RE.test(id) ? id : null
+  return isSessionId(id) ? id : null
 }
 
-/** Resolve one row's DOM key to an anchor id (callId or message id). */
+/** Resolve one row's DOM key to an anchor id (shared + unit-tested, see ids.js). */
 function anchorOf(rowKey: string): string | null {
-  let key: string
-  try {
-    key = decodeURIComponent(rowKey)
-  } catch {
-    return null
-  }
-  const toolPrefix = 'tool\0call\0'
-  if (key.startsWith(toolPrefix)) return key.slice(toolPrefix.length)
-  return key || null
+  return anchorOfRowKey(rowKey)
 }
 
 /**
@@ -143,7 +133,6 @@ function anchorOf(rowKey: string): string | null {
 function visibleToolCallId(): string | null {
   if (typeof document === 'undefined') return null
   const rows = document.querySelectorAll('tr[data-trajectory-row-key]')
-  const toolPrefix = 'tool\0call\0'
   for (const row of Array.from(rows)) {
     const raw = (row as HTMLElement).getAttribute('data-trajectory-row-key') || ''
     let key: string
@@ -152,7 +141,7 @@ function visibleToolCallId(): string | null {
     } catch {
       continue
     }
-    if (key.startsWith(toolPrefix)) return key.slice(toolPrefix.length)
+    if (key.startsWith(TOOL_ROW_PREFIX)) return key.slice(TOOL_ROW_PREFIX.length)
   }
   return null
 }
