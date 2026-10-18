@@ -4,6 +4,24 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.14] - 2026-10-18
+
+Root cause of the empty history captions: the fallback called
+`sessionQuery.load()`, which is NOT part of the public service surface in
+0.2.1 — `load` lives on the internal corpus object, so the route always
+answered "no table". The public read API `readSession(sessionId)` reads and
+replay-validates one complete log WITHOUT making the session live (no write
+lease); `observeSession()` is the lease-based observation used as the
+fallback when `readSession` is absent. The same read-only contract holds:
+the route never resumes, claims, or writes a session.
+
+## [0.2.13] - 2026-10-18
+
+Diagnostics for the stored-log anchor fallback: the route now reports
+`anchorsError` (service unavailable / `load` missing / load failure text)
+when a known session could not be read from persistence, so the field can
+tell "no data source" from "empty log".
+
 ## [0.2.12] - 2026-10-18
 
 Trajectory captions for HISTORY sessions on the Web UI. After 0.2.11 fixed

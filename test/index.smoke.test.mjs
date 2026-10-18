@@ -387,16 +387,18 @@ test('route: sessionId direct, hint resolution, and ambiguity-safe merge', async
     stateOf: (session) => ({ anchors: perSession[session.id] }),
     register: () => () => {},
   }
-  // Persisted-log fallback (0.2.12): a session opened from history in the Web
+  // Persisted-log fallback (0.2.12+): a session opened from history in the Web
   // UI is not attached to the live store, so its anchors come from
-  // sessionQuery.load(). Events carry the same shapes the projection folds.
+  // sessionQuery.readSession() (the public read API; it does NOT make the
+  // session live and takes no write lease). Events carry the same shapes the
+  // projection folds.
   const STORED_EVENTS = [
     { type: 'request/header', data: { header: { config: { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'low' } } } },
     { type: 'assistant/message', data: { turn: 1, step: 1, message: { role: 'assistant', content: [] } } },
   ]
   const sessionQuery = {
-    load: async (id) => {
-      if (id === 's-stored') return { events: STORED_EVENTS }
+    readSession: async (id) => {
+      if (id === 's-stored') return { session: { id }, inheritedEventCount: 0, events: STORED_EVENTS }
       throw new Error('session "' + id + '" not found')
     },
   }
