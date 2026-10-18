@@ -387,11 +387,25 @@ test('route: sessionId direct, hint resolution, and ambiguity-safe merge', async
     stateOf: (session) => ({ anchors: perSession[session.id] }),
     register: () => () => {},
   }
+  // Persisted-log fallback (0.2.12): a session opened from history in the Web
+  // UI is not attached to the live store, so its anchors come from
+  // sessionQuery.load(). Events carry the same shapes the projection folds.
+  const STORED_EVENTS = [
+    { type: 'request/header', data: { header: { config: { provider: 'deepseek-account', model: 'deepseek-flash', reasoningEffort: 'low' } } } },
+    { type: 'assistant/message', data: { turn: 1, step: 1, message: { role: 'assistant', content: [] } } },
+  ]
+  const sessionQuery = {
+    load: async (id) => {
+      if (id === 's-stored') return { events: STORED_EVENTS }
+      throw new Error('session "' + id + '" not found')
+    },
+  }
   const ctx = {
     logger: () => ({ info() {}, warn() {} }),
     get(name) {
       if (name === 'sessions') return sessions
       if (name === 'sessionProjections') return sessionProjections
+      if (name === 'sessionQuery') return sessionQuery
       throw new Error('no service ' + name)
     },
     on() { return () => {} },
@@ -440,8 +454,16 @@ test('route: sessionId direct, hint resolution, and ambiguity-safe merge', async
   assert.equal(merged.anchors.call_old.model, 'kimi-k3')
   assert.equal(merged.anchors.call_new.model, 'deepseek-flash')
 
-  // A KNOWN session id this runtime cannot read must not fall through to the
-  // merged table either (2026-10-18 Web report).
+  // A session opened from history (not attached to the live store) resolves
+  // from its persisted log (0.2.12).
+  const stored = await call('?sessionId=s-stored')
+  assert.equal(stored.anchorsResolved, 'stored')
+  assert.equal(stored.anchors[KEY].provider, 'deepseek-account', 'the stored log folds into the same anchor shape')
+  assert.equal(stored.anchors[KEY].model, 'deepseek-flash')
+  assert.equal(stored.anchors[KEY].effort, 'low')
+
+  // A KNOWN session id this runtime cannot read at all must not fall through
+  // to the merged table either (2026-10-18 Web report).
   const unknown = await call('?sessionId=session-00000000-0000-0000-0000-000000000000')
   assert.equal(unknown.anchors, null, 'unknown session: no merged substitute')
 })

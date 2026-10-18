@@ -4,6 +4,24 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.12] - 2026-10-18
+
+Trajectory captions for HISTORY sessions on the Web UI. After 0.2.11 fixed
+the wrong attribution, many history panes painted no capsule at all:
+sessions opened from history are served through `sessionQuery` and are NOT
+attached to the live `sessions` store in 0.2.1, so the state route — which
+read the anchors from the live session projection — answered "unknown
+session" and the client painted nothing.
+
+### Fixed
+
+- **The state route resolves a known session from its persisted log when
+  it is not live**: `sessionQuery.load()` returns the stored events, the
+  same pure anchor fold runs over them, and the table is cached for 30 s
+  per session (LRU-bounded) so the 2.5 s client poll costs one log read at
+  most. `anchorsResolved` gains the `stored` value. An unknown id still
+  returns no table (never the merged substitute).
+
 ## [0.2.11] - 2026-10-18
 
 Trajectory caption identity fix for the Web UI. Reported shape: after
