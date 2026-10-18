@@ -25,12 +25,17 @@
  * that resolve to nothing stay untouched. Everything is idempotent (rows are
  * keyed, captions carry a marker) and degrades to a no-op outside the
  * trajectory tab or when the host route reports trajectoryAnnotate: false.
- * When the shell URL carries no session id the host route answers with a
- * merged anchor table of the most recent sessions; one visible tool call id
- * travels as `hint` so the host can answer with the on-screen session's OWN
- * table — assistant anchor keys are per-session coordinates and collide
- * across sessions, so a bare merged table can otherwise paint a neighbouring
- * session's capsules (fixed in 0.2.7).
+ * Identity (0.2.11): the SPA keeps the session id out of the URL, so the
+ * pane's session is read from the conversation root's
+ * `data-conversation-session` attribute (0.2.1 stamps it on the element that
+ * wraps the 对话/轨迹 tabs); the URL regex remains only a fallback. A switch
+ * re-reads that attribute synchronously and blanks every caption before the
+ * next poll repaints from the correct table. The merged fallback survives
+ * for shells without the attribute: a visible tool call id travels as
+ * `hint`, and a key whose value is not identical across every candidate
+ * table is DROPPED (0.2.11; assistant anchor keys are per-session
+ * coordinates and collide across sessions — missing captions are honest,
+ * a neighbouring session's capsule is not).
  *
  * Session-switch staleness: row keys collide across sessions, and React
  * REUSES a row element when the next session renders a row with the same
@@ -81,6 +86,8 @@ interface AnchorsState {
   anchors: Record<string, { provider: string | null; model: string | null; effort: string | null }>
 }
 
+const SESSION_ID_RE = /^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /** The session id the web client is currently showing, from the route. */
 function currentSessionId(): string | null {
   if (typeof location === 'undefined') return null
@@ -88,6 +95,27 @@ function currentSessionId(): string | null {
     location.href,
   )
   return match ? match[0] : null
+}
+
+/**
+ * The session id of the ledger ON SCREEN, read from the conversation root
+ * (0.2.1's dsh-client-ui-conversation stamps `data-conversation-session` on
+ * its body, and the 对话/轨迹 tabs both render inside that root).
+ *
+ * The SPA does not put the session id in the URL, so `location` alone is
+ * useless after the first switch: every session looked alike to the merged
+ * fallback, whose per-session `assistant\0turn\0step` keys collide and paint
+ * the PREVIOUS session's capsule (or none at all). The DOM attribute is the
+ * authoritative identity here and changes exactly when the pane switches.
+ */
+function domSessionId(): string | null {
+  if (typeof document === 'undefined') return null
+  const row = document.querySelector('tr[data-trajectory-row-key]')
+  const root = row
+    ? row.closest('[data-conversation-session]')
+    : document.querySelector('[data-conversation-session]')
+  const id = root ? root.getAttribute('data-conversation-session') : null
+  return id !== null && SESSION_ID_RE.test(id) ? id : null
 }
 
 /** Resolve one row's DOM key to an anchor id (callId or message id). */
@@ -308,9 +336,12 @@ export function startTrajectoryDecorator(): () => void {
     fingerprint = ''
   }
 
-  /** Sync the tracked session id from the route; clears captions on change. */
+  /** The pane's own session id first (DOM), then the URL fallback. */
+  const effectiveSessionId = () => domSessionId() ?? currentSessionId()
+
+  /** Sync the tracked session id; clears captions on change. */
   const syncSessionFromRoute = () => {
-    const current = currentSessionId()
+    const current = effectiveSessionId()
     if (current !== sessionId) {
       sessionId = current
       clearAllCaptions()
@@ -463,7 +494,10 @@ export function startTrajectoryDecorator(): () => void {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ['data-trajectory-row-key'],
+      // The conversation root's session attribute changes on a pane switch:
+      // observing it lets the captions clear in the same batch instead of
+      // waiting up to one poll interval.
+      attributeFilter: ['data-trajectory-row-key', 'data-conversation-session'],
     })
   }
   tick()

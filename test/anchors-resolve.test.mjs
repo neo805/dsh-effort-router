@@ -28,19 +28,29 @@ test('a hint resolves the owning session despite colliding assistant keys', () =
   assert.equal(out2.table[ASSISTANT_KEY].model, 'deepseek-flash')
 })
 
-test('merged fallback without a hint: newest session wins colliding keys', () => {
+test('merged fallback without identity: colliding keys are dropped, not misattributed', () => {
   const out = resolveMergedAnchors([older, newer], undefined)
   assert.equal(out.resolved, 'merged')
-  assert.equal(out.table[ASSISTANT_KEY].model, 'deepseek-flash', 'last candidate wins the collision')
+  // 2026-10-18 Web report: a bare merged table painted the other session's
+  // capsule; an ambiguous key must decorate NOTHING instead.
+  assert.equal(out.table[ASSISTANT_KEY], undefined, 'the colliding assistant key is ambiguous')
   // Globally-unique tool call keys from every session survive the merge.
   assert.equal(out.table.call_old.model, 'kimi-k3')
   assert.equal(out.table.call_new.model, 'deepseek-flash')
 })
 
-test('an unknown hint falls through to the merged table', () => {
+test('merged fallback keeps a key whose value agrees across sessions', () => {
+  const same = { provider: 'deepseek-account', model: 'deepseek-flash', effort: 'low' }
+  const a = { id: 's-a', anchors: { [ASSISTANT_KEY]: same } }
+  const b = { id: 's-b', anchors: { [ASSISTANT_KEY]: { ...same } } }
+  const out = resolveMergedAnchors([a, b], undefined)
+  assert.deepEqual(out.table[ASSISTANT_KEY], same, 'identical values are not ambiguous')
+})
+
+test('an unknown hint falls through to the ambiguity-safe merge', () => {
   const out = resolveMergedAnchors([older, newer], 'call_nope')
   assert.equal(out.resolved, 'merged')
-  assert.equal(out.table[ASSISTANT_KEY].model, 'deepseek-flash')
+  assert.equal(out.table[ASSISTANT_KEY], undefined, 'a stray hint does not reintroduce ambiguity')
 })
 
 test('candidates without anchors are skipped; empty input yields null', () => {

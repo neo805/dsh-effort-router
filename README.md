@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.10` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.11` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
@@ -51,7 +51,7 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives
 ## In-session visibility
 
 - **Composer badge** (left of the model selector, gated by `showBadge`): the mode and effort of the session's last step (`Auto · high`), with class and reason in the tooltip. Read-only — control stays in the native selector.
-- **Trajectory hoisting** (`trajectoryAnnotate`, default on): each step's `provider/model · effort` is projected onto the NATIVE trajectory ledger rows (DOM projection anchored on `data-trajectory-row-key` — the assembly-layer route, no host package touched and no new view added). The anchor table is folded host-side from `request/header` + `assistant/message` + `tool/call` events and served on the state route. The chat flow itself stays annotation-free by default.
+- **Trajectory hoisting** (`trajectoryAnnotate`, default on): each step's `provider/model · effort` is projected onto the NATIVE trajectory ledger rows (DOM projection anchored on `data-trajectory-row-key` — the assembly-layer route, no host package touched and no new view added). The anchor table is folded host-side from `request/header` + `assistant/message` + `tool/call` events and served on the state route. Session identity comes from the conversation root's `data-conversation-session` (0.2.11): a switch blanks the old captions and repaints from the new session's table, and an unknown identity paints nothing rather than a neighbouring session's capsule. The chat flow itself stays annotation-free by default.
 - **Chat captions** (`chatAnnotate`, **default off**): when enabled, each tool call gains a `provider/model · effort` caption row fed by the same anchor projection.
 
 ## Safety and degradation

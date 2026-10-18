@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**当前版本：** `0.2.10`（兼容 DSH 0.2.1-rc.2）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
+**当前版本：** `0.2.11`（兼容 DSH 0.2.1-rc.2）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
 
 DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考档位（reasoning effort）**，并让手写声明的 `llm-pi-ai` 自定义模型也能选档位。
 
@@ -53,7 +53,7 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 ## 会话内可见性
 
 - **Composer 徽标**（模型选择器左侧，`showBadge` 可关）：当前会话最近一步的模式与档位（`Auto · high`），悬停显示分类与理由。只读——控制永远在原生的模型选择器里。
-- **轨迹提级**（`trajectoryAnnotate`，默认开）：每一步的 `provider/model · 档位` 直接投影到**原生轨迹视图**的记录行上（以 `data-trajectory-row-key` 为锚的 DOM 投影——装配层路线，不动任何宿主包、不新增视图）。锚点表由宿主侧折叠 `request/header` + `assistant/message` + `tool/call` 事件生成，经只读路由提供给客户端。会话流默认保持零标注。
+- **轨迹提级**（`trajectoryAnnotate`，默认开）：每一步的 `provider/model · 档位` 直接投影到**原生轨迹视图**的记录行上（以 `data-trajectory-row-key` 为锚的 DOM 投影——装配层路线，不动任何宿主包、不新增视图）。锚点表由宿主侧折叠 `request/header` + `assistant/message` + `tool/call` 事件生成，经只读路由提供给客户端。会话身份取自会话根的 `data-conversation-session`（0.2.11）：切换会话先清空旧胶囊、再按新会话的表重绘；身份不明时宁可不出胶囊，也不画错会话。会话流默认保持零标注。
 - **对话流小注**（`chatAnnotate`，**默认关**）：开启后每个工具调用下方显示一行 `provider/model · 档位`，数据来自同一张锚点投影表。
 
 ## 安全与降级

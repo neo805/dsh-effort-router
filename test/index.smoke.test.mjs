@@ -368,7 +368,7 @@ test('apply: a durable pending pick keeps the concrete level manual', async () =
   assert.ok(!logs.some((m) => m.includes('class ')), 'no scheduling happened for a durable pick')
 })
 
-test('route: sessionId direct, hint resolution, and newest-wins merged order', async () => {
+test('route: sessionId direct, hint resolution, and ambiguity-safe merge', async () => {
   const routes = []
   const webServer = { register: (route) => { routes.push(route); return () => {} } }
   const KIMI = { provider: 'moonshotai-cn', model: 'kimi-k3', effort: 'low' }
@@ -432,12 +432,18 @@ test('route: sessionId direct, hint resolution, and newest-wins merged order', a
   assert.equal(hinted.anchorsResolved, 'hint')
   assert.equal(hinted.anchors[KEY].model, 'kimi-k3')
 
-  // Bare merge: the newest session wins colliding assistant keys, unique
-  // tool call keys from every session survive.
+  // Bare merge: the colliding assistant key is AMBIGUOUS and must decorate
+  // nothing; globally-unique tool call keys still survive.
   const merged = await call('')
   assert.equal(merged.anchorsResolved, 'merged')
-  assert.equal(merged.anchors[KEY].model, 'deepseek-flash')
+  assert.equal(merged.anchors[KEY], undefined, 'ambiguity paints nothing, never the wrong session')
   assert.equal(merged.anchors.call_old.model, 'kimi-k3')
+  assert.equal(merged.anchors.call_new.model, 'deepseek-flash')
+
+  // A KNOWN session id this runtime cannot read must not fall through to the
+  // merged table either (2026-10-18 Web report).
+  const unknown = await call('?sessionId=session-00000000-0000-0000-0000-000000000000')
+  assert.equal(unknown.anchors, null, 'unknown session: no merged substitute')
 })
 
 test('apply: poison pin needs shape AND store provenance, and applies immediately', async () => {

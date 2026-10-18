@@ -4,6 +4,33 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.11] - 2026-10-18
+
+Trajectory caption identity fix for the Web UI. Reported shape: after
+viewing session A (qwen route) and switching to session B (deepseek route),
+B's trajectory rows showed A's provider/model capsules — and the reverse
+order behaved the same; some panes painted no capsule at all, so caption
+presence and text were unstable.
+
+### Fixed
+
+- **The Web SPA keeps the session id out of the URL.** The trajectory
+  decorator derived the on-screen session from `location.href`, so after
+  the first switch every session looked alike to the merged fallback;
+  `assistant\0<turn>\0<step>` keys are per-session coordinates and
+  collided, painting a neighbouring session's capsule. The session id is
+  now read from the DOM first — 0.2.1's conversation root stamps
+  `data-conversation-session`, and the 对话/轨迹 tabs render inside it —
+  with the URL only as a fallback. Session switches clear the captions
+  synchronously (the root attribute is observed too) before the next poll
+  repaints from the correct per-session table.
+- **The merged fallback is ambiguity-safe**: a key whose provider/model/
+  effort is not identical across every candidate table is dropped instead
+  of "newest wins". Missing captions are honest; a wrong capsule is not.
+- **A known session id whose session the runtime cannot read no longer
+  falls through to the merged table** — the route returns no anchors (the
+  client paints nothing) instead of another session's data.
+
 ## [0.2.10] - 2026-10-18
 
 DSH 0.2.1-rc.2 support. The host now judges third-party plugins by
