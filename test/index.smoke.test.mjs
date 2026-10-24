@@ -185,7 +185,7 @@ test('apply: a selection echo is proven by OUR decision store and rescheduled', 
   }))
   assert.equal(step2.reasoningEffort, 'low')
   assert.equal(
-    logs.filter((m) => m.includes('class trivial')).length,
+    logs.filter((m) => m.includes('origin trivial')).length,
     2,
     'both steps went through the scheduler (the echo was not honored as manual)',
   )
@@ -249,7 +249,7 @@ test('apply: our own pending=auto stamp never locks the session manual (phantom-
     assert.equal(out.reasoningEffort, 'low')
   }
   assert.equal(
-    logs.filter((m) => m.includes('class trivial')).length,
+    logs.filter((m) => m.includes('origin trivial')).length,
     4,
     'every mirrored step stayed in the scheduler (no phantom manual lock)',
   )
@@ -294,7 +294,7 @@ test('apply: a UI Auto pick (pending=auto) keeps concrete seeds in the scheduler
     provider: 'gw', model: 'thinker', reasoningEffort: 'high',
   }))
   assert.equal(out.reasoningEffort, 'low', 'the mirrored concrete seed is rescheduled')
-  assert.ok(logs.some((m) => m.includes('class trivial')), 'the scheduler ran despite pending=auto')
+  assert.ok(logs.some((m) => m.includes('origin trivial')), 'the scheduler ran despite pending=auto')
 })
 
 test('apply: a consumed explicit pick stays manual (store witness says mode manual)', async () => {
@@ -334,7 +334,7 @@ test('apply: a consumed explicit pick stays manual (store witness says mode manu
   const seed2 = { provider: 'gw', model: 'thinker', reasoningEffort: 'high' }
   const out2 = await onRequest({ agent, turn: 1, step: 2 }, async () => seed2)
   assert.equal(out2, seed2)
-  assert.ok(!logs.some((m) => m.includes('class ')), 'a consumed manual pick is never rescheduled')
+  assert.ok(!logs.some((m) => m.includes(' rank ')), 'a consumed manual pick is never rescheduled')
 })
 
 test('apply: a durable pending pick keeps the concrete level manual', async () => {
@@ -367,7 +367,7 @@ test('apply: a durable pending pick keeps the concrete level manual', async () =
   const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'low' }
   const out = await onRequest({ agent, turn: 1, step: 1 }, async () => seed)
   assert.equal(out, seed, 'explicit pick passes through verbatim')
-  assert.ok(!logs.some((m) => m.includes('class ')), 'no scheduling happened for a durable pick')
+  assert.ok(!logs.some((m) => m.includes(' rank ')), 'no scheduling happened for a durable pick')
 })
 
 test('route: sessionId direct, hint resolution, and ambiguity-safe merge', async () => {
@@ -571,7 +571,7 @@ test('apply: a pinned defaultLevel fills an unselected request instead of schedu
     provider: 'gw', model: 'thinker',
   }))
   assert.equal(out.reasoningEffort, 'high', 'the pinned level is mapped onto the model vocabulary')
-  assert.ok(!logs.some((m) => m.includes('class ')), 'no scheduling happened for a pinned default')
+  assert.ok(!logs.some((m) => m.includes(' rank ')), 'no scheduling happened for a pinned default')
 })
 
 test('apply: subagentEffort fills a subagent request that carries no level', async () => {
@@ -591,6 +591,70 @@ test('apply: a level the model does not advertise is stripped, never clamped', a
   const out = await onRequest({ agent: plainAgent('s-strip'), turn: 1, step: 1 }, async () => seed)
   assert.notEqual(out, seed, 'a copy is returned, the seed is left alone')
   assert.equal(out.reasoningEffort, undefined, 'an unadvertised explicit pick is dropped, not approximated')
+})
+
+/** Agent whose projection classifies one synthetic user brief. */
+function briefAgent(id, text) {
+  const agent = plainAgent(id)
+  agent.session.deriveMessages = () => [{ role: 'user', content: [{ type: 'text', text }] }]
+  return agent
+}
+
+test('0.2.16 apply: allowedEfforts quantizes down, up uses the selected direction', async () => {
+  const downCfg = entry.Config({
+    routes: { trivial: 'low', standard: 'medium', engineering: 'high', hard: 'max' },
+    allowedEfforts: ['low', 'high', 'max'],
+    effortFallback: 'down',
+  })
+  const down = interceptorCtx({ config: downCfg })
+  const downOut = await down.onRequest(
+    { agent: briefAgent('s-rank-down', '今天天气怎么样'), turn: 1, step: 1 },
+    async () => ({ provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }),
+  )
+  assert.equal(downOut.reasoningEffort, 'low', 'target medium(3) quantizes down to low(2)')
+
+  const upCfg = entry.Config({
+    routes: { trivial: 'low', standard: 'medium', engineering: 'high', hard: 'max' },
+    allowedEfforts: ['low', 'high', 'max'],
+    effortFallback: 'up',
+  })
+  const up = interceptorCtx({ config: upCfg })
+  const upOut = await up.onRequest(
+    { agent: briefAgent('s-rank-up', '今天天气怎么样'), turn: 1, step: 1 },
+    async () => ({ provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }),
+  )
+  assert.equal(upOut.reasoningEffort, 'high', 'target medium(3) quantizes up to high(4)')
+})
+
+test('0.2.16 apply: legacy allowMax=false migrates to a final output ceiling', async () => {
+  const legacy = interceptorCtx({
+    config: entry.Config({ allowMax: false, maxFallback: 'low' }),
+  })
+  const out = await legacy.onRequest(
+    { agent: briefAgent('s-legacy-cap', '帮我重构这个模块的缓存层'), turn: 1, step: 1 },
+    async () => ({ provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }),
+  )
+  assert.equal(out.reasoningEffort, 'low', 'engineering high is quantized into the migrated low ceiling')
+})
+
+test('0.2.16 apply: unknown selector ids normalize by advertised order', async () => {
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() {
+      return {
+        reasoning: {
+          efforts: [{ id: 'off' }, { id: 'low' }, { id: 'super' }, { id: 'max' }, { id: 'auto' }],
+        },
+      }
+    },
+  }
+  const harness = interceptorCtx({ llm })
+  const out = await harness.onRequest(
+    { agent: briefAgent('s-unknown-rank', '帮我重构这个模块的缓存层'), turn: 1, step: 1 },
+    async () => ({ provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }),
+  )
+  assert.equal(out.reasoningEffort, 'super', 'super sits between low(2) and max(6), exactly at high(4)')
+  assert.ok(harness.logs.some((m) => m.includes('unknown selector id') && m.includes('super')))
 })
 
 test('apply: one scheduled request reads the volatile config exactly once', async () => {
@@ -634,6 +698,7 @@ test('apply: the interceptor fails OPEN for a concrete request', async () => {
 /** Minimal host ctx exposing the web routes for direct handler calls. */
 function routeHarness(config, services = {}) {
   const routes = []
+  const listeners = new Map()
   const webServer = { register: (route) => { routes.push(route); return () => {} } }
   const projections = services.projections ?? {
     stateOf: () => undefined,
@@ -646,9 +711,10 @@ function routeHarness(config, services = {}) {
       if (name === 'sessionProjections') return projections
       if (name === 'sessions') return services.sessions
       if (name === 'sessionQuery') return services.sessionQuery
+      if (name === 'llm') return services.llm
       throw new Error('no service ' + name)
     },
-    on() { return () => {} },
+    on(event, handler) { listeners.set(event, handler); return () => listeners.delete(event) },
     inject(_names, fn) {
       fn({ webServer, sessionProjections: projections, effect: (run) => { run(); return () => {} } })
       return () => {}
@@ -668,7 +734,12 @@ function routeHarness(config, services = {}) {
     assert.equal(res.status, 200)
     return JSON.parse(res.body)
   }
-  return { routes, asJson }
+  return {
+    routes,
+    asJson,
+    onRequest: listeners.get('agent/request'),
+    onClaimed: listeners.get('agent/inbox/claimed'),
+  }
 }
 
 test('route: /effort-router/dictionaries reports effective, builtin, override, additions', async () => {
@@ -791,7 +862,7 @@ test('apply: an unreadable selection projection is never read as "no pick" (safe
   const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'max' }
   const out = await onRequest({ agent, turn: 1, step: 1 }, async () => seed)
   assert.equal(out, seed, 'an unknowable selection is left alone, never rescheduled over')
-  assert.ok(!logs.some((m) => m.includes('class ')), 'no scheduling happened on an unreadable projection')
+  assert.ok(!logs.some((m) => m.includes(' rank ')), 'no scheduling happened on an unreadable projection')
 })
 
 test('route: a throwing anchors projection degrades to the stored fallback, never a 500', async () => {
@@ -806,6 +877,40 @@ test('route: a throwing anchors projection degrades to the stored fallback, neve
   assert.equal(body.ok, true, 'the route still answers')
   assert.equal(body.anchors, null)
   assert.match(String(body.anchorsError), /sessionQuery service unavailable/)
+})
+
+test('0.2.16 route: decision telemetry carries target rank and mapping', async () => {
+  const harness = routeHarness(entry.Config({
+    routes: { trivial: 'low', standard: 'medium', engineering: 'high', hard: 'max' },
+    allowedEfforts: ['low', 'high', 'max'],
+    effortFallback: 'down',
+  }), {
+    llm: {
+      adapters: new Map(),
+      async resolveModelInfo() {
+        return { reasoning: { efforts: [{ id: 'off' }, { id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+      },
+    },
+  })
+  const agent = plainAgent('s-rank-telemetry')
+  agent.session.deriveMessages = () => [{ role: 'user', content: [{ type: 'text', text: '今天天气怎么样' }] }]
+  harness.onClaimed({ agent, message: { content: '今天天气怎么样', role: 'user' }, turn: 1 })
+  const out = await harness.onRequest(
+    { agent, turn: 1, step: 1 },
+    async () => ({ provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }),
+  )
+  assert.equal(out.reasoningEffort, 'low')
+
+  const badge = await harness.asJson('/effort-router/state', '?view=badge&sessionId=s-rank-telemetry')
+  assert.equal(badge.last.targetRank, 3)
+  assert.equal(badge.last.targetTier, 'medium')
+  assert.equal(badge.last.mapping, 'down')
+  assert.equal(badge.last.originClass, 'standard')
+  assert.equal(badge.last.stepClass, null, 'no synthetic drifted class is logged')
+
+  const cfg = await harness.asJson('/effort-router/state', '?view=config')
+  assert.deepEqual(cfg.allowedEfforts, ['low', 'high', 'max'])
+  assert.equal(cfg.effortFallback, 'down')
 })
 
 // ---- R5: subagent routing (parent auto -> auto, parent manual -> manual) -----
@@ -878,13 +983,15 @@ test('R5: a subagent inherits an AUTO parent as auto, not as a manual pick', asy
   const childOut = await request(onRequest, child, { provider: 'gw', model: 'thinker', reasoningEffort: 'low' })
   assert.equal(childOut.reasoningEffort, 'high', 'the spawn brief (engineering) schedules high')
   assert.ok(
-    logs.some((m) => m.includes('s-child') && m.includes('class engineering')),
+    logs.some((m) => m.includes('s-child') && m.includes('origin engineering')),
     'the child ran through the scheduler',
   )
 })
 
 test('R5: the subagent frugal demotion applies once the warm-up floor expires', async () => {
-  const { onRequest, onClaimed, logs } = r5Ctx()
+  // A downward quantizer makes the one-rank demotion visible on the coarse
+  // low/high/max test vocabulary (medium has no exact slot there).
+  const { onRequest, onClaimed, logs } = r5Ctx(entry.Config({ effortFallback: 'down' }))
   const parent = parentAgent('s-parent-f')
   onClaimed({ agent: parent, message: { content: '翻译这句话', role: 'user' }, turn: 1 })
   await request(onRequest, parent, { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' })
@@ -903,7 +1010,7 @@ test('R5: the subagent frugal demotion applies once the warm-up floor expires', 
     effort = out.reasoningEffort
     seen.push(effort)
   }
-  assert.deepEqual(seen, ['high', 'high', 'high', 'low', 'low'], 'warm-up floor first, demotion after it')
+  assert.deepEqual(seen, ['high', 'high', 'high', 'low', 'low'], 'warm-up floor first, one-rank demotion after it')
   assert.ok(logs.some((m) => m.includes('s-child-f') && m.includes('frugal: subagent')), 'demotion is logged')
 })
 
@@ -918,7 +1025,7 @@ test('R5: a MANUAL parent level is inherited verbatim, never rescheduled', async
   const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'max' }
   const out = await onRequest({ agent: child, turn: 1, step: 1 }, async () => seed)
   assert.equal(out, seed, 'inherited manual stays manual (same object, untouched)')
-  assert.ok(!logs.some((m) => m.includes('s-child-m') && m.includes('class ')), 'no scheduling for the child')
+  assert.ok(!logs.some((m) => m.includes('s-child-m') && m.includes(' rank ')), 'no scheduling for the child')
 })
 
 test('R5: an unknown parent keeps the inherited level (conservative)', async () => {

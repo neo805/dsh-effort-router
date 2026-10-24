@@ -4,6 +4,26 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
+## 0.2.16-rc.1 — integer rank routing (LANDED)
+
+The four origin classes are now anchors on an integer rank ladder, not the
+effort ladder itself. Default anchors remain low/low/high/max, but evidence
+moves one rank at a time; `allowedEfforts` is the global final-id allow-list and
+`effortFallback` is `nearest-up`/`up`/`down`. `allowMax`/`maxFallback` migrate to
+a final ceiling and remain deprecated compatibility keys.
+
+**Shadow result (566 real rc.5 decisions, default config):** 183 targets changed
+(32.3%). Old low/high/max distribution 236/243/87 became minimal 2 / low 203 /
+medium 66 / high 178 / xhigh 95 / max 22. Final effort distribution is NOT
+reconstructable from the logs because advertised vocabularies were not recorded.
+Before changing any evidence threshold, collect post-release records with
+`targetRank`, `mapping`, and `effort` together.
+
+**Open:** `gzipSync` remains a synchronous event-loop cost on large results (see
+the rc.5 section); integer drift does not change that. The deferred ramp and
+dictionary shadow work still runs on real data, not in the same release as this
+engine change.
+
 ## 0.2.15-rc.5 — rc.4 review fixes (LANDED)
 
 The rc.4 audit's high/medium findings are fixed and covered by the regression

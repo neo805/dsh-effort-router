@@ -72,7 +72,7 @@ test('parallel tool results stay in ONE assistant-call bucket', () => {
   assert.equal(sig.taskErrors, 1)
   assert.equal(sig.weightedErrors, 1, 'the error sits in the newest bucket, not one bucket back')
   const decision = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(decision.stepClass, 'engineering', 'the first error lifts standard by one class')
+  assert.equal(decision.targetRank, 3, 'the first error lifts standard by one rank')
 })
 
 test('a subagent-return bucket records its event once across parallel results', () => {

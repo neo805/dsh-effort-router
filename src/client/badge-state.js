@@ -38,6 +38,10 @@ export function sameBadgeState(left, right) {
   return a.mode === b.mode
     && a.effort === b.effort
     && a.tier === b.tier
+    && a.targetTier === b.targetTier
+    && a.targetRank === b.targetRank
+    && a.originClass === b.originClass
+    && a.mapping === b.mapping
     && a.stepClass === b.stepClass
     && a.reason === b.reason
 }

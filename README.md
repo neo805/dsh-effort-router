@@ -2,17 +2,18 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.15-rc.5` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.16-rc.1` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
-- **The drift engine** (0.2.8): the task ORIGIN is classified once from the brief the user sent (`trivial / standard / engineering / hard`); evidence then drifts the class — `level = origin + error channel + volume channel − frugal`
+- **The drift engine** (0.2.8; integer ranks since 0.2.16): the task ORIGIN CLASS is classified once from the brief the user sent (`trivial / standard / engineering / hard`); `routes` maps it to an integer origin rank, then evidence drifts the **rank** — `targetRank = originRank + error channel + volume channel − frugal`, clamped to the hard-anchor ceiling
 - Error channel (short 6-step window, decay-weighted): tool errors, identical-argument retries, event bumps (a just-completed todo, an orchestration return, a compaction checkpoint — each +1 once per step), and a carry from the previous task's unresolved failure
 - Volume channel (long 32-step window): brief and tool-result tokens, **gzip-ratio discounted** (repetition is not information), graded by two linear ramps
 - Warm-up floor: a fresh task never routes below its origin for the first steps (default 3); afterwards drift owns the level — aggressive saving, with the short error window as the feedback loop
 - Wish detector: a short delegation-style brief in the cue vacuum zone (`帮我…`, `can you…`) starts at the engineering floor — underspecified tasks get the benefit of the doubt
-- Frugal signals: subagents, context pressure, or a session token budget demote one class
-- Capability clamp: the scheduled tier maps onto the target model's advertised vocabulary (nearest rank, so gateway vocabularies like `ultra` work)
+- Frugal signals: subagents, context pressure, or a session token budget demote one rank
+- Capability mapping: the target rank maps onto the model's advertised selector ids; the optional global `allowedEfforts` list constrains the final id, and `effortFallback` chooses `nearest-up` (compat), `up`, or `down` with boundary clamping
+- Unknown selector ids: normalized from their advertised weakest-to-strongest order and logged once, never silently treated as `high`
 - Manual wins: a concrete level in the selector passes through verbatim; Auto hands the step to the scheduler
 - Subagent inheritance (0.2.15): a child started from a parent running **Auto** is scheduled from its own spawn brief (origin classification, warm-up floor, frugal demotion); a child started from a parent on a **concrete level** inherits that level verbatim. The seed is classified by provenance — the parent's recorded decision plus the host's `parentSession` lineage — so a human pick is never mistaken for a schedule
 
@@ -33,13 +34,15 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives
 - `enabled`: master switch (off = requests pass through untouched)
 - `defaultLevel`: level when nothing is selected (`auto` or a concrete level)
 - `subagentEffort`: subagent default (`inherit` or a concrete level)
-- `allowMax` / `maxFallback`: automatic routing may reach max (**on by default** since 0.2.0); off collapses max to `maxFallback`
+- `allowedEfforts`: optional global final selector-id allow-list (`minimal/low/medium/high/xhigh/max/ultra`); empty = every advertised non-off level. `off/none/auto` are reserved and rejected
+- `effortFallback`: missing-target behaviour — `nearest-up` (compatibility default), `up`, or `down`; directional modes clamp at the available boundary
+- `allowMax` / `maxFallback`: **deprecated in 0.2.16**. `allowMax=false` migrates to an `allowedEfforts` ceiling up to `maxFallback`; setting both old and new controls is reported as a conflict
 - `wish` / `poisonRecovery` / `frugalDemote` / `contextPressure` / `sessionTokenBudget`: wish detector, poison recovery, frugal demotion and their thresholds
 - `showBadge`: show the read-only badge left of the composer model selector (default on)
 - `trajectoryAnnotate`: project each step's `provider/model · effort` onto the native trajectory ledger (default on; switch off if it conflicts with another plugin)
 - `chatAnnotate`: add a `provider/model · effort` caption row under each tool call in the conversation view (**default off**; read once at client load, so a toggle applies on page reload)
 - `fillCustomModels`: auto-fill default effort tables for hand-declared custom models
-- `routes`: class → tier route table (trivial/standard default low, engineering high, hard max)
+- `routes`: origin class → anchor rank (`minimal/low/medium/high/xhigh/max/ultra`; defaults trivial/standard low, engineering high, hard max). The four anchors must be non-decreasing; an invalid table falls back as a whole with a warning
 - `shortWindow` / `longWindow` / `errorDecay`: window sizes and the per-bucket decay weights of the error channel (defaults 6 / 32 / `1,0.8,0.6,0.5,0.4,0.3`)
 - `briefRamp` / `toolRamp` / `compressDiscount`: linear volume ramps in effective tokens (defaults `400,1600` / `48000,128000`) and the gzip-ratio discount switch
 - `warmUpSteps` / `trivialLiftCap`: origin warm-up floor length (default 3) and the total lift a trivial origin allows (default 1)
@@ -51,7 +54,7 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives
 
 ## In-session visibility
 
-- **Composer badge** (left of the model selector, gated by `showBadge`): the mode and effort of the session's last step (`Auto · high`), with class and reason in the tooltip. Read-only — control stays in the native selector.
+- **Composer badge** (left of the model selector, gated by `showBadge`): the mode and **actually sent** effort of the session's last step (`Auto · high`); the tooltip carries origin class, target tier/rank, mapping mode, and reason. Read-only — control stays in the native selector.
 - **Trajectory hoisting** (`trajectoryAnnotate`, default on): each step's `provider/model · effort` is projected onto the NATIVE trajectory ledger rows (DOM projection anchored on `data-trajectory-row-key` — the assembly-layer route, no host package touched and no new view added). The anchor table is folded host-side from `request/header` + `assistant/message` + `tool/call` events and served on the state route. Session identity comes from the conversation root's `data-conversation-session` (0.2.11): a switch blanks the old captions and repaints from the new session's table, and an unknown identity paints nothing rather than a neighbouring session's capsule. The chat flow itself stays annotation-free by default.
 - **Chat captions** (`chatAnnotate`, **default off**): when enabled, each tool call gains a `provider/model · effort` caption row fed by the same anchor projection.
 

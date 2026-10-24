@@ -2,17 +2,18 @@
 
 [English](README.md) | 中文
 
-**当前版本：** `0.2.15-rc.5`（兼容 DSH 0.2.1-rc.2）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
+**当前版本：** `0.2.16-rc.1`（兼容 DSH 0.2.1-rc.2）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
 
 DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考档位（reasoning effort）**，并让手写声明的 `llm-pi-ai` 自定义模型也能选档位。
 
-- **漂移引擎**（0.2.8）：任务始发时只分类一次（`trivial / standard / engineering / hard`，取自用户任务书本身），随后证据驱动档位漂移——`档位 = 始发 + 错误通道 + 信息量通道 − 节俭`
+- **漂移引擎**（0.2.8；0.2.16 起整数 rank）：任务始发时只做一次**类别分类**（`trivial / standard / engineering / hard`，取自用户任务书本身）；`routes` 把类别映射为整数始发 rank，随后证据直接漂移 **rank**——`targetRank = originRank + 错误通道 + 信息量通道 − 节俭`，封顶于 hard 锚点
 - 错误通道（6 步短窗，窗内衰减加权）：工具报错、同参重试、事件升档（todo 刚完成、编排返回、压缩检查点——各 +1，每步合并一次）、上一任务未解失败的延续
 - 信息量通道（32 步长窗）：简报与工具返回 token，经 **gzip 压缩率折扣**（循环重复不是信息量），双斜坡线性分级
 - 暖启动地板：新任务开头几步（默认 3 步）不低于始发档；之后完全交给漂移——激进节省由短窗错误反馈兜底
 - 许愿检测：零线索真空区里的委托式短简报（「帮我…」「can you…」）按 engineering 起步——信息不足的任务给个善意的起跑线
-- 节俭信号：子代理 / 上下文压力 / token 预算超限时自动降一档
-- 能力钳制：调度结果映射到目标模型**实际支持**的档位词表（含 `ultra` 等网关自定义值取最近档）
+- 节俭信号：子代理 / 上下文压力 / token 预算超限时自动降一个 rank
+- 能力映射：目标 rank 映射到模型实际广告的 selector ID；可选的全局 `allowedEfforts` 限制最终 ID，`effortFallback` 决定缺失时取 `nearest-up`（兼容）、`up` 或 `down`，方向模式在边界处钳制
+- 未知 selector ID：按模型广告的“由弱到强”顺序推断并一次性告警，不再一律当作 `high`
 - 手动优先：选择器里选具体档位 = 完全直通；选 Auto = 交给调度器
 - 子代理继承（0.2.15）：父会话跑 **Auto** 时，子代理按自己的始发简报调度（始发分类 + 暖启动地板 + 节俭降档）；父会话选了**具体档位**时，子代理原样继承该档。种子档位靠**来源**判定——父会话已记录的决策 + 宿主写入的 `parentSession` 血缘——所以人工选择永远不会被误当成调度结果
 
@@ -35,13 +36,15 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 - `enabled`：总开关（关 = 请求原样通过）
 - `defaultLevel`：无显式选择时的档位（`auto` 或具体档）
 - `subagentEffort`：子代理默认档（`inherit` 或具体档）
-- `allowMax` / `maxFallback`：允许自动升到 max（**0.2.0 起默认开**）；关闭则回退到 maxFallback
+- `allowedEfforts`：可选的全局最终 selector-ID 白名单（`minimal/low/medium/high/xhigh/max/ultra`）；留空 = 所有广告的非 off 档。`off/none/auto` 为保留值，会被拒绝
+- `effortFallback`：目标档缺失时的行为——`nearest-up`（兼容默认）、`up`、`down`；方向模式在可用边界处钳制
+- `allowMax` / `maxFallback`：**0.2.16 起废弃**。`allowMax=false` 会迁移为截至 `maxFallback` 的 `allowedEfforts` 上限；新旧键同时设置会明确报告冲突
 - `wish` / `poisonRecovery` / `frugalDemote` / `contextPressure` / `sessionTokenBudget`：许愿检测、毒化恢复、节俭降档及其阈值
 - `showBadge`：是否显示对话视图模型选择器左侧的徽标（默认开）
 - `trajectoryAnnotate`：是否在原生轨迹视图投影每步的 `provider/model · 档位`（默认开；与其他插件冲突时可关）
 - `chatAnnotate`：是否在对话视图为每个工具调用加一行 `provider/model · 档位` 小注（**默认关**，客户端加载时读取一次，切换后刷新页面生效）
 - `fillCustomModels`：是否自动补齐自定义模型默认档位表
-- `routes`：分类 → 档位路由表（trivial/standard 默认 low，engineering 默认 high，hard 默认 max）
+- `routes`：始发类别 → 锚点 rank（`minimal/low/medium/high/xhigh/max/ultra`；默认 trivial/standard low、engineering high、hard max）。四个锚点必须单调不下降；非法表会整体回退并告警
 - `shortWindow` / `longWindow` / `errorDecay`：错误通道的短/长窗口步数与窗内衰减权重数组（默认 6 / 32 / `1,0.8,0.6,0.5,0.4,0.3`）
 - `briefRamp` / `toolRamp` / `compressDiscount`：信息量线性斜坡（有效 token，默认 `400,1600` / `48000,128000`）与 gzip 压缩率折扣开关
 - `warmUpSteps` / `trivialLiftCap`：始发暖启动地板步长（默认 3）与 trivial 始发允许的总升档数（默认 1）
@@ -53,7 +56,7 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 
 ## 会话内可见性
 
-- **Composer 徽标**（模型选择器左侧，`showBadge` 可关）：当前会话最近一步的模式与档位（`Auto · high`），悬停显示分类与理由。只读——控制永远在原生的模型选择器里。
+- **Composer 徽标**（模型选择器左侧，`showBadge` 可关）：当前会话最近一步的模式与**实际发送**的档位（`Auto · high`）；悬停显示始发类别、目标 tier/rank、映射方式与理由。只读——控制永远在原生的模型选择器里。
 - **轨迹提级**（`trajectoryAnnotate`，默认开）：每一步的 `provider/model · 档位` 直接投影到**原生轨迹视图**的记录行上（以 `data-trajectory-row-key` 为锚的 DOM 投影——装配层路线，不动任何宿主包、不新增视图）。锚点表由宿主侧折叠 `request/header` + `assistant/message` + `tool/call` 事件生成，经只读路由提供给客户端。会话身份取自会话根的 `data-conversation-session`（0.2.11）：切换会话先清空旧胶囊、再按新会话的表重绘；身份不明时宁可不出胶囊，也不画错会话。会话流默认保持零标注。
 - **对话流小注**（`chatAnnotate`，**默认关**）：开启后每个工具调用下方显示一行 `provider/model · 档位`，数据来自同一张锚点投影表。
 

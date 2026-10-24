@@ -4,6 +4,61 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.16-rc.1] - 2026-10-25
+
+The integer-rank routing release. The four origin classes remain the task
+taxonomy; drift, ceilings and capability mapping now operate on ranks 0..7
+(`0` off/none reserved for safety, normal Auto uses `1..7`).
+
+### Added
+
+- **Fine-grained integer drift.** `routes` maps the four origin classes to
+  anchor ranks; error/volume/frugal evidence moves the target rank directly.
+  With default anchors, standard+1 is now `medium` (was `high`) and
+  engineering+1 is `xhigh` (was `max`).
+- **Global second-layer allow-list.** `allowedEfforts` restricts the final
+  advertised selector id; empty means every non-off advertised level.
+- **Directional quantization.** `effortFallback` supports `nearest-up`
+  (compatibility default), `up`, and `down`, each with boundary clamping when
+  no candidate exists in the requested direction.
+- **Ordered unknown-selector normalization.** Adapter vocabularies whose ids
+  are not canonical are interpolated from their advertised order and logged
+  once instead of all ranking as `high`.
+- **Decision telemetry:** `targetRank`, `targetTier`, and `mapping`
+  (`exact`/`up`/`down`/`nearest-up`/boundary clamp/unsupported); Badge tooltip
+  shows origin → target rank/tier → mapping, while its label still shows the
+  actual effort only.
+
+### Changed
+
+- `routes` accepts every non-off canonical level
+  (`minimal/low/medium/high/xhigh/max/ultra`). Defaults are unchanged; the four
+  anchors must be non-decreasing or the table falls back as a whole with a
+  warning.
+- Auto can now target every rank up to the configured hard anchor. The default
+  hard anchor remains `max`, so `ultra` is reachable only by explicit config.
+- `allowMax` / `maxFallback` are deprecated. `allowMax=false` migrates to an
+  `allowedEfforts` ceiling through `maxFallback`; explicit old+new controls are
+  reported as a conflict and the explicit allow-list wins.
+- `stepClass` is no longer a post-drift synthetic class (always `null` in new
+  decisions); `originClass`, `targetRank`, and `targetTier` are authoritative.
+
+### Fixed
+
+- `allowMax=false` could still emit `max` through nearest mapping on a
+  `low/max` vocabulary. The second-layer allow-list now constrains the FINAL
+  output, closing that path.
+
+### Shadow
+
+- Replayed 566 real rc.5 decisions with default config against the new kernel:
+  target changed in 183 (32.3%). Old target distribution was
+  low 236 / high 243 / max 87; new targets spread across
+  minimal 2 / low 203 / medium 66 / high 178 / xhigh 95 / max 22. Final effort
+  distribution cannot be reconstructed from logs because advertised
+  vocabularies were not recorded.
+- Test baseline: 194 → 211 tests.
+
 ## [0.2.15-rc.5] - 2026-10-25
 
 Review-fix release for the rc.4 code audit. No new user-facing option and no

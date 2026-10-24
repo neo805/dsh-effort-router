@@ -106,77 +106,79 @@ test('decideEffort: routes table drives the tier', () => {
   assert.equal(decideEffort(cfg, { originClass: 'engineering' }).tier, 'high')
 })
 
-test('decideEffort: hard routes to max by default; opt-out clamps to fallback', () => {
+test('decideEffort: hard targets max; legacy opt-out is a second-layer ceiling', () => {
   const d = decideEffort(cfg, { originClass: 'hard' })
-  assert.equal(d.stepClass, 'hard')
-  assert.equal(d.tier, 'max') // allowMax defaults to true (0.2.0)
+  assert.equal(d.stepClass, null)
+  assert.equal(d.targetRank, 6)
+  assert.equal(d.tier, 'max')
   const noMax = normalizePolicyConfig({ allowMax: false })
-  const clamped = decideEffort(noMax, { originClass: 'hard' })
-  assert.equal(clamped.tier, 'high')
-  assert.ok(clamped.reason.join().includes('max is opt-out'))
+  const target = decideEffort(noMax, { originClass: 'hard' })
+  assert.equal(target.targetRank, 6, 'policy keeps the target; the allow-list is applied on capabilities')
+  assert.deepEqual(noMax.allowedRanks, [1, 2, 3, 4], 'legacy fallback=high becomes an allowed rank ceiling')
 })
 
-test('decideEffort: error-channel evidence lifts the class, capped at the ceiling', () => {
-  // weightedErrors 1.8 = two fresh errors under the default decay -> +2
+test('decideEffort: error-channel evidence moves rank, capped at the ceiling', () => {
+  // weightedErrors 1.8 = two fresh errors under the default decay -> +2 ranks
   const d = decideEffort(cfg, { originClass: 'standard', weightedErrors: 1.8 })
-  assert.equal(d.stepClass, 'hard')
-  assert.equal(d.tier, 'max')
+  assert.equal(d.targetRank, 4)
+  assert.equal(d.tier, 'high')
   // the channel cap (maxEscalations) binds evidence + todo + carry together
   const capped = decideEffort(cfg, { originClass: 'standard', weightedErrors: 9, todoBump: 1, carry: 1 })
-  assert.equal(capped.stepClass, 'hard', 'standard +2 (channel cap) -> hard, not beyond')
+  assert.equal(capped.targetRank, 4, 'standard +2 (channel cap) -> high, not beyond')
   assert.ok(capped.reason.join().includes('error channel capped'))
 })
 
-test('decideEffort: carry lifts the origin one class', () => {
+test('decideEffort: carry lifts the origin by one rank', () => {
   const d = decideEffort(cfg, { originClass: 'engineering', carry: 1 })
-  assert.equal(d.stepClass, 'hard')
+  assert.equal(d.targetRank, 5)
+  assert.equal(d.tier, 'xhigh')
 })
 
 test('decideEffort: subagent/compaction events stack in channel ① and share its cap (0.2.9)', () => {
   const sub = decideEffort(cfg, { originClass: 'engineering', subagentReturn: 1 })
-  assert.equal(sub.stepClass, 'hard')
+  assert.equal(sub.targetRank, 5)
   assert.ok(sub.reason.join().includes('subagent returned +1'))
   const comp = decideEffort(cfg, { originClass: 'standard', compaction: 1 })
-  assert.equal(comp.stepClass, 'engineering')
+  assert.equal(comp.targetRank, 3)
   assert.ok(comp.reason.join().includes('context compacted +1'))
   // All three events + evidence together still stop at maxEscalations.
   const capped = decideEffort(cfg, {
     originClass: 'standard', weightedErrors: 9, subagentReturn: 1, compaction: 1, todoBump: 1,
   })
-  assert.equal(capped.stepClass, 'hard', 'standard +2 (channel cap) -> hard, not beyond')
+  assert.equal(capped.targetRank, 4, 'standard +2 (channel cap) -> high, not beyond')
   assert.ok(capped.reason.join().includes('error channel capped'))
 })
 
 test('decideEffort: volume reads linear ramps; channels STACK (0.2.8)', () => {
-  // brief >400 -> +1: standard -> engineering
+  // brief >400 -> +1 rank: standard(low) -> medium
   const brief1 = decideEffort(cfg, { originClass: 'standard', briefVolume: 500 })
-  assert.equal(brief1.stepClass, 'engineering')
+  assert.equal(brief1.targetRank, 3)
   assert.ok(brief1.reason.join().includes('brief volume'))
-  // brief >1600 -> +2: standard -> hard
+  // brief >1600 -> +2 ranks: standard -> high
   const brief2 = decideEffort(cfg, { originClass: 'standard', briefVolume: 1700 })
-  assert.equal(brief2.stepClass, 'hard')
-  // tool window >48000 -> +1
+  assert.equal(brief2.targetRank, 4)
+  // tool window >48000 -> +1 rank
   const tool1 = decideEffort(cfg, { originClass: 'standard', toolVolume: 50000 })
-  assert.equal(tool1.stepClass, 'engineering')
+  assert.equal(tool1.targetRank, 3)
   // the louder of the two ramps speaks (brief +2 vs tool +1)
   const louder = decideEffort(cfg, { originClass: 'standard', briefVolume: 1700, toolVolume: 50000 })
-  assert.equal(louder.stepClass, 'hard')
-  // 0.2.8: channels STACK — evidence +2 AND tool volume +2 lift +4 (ceiling hard)
+  assert.equal(louder.targetRank, 4)
+  // 0.2.8: channels STACK — evidence +2 AND tool volume +2 lift +4 ranks (ceiling max)
   const stacked = decideEffort(cfg, { originClass: 'standard', weightedErrors: 1.8, toolVolume: 130000 })
-  assert.equal(stacked.stepClass, 'hard')
-  assert.ok(stacked.reason.join().includes('lift +4'), 'the drift sum is reported: ' + stacked.reason.join())
+  assert.equal(stacked.targetRank, 6)
+  assert.ok(stacked.reason.join().includes('rank +4'), 'the drift sum is reported: ' + stacked.reason.join())
   // a trivial origin caps the TOTAL lift at trivialLiftCap (default 1)
   const cappedLift = decideEffort(cfg, { originClass: 'trivial', briefVolume: 5000, toolVolume: 200000 })
-  assert.equal(cappedLift.stepClass, 'standard')
+  assert.equal(cappedLift.targetRank, 3)
   assert.ok(cappedLift.reason.join().includes('trivial origin'))
 })
 
-test('decideEffort: the warm-up floor holds the origin against frugal', () => {
+test('decideEffort: the warm-up floor holds the origin rank against frugal', () => {
   const held = decideEffort(cfg, { originClass: 'engineering', frugal: true, frugalWhy: 'subagent', warmup: true })
-  assert.equal(held.stepClass, 'engineering', 'frugal cannot undercut a fresh task')
+  assert.equal(held.targetRank, 4, 'frugal cannot undercut a fresh task')
   assert.ok(held.reason.join().includes('warm-up'))
   const released = decideEffort(cfg, { originClass: 'engineering', frugal: true, frugalWhy: 'subagent', warmup: false })
-  assert.equal(released.stepClass, 'standard', 'after the warm-up, drift owns the level')
+  assert.equal(released.targetRank, 3, 'after the warm-up, drift owns the level')
 })
 
 test('evidenceBumps: freshness-aware rungs under decay weights (0.2.8)', () => {
@@ -219,10 +221,10 @@ test('normalizePolicyConfig: ramp/decay vectors sanitize element-wise', () => {
   assert.deepEqual(bad.toolRamp, POLICY_DEFAULTS.toolRamp)
 })
 
-test('decideEffort: frugal signal demotes one class', () => {
+test('decideEffort: frugal signal demotes one rank', () => {
   const d = decideEffort(cfg, { originClass: 'engineering', frugal: true, frugalWhy: 'subagent' })
-  assert.equal(d.stepClass, 'standard')
-  assert.equal(d.tier, 'low')
+  assert.equal(d.targetRank, 3)
+  assert.equal(d.tier, 'medium')
   assert.ok(d.reason.join().includes('frugal'))
   const off = normalizePolicyConfig({ frugalDemote: false })
   assert.equal(decideEffort(off, { originClass: 'engineering', frugal: true }).tier, 'high')
@@ -234,18 +236,20 @@ test('decideEffort: poisoned history pins off', () => {
   assert.equal(d.poisoned, true)
 })
 
-test('decideEffort: a route of off can never be emitted (rule 4)', () => {
-  const weird = normalizePolicyConfig({})
-  weird.routes = { trivial: 'off', standard: 'off', engineering: 'off', hard: 'off' }
+test('decideEffort: off/auto are never route targets (rule 4)', () => {
+  const weird = normalizePolicyConfig({
+    routes: { trivial: 'off', standard: 'auto', engineering: 'none', hard: 'max' },
+  })
+  assert.deepEqual(weird.routes, { trivial: 'low', standard: 'low', engineering: 'high', hard: 'max' })
   const d = decideEffort(weird, { originClass: 'trivial' })
+  assert.equal(d.targetRank, 2)
   assert.equal(d.tier, 'low')
 })
 
-test('normalizePolicyConfig: invalid route values fall back', () => {
+test('normalizePolicyConfig: invalid or non-monotonic route values fall back as a whole', () => {
   const c = normalizePolicyConfig({ routes: { trivial: 'max', standard: 'nonsense' } })
-  assert.equal(c.routes.trivial, 'max')
-  assert.equal(c.routes.standard, 'low')
-  assert.equal(c.routes.engineering, 'high')
+  assert.match(c.routeError, /non-decreasing/)
+  assert.deepEqual(c.routes, { trivial: 'low', standard: 'low', engineering: 'high', hard: 'max' })
 })
 
 test('normalizePolicyConfig: user cues merge on top of the shipped dictionaries', () => {

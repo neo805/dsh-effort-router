@@ -63,6 +63,11 @@ test('same badge view suppresses identical polling renders', () => {
   assert.equal(sameBadgeState(first, { ...first, last: { ...first.last, effort: 'low' } }), false)
   assert.equal(sameBadgeState(first, { ...first, showBadge: false }), false)
   assert.equal(sameBadgeState(first, { ...first, sessionId: 'other' }), false)
+  // 0.2.16 telemetry is part of the rendered decision.
+  const ranked = { ...first, last: { ...first.last, originClass: 'engineering', targetRank: 5, targetTier: 'xhigh', mapping: 'down' } }
+  assert.equal(sameBadgeState(ranked, { ...ranked, last: { ...ranked.last } }), true)
+  assert.equal(sameBadgeState(ranked, { ...ranked, last: { ...ranked.last, targetRank: 4 } }), false)
+  assert.equal(sameBadgeState(ranked, { ...ranked, last: { ...ranked.last, mapping: 'up' } }), false)
 })
 
 test('badge shows the ACTUAL effort, never the target tier as a fallback', () => {

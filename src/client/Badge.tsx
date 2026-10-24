@@ -22,6 +22,11 @@ interface DecisionState {
     mode?: string
     effort?: string | null
     tier?: string | null
+    targetTier?: string | null
+    targetRank?: number | null
+    originClass?: string | null
+    mapping?: string | null
+    /** @deprecated rc.5: drifted classes are no longer fabricated. */
     stepClass?: string | null
     reason?: string
   } | null
@@ -90,7 +95,11 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
   const tooltip = !last
     ? t('badge.none')
     : [
-        last.stepClass ? `class: ${last.stepClass}` : '',
+        last.originClass ? `origin: ${last.originClass}` : (last.stepClass ? `class: ${last.stepClass}` : ''),
+        last.targetTier
+          ? `target: ${last.targetTier}${last.targetRank === null || last.targetRank === undefined ? '' : ` (rank ${last.targetRank})`}`
+          : '',
+        last.mapping ? `mapping: ${last.mapping}` : '',
         last.reason || '',
       ].filter(Boolean).join('\n')
 

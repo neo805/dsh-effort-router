@@ -77,7 +77,7 @@ test('origin: the claimed brief is classified ONCE and anchors the task', () => 
   sig = signals.collect(agent, { turn: 1, step: 2 })
   assert.equal(sig.originClass, 'engineering')
   const d = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(d.stepClass, 'engineering')
+  assert.equal(d.targetRank, 4)
   assert.equal(d.tier, 'high')
 })
 
@@ -113,14 +113,14 @@ test('warm-up floor: frugal cannot undercut the origin while the task is fresh',
     const sig = signals.collect(agent, { turn: 1, step })
     assert.equal(sig.warmup, true, 'step ' + step + ' is inside the warm-up')
     const d = decideEffort(cfg, sig)
-    assert.equal(d.stepClass, 'engineering', 'frugal is floored at step ' + step)
+    assert.equal(d.targetRank, 4, 'frugal is floored at step ' + step)
     assert.ok(d.reason.join().includes('warm-up'))
   }
-  // ...the fourth step drifts below the origin: aggressive saving in action.
+  // ...the fourth step drifts one rank below the origin.
   const sig = signals.collect(agent, { turn: 1, step: 4 })
   assert.equal(sig.warmup, false)
   const d = decideEffort(cfg, sig)
-  assert.equal(d.stepClass, 'standard', 'after the warm-up, drift owns the level')
+  assert.equal(d.targetRank, 3, 'after the warm-up, drift owns the level')
 })
 
 test('merge rule: a follow-up inside the warm-up keeps the STRONGER origin and restarts it', () => {
@@ -169,7 +169,7 @@ test('errors fold into the short window; the FIRST one lifts (0.2.6, audit R4.1)
   assert.equal(sig.taskErrors, 2)
   assert.equal(sig.weightedErrors, 1 + 0.8, 'newest bucket weighs 1, the previous 0.8')
   const d = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(d.stepClass, 'hard', 'standard +2 -> hard')
+  assert.equal(d.targetRank, 4, 'standard +2 -> high')
 })
 
 test('decay weights: a stale error alone cannot reach the threshold', () => {
@@ -184,7 +184,7 @@ test('decay weights: a stale error alone cannot reach the threshold', () => {
   assert.equal(sig.taskErrors, 1, 'the raw count still logs')
   assert.equal(sig.weightedErrors, 0.8)
   const d = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(d.stepClass, 'standard', 'no fresh evidence: no lift')
+  assert.equal(d.targetRank, 2, 'no fresh evidence: no lift')
 })
 
 test('the short window ages evidence out after shortWindow buckets', () => {
@@ -221,7 +221,7 @@ test('a real task boundary zeroes the short window but carries unresolved errors
   assert.equal(sig.carry, 1, 'the unresolved failure of the previous task carries +1')
   assert.equal(sig.toolVolume, volumeBefore, 'the long volume window spans the boundary')
   const d = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(d.stepClass, 'engineering', 'standard +1 carry -> engineering')
+  assert.equal(d.targetRank, 3, 'standard +1 carry -> medium')
 })
 
 test('carry decays with the short window', () => {
@@ -277,7 +277,7 @@ test('todo completion bumps +1 inside the short window', () => {
   sig = signals.collect(agent, { turn: 1, step: 2 })
   assert.equal(sig.todoBump, 1)
   const d = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(d.stepClass, 'hard', 'engineering +1 todo -> hard')
+  assert.equal(d.targetRank, 5, 'engineering +1 todo -> xhigh')
   // ...two completions in ONE step still fire a single bump...
   todos = [
     { status: 'completed', content: '实现缓存层' },
@@ -381,7 +381,7 @@ test('a subagent return bumps +1 inside the short window, then decays', () => {
   sig = signals.collect(agent, { turn: 1, step: 2 })
   assert.equal(sig.subagentReturn, 1, 'the integrating step reads the return')
   const d = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(d.stepClass, 'hard', 'engineering +1 subagent return -> hard')
+  assert.equal(d.targetRank, 5, 'engineering +1 subagent return -> xhigh')
   // The bump ages out with the short window (event tick 1, shortWindow 6:
   // holds while tick - 1 < 6, i.e. through step 6, gone from step 7).
   for (let step = 3; step <= 6; step += 1) {
@@ -420,7 +420,7 @@ test('a compaction checkpoint bumps +1 (snapshotEvents scan, engine-agnostic)', 
   sig = signals.collect(agent, { turn: 1, step: 3 })
   assert.equal(sig.compaction, 1)
   const d = decideEffort(normalizePolicyConfig({}), sig)
-  assert.equal(d.stepClass, 'hard', 'engineering +1 compaction -> hard')
+  assert.equal(d.targetRank, 5, 'engineering +1 compaction -> xhigh')
   // The lifecycle event fires too (kind variant also matches).
   events.push({ type: 'compaction/end', data: { compactionId: 'k2' } })
   sig = signals.collect(agent, { turn: 1, step: 4 })
