@@ -58,7 +58,8 @@
  *     updates re-resolve just the rows that have no caption yet.
  */
 
-import { SESSION_ID_IN_URL_RE, TOOL_ROW_PREFIX, anchorOfRowKey, isSessionId } from './ids.js'
+import { TOOL_ROW_PREFIX, anchorOfRowKey, isSessionId, sessionIdFromUrl } from './ids.js'
+import { createPollGuard } from './poll-guard.js'
 
 const POLL_MS = 2500
 /** Every Nth successful poll forces a full re-registration (safety net). */
@@ -94,8 +95,14 @@ interface AnchorsState {
 /** The session id the web client is currently showing, from the route. */
 function currentSessionId(): string | null {
   if (typeof location === 'undefined') return null
-  const match = SESSION_ID_IN_URL_RE.exec(location.href)
-  return match ? match[0] : null
+  return sessionIdFromUrl(location.href)
+}
+
+/** The conversation root a ledger row belongs to (may be absent). */
+function rowSessionId(tr: HTMLElement): string | null {
+  const root = typeof tr.closest === 'function' ? tr.closest('[data-conversation-session]') : null
+  const id = root ? root.getAttribute('data-conversation-session') : null
+  return isSessionId(id) ? id : null
 }
 
 /**
@@ -133,17 +140,26 @@ function anchorOf(rowKey: string): string | null {
 function visibleToolCallId(): string | null {
   if (typeof document === 'undefined') return null
   const rows = document.querySelectorAll('tr[data-trajectory-row-key]')
+  const owners = new Set<string>()
+  let hint: string | null = null
   for (const row of Array.from(rows)) {
-    const raw = (row as HTMLElement).getAttribute('data-trajectory-row-key') || ''
+    const tr = row as HTMLElement
+    const owner = rowSessionId(tr)
+    if (owner) owners.add(owner)
+    // Two panes on screen have no single on-screen owner: a hint would pick
+    // one pane's table and decorate both. Missing captions are honest.
+    if (owners.size > 1) return null
+    if (hint !== null) continue
+    const raw = tr.getAttribute('data-trajectory-row-key') || ''
     let key: string
     try {
       key = decodeURIComponent(raw)
     } catch {
       continue
     }
-    if (key.startsWith(TOOL_ROW_PREFIX)) return key.slice(TOOL_ROW_PREFIX.length)
+    if (key.startsWith(TOOL_ROW_PREFIX)) hint = key.slice(TOOL_ROW_PREFIX.length)
   }
-  return null
+  return hint
 }
 
 /**
@@ -168,6 +184,8 @@ export function startTrajectoryDecorator(): () => void {
   let polls = 0
   let pollTimer: ReturnType<typeof setTimeout> | undefined
   let sessionId: string | null = null
+  let polling = false
+  const guard = createPollGuard()
 
   /** Rows queued for decoration on the next animation frame. */
   const pendingRows = new Set<HTMLElement>()
@@ -207,6 +225,25 @@ export function startTrajectoryDecorator(): () => void {
   // ABOVE the row text; inserting INTO it keeps the caption on the same
   // line, visually right of the 【助手】 badge, pushing the row's own text
   // right.
+  /** May this row be decorated with the table for the current pane? */
+  const rowOwnedByCurrent = (tr: HTMLElement): boolean => {
+    if (sessionId === null) return true
+    const owner = rowSessionId(tr)
+    return owner === null || owner === sessionId
+  }
+
+  const shedRow = (tr: HTMLElement) => {
+    const caption = captions.get(tr)
+    if (caption) {
+      caption.remove()
+      captions.delete(tr)
+    }
+    tr.removeAttribute(DONE_ATTR)
+    pendingRows.delete(tr)
+    unresolvedRows.delete(tr)
+    labeledRows.delete(tr)
+  }
+
   const mountInline = (tr: HTMLElement, caption: HTMLElement) => {
     const cell = tr.querySelector('td:last-child')
     const target = (cell && cell.firstElementChild) ?? cell ?? tr
@@ -242,6 +279,11 @@ export function startTrajectoryDecorator(): () => void {
   }
 
   const decorateRow = (tr: HTMLElement) => {
+    if (!rowOwnedByCurrent(tr)) {
+      // Another ledger is on screen with this one. Never borrow its table.
+      shedRow(tr)
+      return
+    }
     // React may strip our foreign caption when it re-renders the cell that
     // hosts it; a cached-but-disconnected caption must force a full
     // re-create, or the DONE marker below would suppress the re-mount.
@@ -308,7 +350,10 @@ export function startTrajectoryDecorator(): () => void {
       labeledRows.add(tr)
     } else {
       labeledRows.delete(tr)
-      unresolvedRows.add(tr)
+      // Only assistant rows with a real anchor can become resolvable when the
+      // table changes. Tool rows have no anchor id and must not be rescanned.
+      if (isAssistantRow && anchorId !== null) unresolvedRows.add(tr)
+      else unresolvedRows.delete(tr)
     }
   }
 
@@ -336,7 +381,7 @@ export function startTrajectoryDecorator(): () => void {
   /** Sync the tracked session id; clears captions on change. */
   const syncSessionFromRoute = () => {
     const current = effectiveSessionId()
-    if (current !== sessionId) {
+    if (guard.updateSession(current) || current !== sessionId) {
       sessionId = current
       clearAllCaptions()
     }
@@ -370,33 +415,45 @@ export function startTrajectoryDecorator(): () => void {
   /** Queue rows already on screen (initial paint and anchor-table changes). */
   const registerVisibleRows = () => {
     const rows = document.querySelectorAll('tr[data-trajectory-row-key]')
-    for (const row of Array.from(rows)) pendingRows.add(row as HTMLElement)
+    for (const row of Array.from(rows)) {
+      const tr = row as HTMLElement
+      if (rowOwnedByCurrent(tr)) pendingRows.add(tr)
+      else shedRow(tr)
+    }
     scheduleFrame()
   }
 
+  /** The trajectory ledger is not on screen: no fetch, no table work. */
+  const hasTrajectoryRows = (): boolean =>
+    typeof document !== 'undefined' && document.querySelector('tr[data-trajectory-row-key]') !== null
+
   const tick = async () => {
     if (stopped) return
+    if (!hasTrajectoryRows()) {
+      // Pure chat page: no anchors are requested, hashed, or identity-queried.
+      // The observer wakes the poll immediately when the ledger appears.
+      if (!stopped) pollTimer = setTimeout(tick, POLL_MS)
+      return
+    }
     syncSessionFromRoute()
-    // Even without a session id in the URL we still poll: the host route then
-    // answers with a merged anchor table of the most recent sessions. One
-    // visible tool call id goes along as `hint` — assistant anchor keys
-    // collide across sessions, and the hint lets the host answer with the
-    // on-screen session's own table instead.
+    // Even without a session id in the URL the host answers with a merged
+    // table. One visible tool call id identifies its owner; it participates
+    // in the poll generation so switching panes invalidates old responses.
+    if (!sessionId) guard.updateHint(visibleToolCallId())
+    const requestToken = guard.snapshot()
     if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
+      polling = true
       try {
         const params = new URLSearchParams()
-        if (sessionId) params.set('sessionId', sessionId)
-        else {
-          const hint = visibleToolCallId()
-          if (hint) params.set('hint', hint)
-        }
-        const query = params.toString() ? '?' + params.toString() : ''
-        const response = await fetch('/effort-router/state' + query, {
+        params.set('view', 'anchors')
+        if (requestToken.sessionId) params.set('sessionId', requestToken.sessionId)
+        else if (requestToken.hint) params.set('hint', requestToken.hint)
+        const response = await fetch('/effort-router/state?' + params.toString(), {
           cache: 'no-store',
         })
         if (response.ok) {
           const json = await response.json()
-          if (!stopped && json && json.ok === true) {
+          if (!stopped && guard.isCurrent(requestToken) && json && json.ok === true) {
             const next: AnchorsState = {
               enabled: json.trajectoryAnnotate === true,
               anchors: json.anchors && typeof json.anchors === 'object' ? json.anchors : {},
@@ -411,31 +468,43 @@ export function startTrajectoryDecorator(): () => void {
               // decorated with no anchor may now resolve, and every caption
               // must leave if annotation was switched off.
               registerVisibleRows()
-            } else if (unresolvedRows.size > 0) {
-              for (const tr of Array.from(unresolvedRows)) pendingRows.add(tr)
-              scheduleFrame()
             }
+            // An unchanged table is not retried against unresolved rows:
+            // row mutations and table changes enqueue explicitly.
           }
         }
       } catch {
         // The route is best-effort; a failed poll keeps the last known state.
+      } finally {
+        polling = false
       }
     }
-    pollTimer = setTimeout(tick, POLL_MS)
+    if (!stopped) pollTimer = setTimeout(tick, POLL_MS)
+  }
+
+  /** Start an immediate poll when the trajectory ledger first appears. */
+  const wakePoll = () => {
+    if (stopped || polling) return
+    if (pollTimer !== undefined) clearTimeout(pollTimer)
+    pollTimer = undefined
+    void tick()
   }
 
   const observer = new MutationObserver((mutations) => {
     if (stopped) return
-    // A session switch replaces the ledger en masse; re-read the route now
-    // (not at the next poll) so reused rows shed the old session's captions
-    // within one mutation batch instead of up to one poll interval.
-    syncSessionFromRoute()
+    let structureChanged = false
+    let rowsAdded = false
+    let sessionAttrChanged = false
     for (const mutation of mutations) {
       // React reuses a row element when the incoming record carries the same
       // row key: the key attribute is then the ONLY signal that the row now
       // shows a different record — drop every cache and re-decorate.
       if (mutation.type === 'attributes') {
         const el = mutation.target as HTMLElement
+        if (mutation.attributeName === 'data-conversation-session') {
+          sessionAttrChanged = true
+          continue
+        }
         if (typeof el.matches === 'function' && el.matches('tr[data-trajectory-row-key]')) {
           anchorIds.delete(el)
           const caption = captions.get(el)
@@ -445,18 +514,30 @@ export function startTrajectoryDecorator(): () => void {
           }
           el.removeAttribute(DONE_ATTR)
           pendingRows.add(el)
+          structureChanged = true
         }
         continue
       }
       for (const node of Array.from(mutation.addedNodes)) {
         if (node.nodeType !== 1) continue
         const el = node as HTMLElement
+        let found = false
         if (typeof el.matches === 'function' && el.matches('tr[data-trajectory-row-key]')) {
           pendingRows.add(el)
+          found = true
         }
-        if (typeof el.querySelectorAll === 'function') {
+        // Skip leaf nodes: chat streaming and composer updates are the common
+        // case and cannot contain a ledger row.
+        if (el.firstElementChild && typeof el.querySelectorAll === 'function') {
           const rows = el.querySelectorAll('tr[data-trajectory-row-key]')
-          for (const row of Array.from(rows)) pendingRows.add(row as HTMLElement)
+          for (const row of Array.from(rows)) {
+            pendingRows.add(row as HTMLElement)
+            found = true
+          }
+        }
+        if (found) {
+          rowsAdded = true
+          structureChanged = true
         }
       }
       // Rows leaving the ledger (virtualized scroll, tab switch) must drop
@@ -465,23 +546,34 @@ export function startTrajectoryDecorator(): () => void {
         for (const node of Array.from(mutation.removedNodes)) {
           if (node.nodeType !== 1) continue
           const el = node as HTMLElement
+          let found = false
           if (typeof el.matches === 'function' && el.matches('tr[data-trajectory-row-key]')) {
             pendingRows.delete(el)
             unresolvedRows.delete(el)
             labeledRows.delete(el)
+            found = true
           }
-          if (typeof el.querySelectorAll === 'function') {
+          if (el.firstElementChild && typeof el.querySelectorAll === 'function') {
             const rows = el.querySelectorAll('tr[data-trajectory-row-key]')
             for (const row of Array.from(rows)) {
               pendingRows.delete(row as HTMLElement)
               unresolvedRows.delete(row as HTMLElement)
               labeledRows.delete(row as HTMLElement)
+              found = true
             }
           }
+          if (found) structureChanged = true
         }
       }
     }
+    // Only mutations that can affect the ledger trigger the identity query.
+    // Unrelated chat streaming never pays a document-wide lookup.
+    if (sessionAttrChanged || structureChanged) {
+      syncSessionFromRoute()
+      if (sessionId === null) guard.updateHint(visibleToolCallId())
+    }
     scheduleFrame()
+    if (rowsAdded) wakePoll()
   })
   if (typeof document !== 'undefined' && document.body) {
     observer.observe(document.body, {
@@ -501,5 +593,10 @@ export function startTrajectoryDecorator(): () => void {
     observer.disconnect()
     if (pollTimer !== undefined) clearTimeout(pollTimer)
     if (rafId !== undefined && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId)
+    const tracked = new Set<HTMLElement>([...pendingRows, ...unresolvedRows, ...labeledRows])
+    for (const tr of tracked) shedRow(tr)
+    pendingRows.clear()
+    unresolvedRows.clear()
+    labeledRows.clear()
   }
 }

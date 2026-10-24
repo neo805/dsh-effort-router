@@ -1,6 +1,6 @@
 {
   "name": "dsh-effort-router",
-  "version": "0.2.15-rc.3",
+  "version": "0.2.15-rc.4",
   "publishConfig": {
     "access": "public"
   },
@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "node build-client.mjs",
-    "test": "node --test",
+    "test": "node --test \"test/*.test.mjs\"",
     "prepack": "node build-client.mjs"
   },
   "dependencies": {

@@ -73,3 +73,19 @@ test('the registry-facing schemas are identity parsers (clone-safe wire contract
   // so the served view must survive a JSON round trip unchanged.
   assert.deepEqual(JSON.parse(JSON.stringify(view)), view)
 })
+
+test('the wire view keeps its identity when only the header changed', () => {
+  let state = projection.init()
+  state = projection.apply(state, header('p', 'm', 'low'))
+  state = projection.apply(state, call('call_1'))
+  const before = projection.wire.view(state)
+  state = projection.apply(state, header('p', 'm', 'high'))
+  const after = projection.wire.view(state)
+  assert.equal(after, before, 'same anchors => same published view')
+  assert.deepEqual(after.anchors.call_1.effort, 'low', 'the existing anchor is unchanged')
+
+  state = projection.apply(state, call('call_2'))
+  const grown = projection.wire.view(state)
+  assert.notEqual(grown, after, 'a new anchor publishes a new view')
+  assert.equal(grown.anchors.call_2.effort, 'high')
+})

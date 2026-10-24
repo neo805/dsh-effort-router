@@ -20,4 +20,4 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: corepack enable
       - run: pnpm install --ignore-scripts
-      - run: node --test
+      - run: node --test "test/*.test.mjs"

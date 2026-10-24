@@ -12,9 +12,11 @@ import {
   decayThreshold,
   demoteClass,
   errorTextMatches,
+  errorTextSource,
   escalateClass,
   evidenceBumps,
   isPlanLike,
+  isStructural,
   normalizePolicyConfig,
   rampBumps,
   stableStringify,
@@ -47,6 +49,12 @@ test('classifyStep: engineering cue -> engineering', () => {
 test('classifyStep: structural text -> engineering', () => {
   const r = classifyStep({ text: '看看这段代码\n```js\nconst a = 1\n```', toolCalls: 0 }, cfg)
   assert.equal(r.stepClass, 'engineering')
+})
+
+test('isStructural: a spaced arrow function is still code', () => {
+  assert.equal(isStructural('f = (x) => x + 1', 'f = (x) => x + 1'), true)
+  assert.equal(isStructural('f=(x)=>x+1', 'f=(x)=>x+1'), true)
+  assert.equal(isStructural('普通说明文字，没有代码', '普通说明文字，没有代码'), false)
 })
 
 test('classifyStep: dense engineering brief with structure -> hard', () => {
@@ -274,6 +282,11 @@ test('normalizePolicyConfig: dictionaries channel replaces the shipped list, add
   assert.equal(wishOn.wishEnabled, true)
 })
 
+test('normalizePolicyConfig: additive cues also apply to a programmatic full replacement', () => {
+  const c = normalizePolicyConfig({ strong: ['base'], extraCues: { strong: ['extra'] } })
+  assert.deepEqual(c.strong, ['base', 'extra'])
+})
+
 test('escalateClass/demoteClass ladder', () => {
   assert.equal(escalateClass('trivial', 1), 'standard')
   assert.equal(escalateClass('standard', 5), 'hard') // capped at ceiling
@@ -306,6 +319,18 @@ test('errorTextMatches: the 0.2.6 marker set (audit R2 / §4.3)', () => {
   assert.equal(errorTextMatches('all good'), false)
 })
 
+test('errorTextSource: the decision log can tell every failure channel apart', () => {
+  assert.equal(errorTextSource('[exit code: 1]'), 'exit-bracket')
+  assert.equal(errorTextSource('\nExit Code: 2\n'), 'exit-line')
+  assert.equal(errorTextSource('Traceback (most recent call last)'), 'en')
+  assert.equal(errorTextSource('错误: boom'), 'cjk')
+  assert.equal(errorTextSource('错误\n[exit code: 0]'), 'cjk-downgraded')
+  assert.equal(errorTextSource('Stdout: Traceback (most recent call last)\n[exit code: 0]'), 'exit0-traceback')
+  assert.equal(errorTextSource('all good'), null)
+  // Existing boolean semantics are unchanged.
+  assert.equal(errorTextMatches('错误\n[exit code: 0]'), false)
+})
+
 test('toolErrorOfMessage: the v4 first-class tool message', () => {
   const v4 = (text, isError) => ({
     role: 'tool', toolCallId: 'c1', isError, source: { kind: 'tool', callId: 'c1' },
@@ -327,6 +352,20 @@ test('stableStringify / toolCallsOf: argument key order cannot hide a repeat (au
   assert.notEqual(callA[0].key, callC[0].key)
   const callRaw = toolCallsOf([{ type: 'tool-call', name: 'read', arguments: 'not json at all' }])
   assert.equal(callRaw[0].key, 'read|not json at all', 'unparsable args keep their raw spelling')
+})
+
+test('toolCallsOf: long arguments that differ only after 400 chars are different calls', () => {
+  // Regression: the prefix-only truncation collapsed both writes to one key,
+  // so three distinct large edits could masquerade as an identical retry loop.
+  const prefix = 'x'.repeat(450)
+  const first = toolCallsOf([{ type: 'tool-call', name: 'write', arguments: JSON.stringify({ text: prefix + '-A' }) }])[0]
+  const second = toolCallsOf([{ type: 'tool-call', name: 'write', arguments: JSON.stringify({ text: prefix + '-B' }) }])[0]
+  assert.notEqual(first.key, second.key, 'the complete canonical argument spelling is the identity')
+
+  // The same arguments still agree across object / JSON-string input and key order.
+  const objectCall = toolCallsOf([{ type: 'tool-call', name: 'edit', arguments: { a: 1, b: 2 } }])[0]
+  const stringCall = toolCallsOf([{ type: 'tool-call', name: 'edit', arguments: '{"b":2,"a":1}' }])[0]
+  assert.equal(objectCall.key, stringCall.key)
 })
 
 test('T6 dictionaries (0.2.6, audit R3): migrations and additions', () => {

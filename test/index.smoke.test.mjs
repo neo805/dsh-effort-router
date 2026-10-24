@@ -3,6 +3,7 @@
  * defaults, and apply() wires an interceptor that schedules a synthetic
  * request end-to-end with mocked host services.
  */
+import './test-profile.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as entry from '../lib/index.js'
@@ -590,6 +591,24 @@ test('apply: a level the model does not advertise is stripped, never clamped', a
   const out = await onRequest({ agent: plainAgent('s-strip'), turn: 1, step: 1 }, async () => seed)
   assert.notEqual(out, seed, 'a copy is returned, the seed is left alone')
   assert.equal(out.reasoningEffort, undefined, 'an unadvertised explicit pick is dropped, not approximated')
+})
+
+test('apply: one scheduled request reads the volatile config exactly once', async () => {
+  const resolved = entry.Config({})
+  const config = { ...resolved }
+  let reads = 0
+  for (const [key, value] of Object.entries(resolved)) {
+    if (value && typeof value === 'object' && typeof value.get === 'function') {
+      config[key] = { get() { reads += 1; return value.get() } }
+    }
+  }
+  const { onRequest } = interceptorCtx({ config })
+  await new Promise((resolve) => setImmediate(resolve))
+  reads = 0
+  await onRequest({ agent: plainAgent('s-config'), turn: 1, step: 1 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
+  }))
+  assert.equal(reads, 18, 'the interceptor snapshot is passed into signals.collect instead of rebuilt')
 })
 
 test('apply: the interceptor fails OPEN — a broken config still passes the request through', async () => {

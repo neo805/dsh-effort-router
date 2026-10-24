@@ -569,6 +569,20 @@ test('v4 tool channel: exit-code text counts without the flag; clean results do 
   assert.equal(sig.taskErrors, 1, 'only the exit-code result counts')
 })
 
+test('error sources are counted for the decision log', () => {
+  const signals = makeSignals()
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('排查这个脚本的失败'), turn: 1 })
+  agent.session.deriveMessages = () => [
+    assistantCall('a', '{"p":1}'), v4ToolResult('', true, 'c1'),
+    assistantCall('b', '{"p":2}'), v4ToolResult('[exit code: 2]', false, 'c2'),
+    assistantCall('c', '{"p":3}'), v4ToolResult('ok', false, 'c3'),
+  ]
+  const sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.deepEqual(sig.errorSources, { isError: 1, 'exit-bracket': 1 })
+  assert.equal(typeof sig.sessionTokens, 'number', 'raw telemetry is available to the decision log')
+})
+
 test('mixed v4 + v0/v3 history folds each result exactly once', () => {
   const signals = makeSignals()
   const agent = makeAgent([])
@@ -632,25 +646,68 @@ test('frugal: the session token budget fires once the projection total crosses i
 
 test('compactionBump=false never materializes the event log; re-enabling re-anchors', () => {
   let cfg = normalizePolicyConfig({ compactionBump: false })
-  let scans = 0
+  const fromSeqCalls = []
   const events = []
   const agent = makeAgent([])
-  agent.session.snapshotEvents = () => { scans += 1; return events }
+  Object.defineProperty(agent.session, 'seq', { get: () => events.length })
+  agent.session.snapshotEvents = (fromSeq = 0) => {
+    fromSeqCalls.push(fromSeq)
+    return events.slice(fromSeq)
+  }
   const signals = createSignals({ config: () => cfg, logger: silentLogger })
 
   assert.equal(signals.collect(agent, { turn: 1, step: 1 }).compaction, 0)
-  assert.equal(scans, 0, 'a disabled channel pays nothing per step')
+  assert.equal(fromSeqCalls.length, 0, 'a disabled channel pays nothing per step')
 
   // A checkpoint lands while the channel is off: enabling it again must adopt
   // the current log as the BASELINE, not replay it as fresh evidence.
   events.push({ type: 'compaction/end', data: {} })
   cfg = normalizePolicyConfig({ compactionBump: true })
   assert.equal(signals.collect(agent, { turn: 1, step: 2 }).compaction, 0)
-  assert.equal(scans, 1, 'the scan resumes with the channel')
+  assert.equal(fromSeqCalls.length, 0, 're-anchor reads session.seq, not the whole log')
 
   // A checkpoint AFTER the baseline is real evidence again.
   events.push({ type: 'compaction/end', data: {} })
   assert.equal(signals.collect(agent, { turn: 1, step: 3 }).compaction, 1)
+  assert.deepEqual(fromSeqCalls, [1], 'only the unseen tail is materialized')
+})
+
+test('compaction scan reads only the suffix after the watermark', () => {
+  const events = [{ type: 'step/end', data: { i: 0 } }, { type: 'step/end', data: { i: 1 } }]
+  const fromSeq = []
+  const agent = makeAgent([])
+  Object.defineProperty(agent.session, 'seq', { get: () => events.length })
+  agent.session.snapshotEvents = (start = 0) => {
+    fromSeq.push(start)
+    return events.slice(start)
+  }
+  const signals = makeSignals()
+  signals.collect(agent, { turn: 1, step: 1 })
+  events.push({ type: 'compaction/end', data: {} })
+  assert.equal(signals.collect(agent, { turn: 1, step: 2 }).compaction, 1)
+  assert.deepEqual(fromSeq, [0, 2], 'the second scan starts at the old log end')
+})
+
+test('todoBump disabled then enabled does not replay completions from the off period', () => {
+  let cfg = normalizePolicyConfig({ todoBump: true })
+  const todos = [{ content: 'step one', status: 'in_progress' }]
+  const projections = {
+    stateOf: (_session, key) => (key === 'todos' ? todos : undefined),
+  }
+  const signals = createSignals({ config: () => cfg, projections, logger: silentLogger })
+  const agent = makeAgent([])
+  assert.equal(signals.collect(agent, { turn: 1, step: 1 }).todoBump, 0, 'prime the in-progress snapshot')
+
+  cfg = normalizePolicyConfig({ todoBump: false })
+  todos[0] = { content: 'step one', status: 'completed' }
+  assert.equal(signals.collect(agent, { turn: 1, step: 2 }).todoBump, 0)
+
+  cfg = normalizePolicyConfig({ todoBump: true })
+  assert.equal(signals.collect(agent, { turn: 1, step: 3 }).todoBump, 0, 'the first snapshot after re-enable only primes')
+  todos.push({ content: 'step two', status: 'in_progress' })
+  assert.equal(signals.collect(agent, { turn: 1, step: 4 }).todoBump, 0)
+  todos[1] = { content: 'step two', status: 'completed' }
+  assert.equal(signals.collect(agent, { turn: 1, step: 5 }).todoBump, 1, 'a real transition after priming still fires')
 })
 
 test('the long window is a bounded ring: aged buckets leave every counter', () => {

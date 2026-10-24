@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**当前版本：** `0.2.15-rc.3`（兼容 DSH 0.2.1-rc.2）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
+**当前版本：** `0.2.15-rc.4`（兼容 DSH 0.2.1-rc.2）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
 
 DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考档位（reasoning effort）**，并让手写声明的 `llm-pi-ai` 自定义模型也能选档位。
 
@@ -24,7 +24,7 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 
 **DSH 0.2.1 起，Models 页已可在 UI 中为每个自定义模型配置推理等级**（开关 + 每级线上值），不再需要手改配置文件。本插件的自动补齐因此缩窄为**只补 profile 层声明、且设置层从未触碰过的模型**：某个模型只要已出现在设置文档的用户层（UI 编辑过），就视为用户自管——UI 的开关「关」是把字段删掉，若再补表就会静默覆盖用户的选择，故一律跳过。目录已带档位的模型解析后自带档位，天然跳过；`false`（非思考模型）与已有表一律尊重。显式 `openai-completions` 路由上补齐的模型还会自动带上 `compat.supportsReasoningEffort: true`。
 
-补齐的表是 `{ low, high, max }`，**刻意不含 `off`**：选择 off 后再发工具调用会毒化后续所有思考请求，而调度器自身也永不路由到 off。想用 UI 管理或不想要任何自动补齐，把 `fillCustomModels` 设为 `false` 即可。
+补齐的表是 `{ low, high, max }`，**刻意不含 `off`**：选择 off 后再发工具调用会毒化后续所有思考请求，而调度器自身也永不路由到 off。想用 UI 管理或不想要任何自动补齐，把 `fillCustomModels` 设为 `false` 即可。若 profile 层手写的模型仍然解析不到任何档位，插件会在日志里**点名一次**，而不是让 Auto 静默消失；该用户自管行不会被改写，需显式补 `reasoningEfforts`（或用 Models 页开关）才能启用 Auto。
 
 每模型的「档位 → 网关线上值」映射（如 `high → ultra`）在 Models 页编辑，或直接编辑 `llm-pi-ai` 配置中对应模型的 `reasoningEfforts` 表，由官方 schema 校验，下一请求生效。pi-ai 原生按表序列化，无需插件侧翻译。
 

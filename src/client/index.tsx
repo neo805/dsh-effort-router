@@ -52,7 +52,7 @@ export function apply(ctx: any) {
   // 3. Chat captions (opt-in via config chatAnnotate, read once at load) -------
   ctx.effect(() => {
     let cancelled = false
-    fetch('/effort-router/state', { cache: 'no-store' })
+    fetch('/effort-router/state?view=config', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : null))
       .then((json) => {
         if (cancelled || !json || json.chatAnnotate !== true) return

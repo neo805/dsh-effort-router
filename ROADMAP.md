@@ -225,6 +225,11 @@ so the first steps after a restart can sit one class high. Options if it ever
 matters: persist the watermark with the decision store, or stamp evidence with
 wall-clock age and discount old buckets.
 
+**Further bounded in 0.2.15-rc.4.** The compaction scan now calls
+`snapshotEvents(fromSeq)` with the session-seq watermark and reads only the
+unseen suffix; the same watermark re-anchors on shrink, branch switch, and when
+`compactionBump` is re-enabled.
+
 ## Deferred calibration (the "next cycle" work, still open)
 
 The audit research (`T4`/`T6`, machine-local notes under `docs/`) deferred two
@@ -245,3 +250,40 @@ the fields needed since 0.2.8, so both are executable whenever picked up:
   cycle" step was never run, and the observation list (方法/具体/参考/读取/
   资料/获取/项目/你是/代理) plus the zero-hit pruning rule still await a ruling.
   See `docs/ops/t6-dictionary-full-recommendations.md` §6.
+- **Runtime evidence now available (0.2.15-rc.4).** New decisions carry
+  `errorSources`, `contextPressure`, and `sessionTokens`, alongside the existing
+  volume/repeat/consecSameTool fields. The next calibration pass should use
+  these actuals to review the volume ramps, `escalateOnErrors`, the repeat
+  channel, and the frugal-signal distribution before changing any value.
+
+## Open decision — custom-model fill ownership (0.2.15-rc.4)
+
+The review confirmed the long-standing limit: `settings.describe()` classifies
+the profile patch's hand-declared models in `user`/`override`, while the fill
+takes candidates from `base`. The result is that a profile-declared model never
+enters the fill, and a model the installed catalog does not know (e.g. a newly
+released model) can stay without levels. 0.2.15-rc.4 makes that visible: the
+plugin logs the exact `provider/model` once and leaves the row untouched.
+
+This is a producer decision because the same absence means "never configured"
+AND "the Models page switch was turned off". Options:
+
+1. Keep diagnostics + documentation: users declare `reasoningEfforts` for a
+   catalog-unknown model (or use the Models page switch). Zero risk of undoing
+   an explicit off choice.
+2. Auto-fill catalog-unknown rows with a persistent tombstone so a filled row
+   that the user later switches off is remembered and not re-added. More code,
+   a one-time baseline migration, and a new state file field.
+3. Offer an explicit opt-in config mode for filling user-layer rows. Simple,
+   but a user who forgets the switch expects "off" and gets levels.
+
+Until the producer rules, do not widen the write path. Track the decision here
+and keep the diagnostic in place.
+
+## Maintainer-only UI gate
+
+`chatAnnotate` still has only a static host-seam check (2026-10-18); it is
+default-off and should be looked at once during the next major version or a
+related host-slot change. It is not a per-release development task. The new
+rc.4 trajectory generation/cleanup behaviour is exercised by Web automation,
+but visual capsule placement remains the producer's final acceptance item.

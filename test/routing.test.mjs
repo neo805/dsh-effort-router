@@ -7,6 +7,7 @@ import assert from 'node:assert/strict'
 import {
   contextPressureRatio,
   mapEffort,
+  rankOf,
   sessionTokensOf,
 } from '../lib/routing.js'
 
@@ -34,6 +35,12 @@ test('mapEffort: custom gateway vocabulary (ultra)', () => {
 test('mapEffort: no advertised efforts -> undefined', () => {
   assert.equal(mapEffort('high', []), undefined)
   assert.equal(mapEffort('high', undefined), undefined)
+})
+
+test('rankOf: inherited object properties are not effort identifiers', () => {
+  assert.equal(rankOf('toString'), 4, 'unknown ids fall back to high')
+  assert.equal(rankOf('constructor'), 4)
+  assert.equal(mapEffort('low', ['toString']), 'toString', 'unknown advertised id is still ranked safely')
 })
 
 test('contextPressureRatio / sessionTokensOf', () => {

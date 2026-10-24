@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.15-rc.3` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.15-rc.4` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
@@ -22,7 +22,7 @@ The host's native model selector already is the per-session effort control. The 
 
 ## Custom models (llm-pi-ai)
 
-**Since DSH 0.2.1 the Models page can declare reasoning levels per custom model in the UI** (a switch plus one row per level), so editing the config file is no longer required. The plugin's auto-fill therefore narrows to **models declared in the profile layer that the settings user layer has never touched**: once a model appears in the user layer (edited in the UI) it is treated as user-owned — the UI's switch stores OFF by REMOVING the field, so re-filling it would silently undo that choice, and the fill skips it. Catalog models that already inherit levels resolve WITH levels and are skipped, so catalog capability is never shadowed; an explicit table or an explicit `false` is never touched. The filled table is `{ low, high, max }`, deliberately with **no `off` rung**: an off selection followed by a tool call poisons the conversation for every later thinking-enabled request, and the router never routes to off either. Models filled on explicit `openai-completions` routes also gain `compat.supportsReasoningEffort: true`, the switch that protocol needs to actually send the effort. Set `fillCustomModels: false` to let the Models page own every declaration.
+**Since DSH 0.2.1 the Models page can declare reasoning levels per custom model in the UI** (a switch plus one row per level), so editing the config file is no longer required. The plugin's auto-fill therefore narrows to **models declared in the profile layer that the settings user layer has never touched**: once a model appears in the user layer (edited in the UI) it is treated as user-owned — the UI's switch stores OFF by REMOVING the field, so re-filling it would silently undo that choice, and the fill skips it. Catalog models that already inherit levels resolve WITH levels and are skipped, so catalog capability is never shadowed; an explicit table or an explicit `false` is never touched. The filled table is `{ low, high, max }`, deliberately with **no `off` rung**: an off selection followed by a tool call poisons the conversation for every later thinking-enabled request, and the router never routes to off either. Models filled on explicit `openai-completions` routes also gain `compat.supportsReasoningEffort: true`, the switch that protocol needs to actually send the effort. Set `fillCustomModels: false` to let the Models page own every declaration. A profile-declared model that still resolves with no levels is **named once in the log** rather than silently receiving no Auto entry; the plugin never rewrites that user-owned row — declare `reasoningEfforts` on it (or use the Models page) to enable Auto.
 
 The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives in the model's `reasoningEfforts` table inside the `llm-pi-ai` config — edit it directly or ask your agent to. The official schema validates it and the next request picks it up. pi-ai serializes the table natively; no plugin-side translation layer.
 

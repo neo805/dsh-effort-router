@@ -9,8 +9,11 @@
  * read-only so the composer never gains a second effort input.
  */
 import { useEffect, useState } from 'react'
+import { badgeForSession, sameBadgeState } from './badge-state.js'
 
 interface DecisionState {
+  /** Locally stamped owner; never part of the host payload contract. */
+  sessionId?: string
   ok: boolean
   enabled: boolean
   /** Config `showBadge`: false hides the pill (display gate, scheduling is unaffected). */
@@ -32,6 +35,9 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
 
   useEffect(() => {
     if (!sessionId) return
+    // Switching back must not briefly repaint the previous session's cached
+    // decision: ownership is re-established by the next response.
+    setState(null)
     let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const tick = async () => {
@@ -41,17 +47,21 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
         return
       }
       try {
-        const response = await fetch('/effort-router/state?sessionId=' + encodeURIComponent(sessionId), {
-          cache: 'no-store',
-        })
+        const response = await fetch(
+          '/effort-router/state?view=badge&sessionId=' + encodeURIComponent(sessionId),
+          { cache: 'no-store' },
+        )
         if (response.ok) {
           const json = (await response.json()) as DecisionState
-          if (!stopped) setState(json)
+          const next = { ...json, sessionId }
+          if (!stopped) {
+            setState((previous) => (sameBadgeState(previous, next) ? previous : next))
+          }
         }
       } catch {
         // The route is best-effort; a failed poll keeps the last known state.
       }
-      timer = setTimeout(tick, POLL_MS)
+      if (!stopped) timer = setTimeout(tick, POLL_MS)
     }
     tick()
     return () => {
@@ -60,9 +70,10 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
     }
   }, [sessionId])
 
-  if (!state || state.ok !== true || state.enabled !== true || state.showBadge === false) return null
+  const owned = badgeForSession(state, sessionId)
+  if (!owned || owned.ok !== true || owned.enabled !== true || owned.showBadge === false) return null
 
-  const last = state.last
+  const last = owned.last
   const modeKey = last && typeof last.mode === 'string' ? last.mode : 'auto'
   const modeLabel =
     // 'manual-stripped' counts as a manual pick (the level was refused by the model)
@@ -70,6 +81,7 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
     : modeKey === 'default' ? t('badge.default')
     : modeKey === 'subagent' ? t('badge.subagent')
     : modeKey === 'poisoned' ? t('badge.poisoned')
+    : modeKey === 'poisoned-unsupported' ? t('badge.poisonedUnsupported')
     : modeKey === 'unsupported' ? t('badge.unsupported')
     : t('badge.auto')
   const effort = last && (last.effort ?? last.tier)

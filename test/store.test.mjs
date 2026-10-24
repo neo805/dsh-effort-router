@@ -46,6 +46,20 @@ test('createStore: record flushes to disk and reloads', async () => {
   assert.equal(bad.last('nope'), undefined)
 })
 
+test('createStore: compact JSON and dispose flush the last decision exactly once', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'er-store-dispose-'))
+  const file = join(dir, 'state.json')
+  const store = createStore(file, { info() {}, warn() {} })
+  store.record('s1', { at: 1, turn: 1, step: 1, mode: 'auto', effort: 'low' })
+  store.dispose()
+  const text = readFileSync(file, 'utf8')
+  assert.equal(text.includes('\n  "'), false, 'the store is compact JSON, not pretty-printed')
+  const reopened = createStore(file, { info() {}, warn() {} })
+  assert.equal(reopened.last('s1').effort, 'low', 'dispose performs the final durable write')
+  store.dispose()
+  assert.equal(store.last('s1').effort, 'low', 'a repeated dispose is safe')
+})
+
 test('createStore: an unwritable path warns ONCE and keeps serving in memory', () => {
   // A plain FILE where the store needs a directory: mkdirSync fails with
   // ENOTDIR, which is the "profile dir is not writable" class of failure.

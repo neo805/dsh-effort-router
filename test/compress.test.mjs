@@ -28,11 +28,15 @@ test('repetition compresses away; varied prose does not', () => {
 })
 
 test('the ratio is clamped to 1 even when gzip expands the input', () => {
-  const c = createCompressor()
-  // Random-ish bytes spelled as text: gzip adds its header and expands it.
-  const noise = Array.from({ length: COMPRESS_MIN_BYTES }, (_, i) => String.fromCharCode(33 + ((i * 2654435761) % 90))).join('')
-  const measured = c.ratio([noise])
-  assert.ok(measured.ratio <= 1, 'never a negative discount')
+  // One byte is dominated by the gzip header; minBytes:0 forces measurement
+  // and guarantees the expansion branch is actually exercised.
+  const c = createCompressor({ minBytes: 0 })
+  const measured = c.ratio(['x'])
+  assert.ok(measured.gzBytes > measured.bytes, 'the fixture must really expand')
+  assert.equal(measured.ratio, 1, 'never a negative discount')
+  // The shipped threshold still refuses to measure small text.
+  assert.equal(createCompressor().ratio(['x']), null)
+  assert.equal(typeof COMPRESS_MIN_BYTES, 'number')
 })
 
 test('several pieces measure as one concatenated stream', () => {

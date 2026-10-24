@@ -4,6 +4,67 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.15-rc.4] - 2026-10-25
+
+Hardening pass after the 0.2.15-rc.3 code review. No settings UI and no new
+user-facing option; the scheduling contract is unchanged except where a bug
+made it unsafe.
+
+### Added
+
+- **Failure-source telemetry in the decision log.** Scheduled decisions now
+  carry `errorSources` (`isError`, `exit-bracket`, `exit-line`, `en`, `cjk`,
+  `exit0-traceback`), plus raw `contextPressure` and `sessionTokens`. This is
+  the observation side of audit D52/R4; no threshold changed in this release.
+- **A loud diagnostic for unsupported custom models.** A model declared only
+  in the settings user/profile layer that resolves with no reasoning levels is
+  named once in the log, with the remedy (declare `reasoningEfforts`), instead
+  of silently receiving no Auto entry. The user-owned row is still never
+  rewritten.
+
+### Fixed
+
+- **The Auto mask now has an owner.** Adapter wrappers are restored on plugin
+  unload (only while our wrapper is still current), and resolved model info is
+  copied instead of mutated in place. Capability cache writes are
+  generation-guarded and concurrent misses share one resolution.
+- **Auto can no longer emit a non-thinking effort.** An off-only vocabulary
+  strips the field and logs why; a poisoned-history pin is applied only when the
+  target really advertises `off`. If it does not, the request is sent without a
+  fabricated pin and the downgrade is reported (`poisoned-unsupported`).
+- **Identical-argument repeat detection uses the complete canonical argument.**
+  The old 400-character prefix could classify two different large writes as a
+  repeat and escalate the step. Parsed object arguments are also canonicalized
+  only once.
+- **Client session switching cannot repaint the previous session.** Trajectory
+  responses are generation-gated; Badge state is bound to its session id;
+  ordinary `session-<uuid>` URLs retain their prefix; cleanup removes caption
+  nodes; and a second on-screen ledger is never decorated with the first one's
+  table.
+- **Stored anchor reads are single-flight and errors are per request.** Two
+  pollers share one log read, failures are negatively cached briefly, a stale
+  read cannot overwrite a newer one, and `anchorsError` no longer leaks across
+  sessions. A hint can still find an idle session outside the 8-session merge
+  slice via cached projections.
+- **Compaction scans read only the unseen event suffix** (`snapshotEvents(fromSeq)`),
+  instead of materialising the whole log every step.
+- **Store lifecycle:** compact JSON, `flush()` cancels its pending timer, and
+  `dispose()` persists the last decision. Client tests now use a temporary
+  profile instead of the real decision store.
+- **Smaller correctness fixes:** programmatic cue replacement now honours
+  `extraCues`; spaced arrow functions count as code; effort ranks no longer read
+  inherited object properties; re-enabling `todoBump` no longer replays a
+  completion from the disabled period; the CJK failure marker accepts a
+  line-ending colonless form.
+
+### Changed
+
+- Read-only state route supports `view=badge|anchors|config` (default `full`).
+  The built-in Badge no longer requests anchors, trajectory no longer downloads
+  decision history, and the one-shot chat-flag read fetches neither.
+- The trajectory poller makes no anchor request outside the trajectory ledger,
+  filters unrelated DOM mutations, and leaves the safety sweep in place.
+
 ## [0.2.15-rc.3] - 2026-10-18
 
 ### Fixed

@@ -20,8 +20,19 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 /** Anchored matcher for a whole session id, both shapes. */
 export const SESSION_ID_RE = new RegExp('^(?:session-)?' + UUID + '$', 'i')
 
-/** Unanchored matcher used to pull an id out of a URL. */
-export const SESSION_ID_IN_URL_RE = new RegExp(UUID, 'i')
+/**
+ * Unanchored matcher used to pull an id out of a URL. The optional prefix is
+ * INSIDE the match: an ordinary `session-<uuid>` URL must not be truncated to
+ * the bare uuid (the host then looks up an id that does not exist).
+ */
+export const SESSION_ID_IN_URL_RE = new RegExp('(?:session-)?' + UUID, 'i')
+
+/** Extract the full session id from a URL, preserving an ordinary prefix. */
+export function sessionIdFromUrl(url) {
+  if (typeof url !== 'string' || url === '') return null
+  const match = SESSION_ID_IN_URL_RE.exec(url)
+  return match ? match[0] : null
+}
 
 /** Is this string a session id (either shape)? */
 export function isSessionId(value) {

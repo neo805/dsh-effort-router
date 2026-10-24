@@ -9,12 +9,14 @@
  *   → a manual pick passes through verbatim
  *   → a model that resolved WITH catalog levels is never filled
  */
+import './test-profile.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import * as entry from '../lib/index.js'
 
-function makeHost() {
+function makeHost(overrides = {}) {
   const listeners = new Map()
+  const logs = []
   const section = {
     providers: {
       'acme-gateway': { apiKeyEnv: 'KEY', models: [{ id: 'think-lite' }, { id: 'think-pro' }] },
@@ -29,11 +31,11 @@ function makeHost() {
   // user layer, and never touches a row the user layer owns.
   // There is NO get(ns) — 0.1.0–0.1.2 guarded on one, so the fill silently
   // never ran.
-  const settings = {
+  const settings = overrides.settings ?? {
     describe: () => [{ ns: 'llm-pi-ai', base: section, user: {}, value: section, revision: 7 }],
     update: async (ns, patch, expectedRevision) => { writes.push({ ns, patch, expectedRevision }) },
   }
-  const llm = {
+  const llm = overrides.llm ?? {
     adapters: new Map(),
     async resolveModelInfo(provider, model) {
       // The catalog-blessed model always advertises levels (inherited).
@@ -50,7 +52,7 @@ function makeHost() {
     },
   }
   const ctx = {
-    logger: () => ({ info() {}, warn() {} }),
+    logger: () => ({ info: (m) => logs.push(m), warn: (m) => logs.push(m) }),
     get(name) {
       if (name === 'llm') return llm
       if (name === 'settings') return settings
@@ -59,7 +61,7 @@ function makeHost() {
     on(event, handler) { listeners.set(event, handler); return () => {} },
     inject() { return () => {} },
   }
-  return { ctx, listeners, writes, section }
+  return { ctx, listeners, writes, section, logs }
 }
 
 test('fill → capability refresh → auto schedules the previously-bare custom model', async () => {
@@ -147,4 +149,35 @@ test('dictStrong full replacement reaches the scheduler through apply()', async 
     provider: 'catalog-blessed', model: 'thinking-model', reasoningEffort: 'auto',
   }))
   assert.equal(outOwn.reasoningEffort, 'high', 'replacement cue drives engineering -> high')
+})
+
+test('fill: profile-owned models that stay unsupported are diagnosed, never overwritten', async () => {
+  const user = { providers: { 'acme-gateway': { models: [{ id: 'brand-new' }] } } }
+  const writes = []
+  const settings = {
+    describe: () => [{ ns: 'llm-pi-ai', base: { providers: {} }, user, value: user, revision: 3 }],
+    update: async (ns, patch, expectedRevision) => { writes.push({ ns, patch, expectedRevision }) },
+  }
+  const llm = {
+    adapters: new Map(),
+    async resolveModelInfo() { return { inputModalities: ['text'] } },
+  }
+  const { ctx, listeners, logs } = makeHost({ settings, llm })
+  entry.apply(ctx, entry.Config({}))
+  await new Promise((resolve) => setTimeout(resolve, 50))
+
+  assert.equal(writes.length, 0, 'a user-layer row is never filled in the background')
+  assert.ok(
+    logs.some((m) => m.includes('acme-gateway/brand-new') && m.includes('no reasoning levels')),
+    'the silent hole is surfaced with the exact provider/model',
+  )
+
+  const updates = logs.filter((m) => m.includes('acme-gateway/brand-new')).length
+  listeners.get('settings/document-updated')('llm-pi-ai')
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  assert.equal(
+    logs.filter((m) => m.includes('acme-gateway/brand-new')).length,
+    updates,
+    'the diagnostic is emitted once per model, not on every settings event',
+  )
 })
