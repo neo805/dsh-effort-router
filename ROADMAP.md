@@ -4,6 +4,20 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
+## 0.2.15-rc.5 — rc.4 review fixes (LANDED)
+
+The rc.4 audit's high/medium findings are fixed and covered by the regression
+suite: parallel tool results share one assistant-call bucket; the Auto sentinel
+is excluded from concrete mapping and stripped on every fail-open path; manual
+off poison provenance survives the 20-decision ring and clears with the shape;
+transient capability failures are retried; removed adapters are released on
+churn; long-window repeat keys retain only a SHA-256 digest; and the Badge no
+longer displays a target tier as the running effort. Test baseline 194/194.
+
+**Still open:** `gzipSync` on large tool results is synchronous. A byte cap is
+simple but changes the volume channel's semantics; async zlib preserves values
+but needs an ordered collect design. Do not fold either into a pure refactor.
+
 ## Settled by 0.2.8 (the drift engine)
 
 - **R5 (subagent routing) — IMPLEMENTED (0.2.15-rc.1).** The producer's ruling

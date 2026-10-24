@@ -37,6 +37,15 @@ test('mapEffort: no advertised efforts -> undefined', () => {
   assert.equal(mapEffort('high', undefined), undefined)
 })
 
+test('mapEffort: the Auto sentinel is never a concrete target', () => {
+  // Auto is the plugin's own virtual selector entry. Fixed default/subagent
+  // paths used to pass the full advertised list straight through, so medium
+  // could take the equal-distance tie to the stronger unknown id 'auto'.
+  assert.equal(mapEffort('medium', ['low', 'high', 'auto']), 'high')
+  assert.equal(mapEffort('auto', ['low', 'high', 'auto']), undefined)
+  assert.equal(mapEffort('low', ['auto']), undefined, 'no concrete level is better than a sentinel')
+})
+
 test('rankOf: inherited object properties are not effort identifiers', () => {
   assert.equal(rankOf('toString'), 4, 'unknown ids fall back to high')
   assert.equal(rankOf('constructor'), 4)

@@ -711,14 +711,14 @@ test('todoBump disabled then enabled does not replay completions from the off pe
 })
 
 test('the long window is a bounded ring: aged buckets leave every counter', () => {
-  // 10 identical calls into a 4-bucket ring: the oldest buckets are evicted, so
-  // both the call count and the repeat memory must reflect only what is kept.
+  // 10 identical calls: at most longWindow SEALED buckets are retained plus the
+  // open batch, which is the newest one and participates in every window sum.
   const signals = makeSignals({ longWindow: 4, shortWindow: 4 })
   const messages = []
   for (let i = 0; i < 10; i += 1) {
     messages.push(assistantCall('same-tool', '{"p":1}'), v4ToolResult('ok', false, 'c' + i))
   }
   const sig = signals.collect(makeAgent(messages), { turn: 1, step: 1 })
-  assert.equal(sig.toolCalls, 4, 'only the newest longWindow buckets are retained')
-  assert.equal(sig.taskRepeats, 4, 'the newest 4 buckets each saw the key before, the evicted ones do not count')
+  assert.equal(sig.toolCalls, 5, 'four sealed buckets + the open newest batch')
+  assert.equal(sig.taskRepeats, 4, 'the retained repeat buckets stay bounded; the open batch adds the call count')
 })

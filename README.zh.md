@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**当前版本：** `0.2.15-rc.4`（兼容 DSH 0.2.1-rc.2）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
+**当前版本：** `0.2.15-rc.5`（兼容 DSH 0.2.1-rc.2）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
 
 DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考档位（reasoning effort）**，并让手写声明的 `llm-pi-ai` 自定义模型也能选档位。
 
@@ -59,14 +59,17 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 
 ## 安全与降级
 
-- 拦截器整体 try/catch，任何异常原样放行请求（fail-open）
+- 拦截器整体 try/catch，任何异常都原样放行**具体档位**请求；插件自己的虚拟 `Auto` 哨兵即使在异常路径也会被剥离（fail-open，但不泄漏 Auto）
 - 不支持的模型一律剥离 `reasoningEffort`，绝不触发 `UNSUPPORTED_REASONING_EFFORT`
 - 自动路由永不产出 `off`（严格 thinking-mode API 上的思考连续性）。仅当历史被**确证**毒化——存在无思考块的工具调用消息，且本会话决策日志记录过手动 `off` 步骤——才钉 `off` 并告警，直到压缩移除肇事消息。仅凭消息形态永不钉死：kimi-K3 这类模型思考开启时也可能不产生思考块（2026-10-10 实测）。路由全部非严格时可用 `poisonRecovery` 关闭
 - 信号读取只走 `deriveMessages()` + `sessionProjections`；取不到样本会**显式告警**，不做静默降级
 
 ## 作者与维护声明
 
-- **作者**：kimi-k3、DeepSeek-V4.1-Flash-1017（AI 模型，通过 DeepSeek Harness 联合设计与编码）。
+- **各版本范围的 AI 模型作者**（表示各开发期的主要参与，不表示逐提交独占署名）：
+  - `0.1.0–0.2.14`：`moonshotai-kimi-k3`。
+  - `0.2.15-rc.1–0.2.15-rc.3`：`deepseek-v4.1-flash-1017`。
+  - `0.2.15-rc.4–至今`：`moonshotai-kimi-k3.1-pro`（规划与审查）、`deepseek-v4.1-flash-1017`（执行与测试）。
 - **出品人 / 仓库管理员**：KEI.NEO（@neo805）—— 人类出品人，对本仓库内容负责。
 - **维护范围**：这是出品人的个人业余（Vibe Coding）项目。公开仅为分享，**不对项目本身承诺任何源于外部需求的维护与更新**。
 - **协作政策**：本仓库**不开启 Issues，不接受 Pull Requests**。欢迎在 MIT 许可下 fork 后自由演进。

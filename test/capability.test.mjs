@@ -139,7 +139,7 @@ test('createCapabilityResolver: caches per model and clear() re-resolves', async
   assert.equal(calls, 3, 'clear() drops the cache (adapter churn)')
 })
 
-test('createCapabilityResolver: a resolution failure degrades to "never inject"', async () => {
+test('createCapabilityResolver: a resolution failure degrades without poisoning the cache', async () => {
   let calls = 0
   const capability = createCapabilityResolver({
     llm: () => ({
@@ -153,7 +153,7 @@ test('createCapabilityResolver: a resolution failure degrades to "never inject"'
   assert.deepEqual(failed, UNRESOLVABLE_CAPABILITY)
   assert.equal(failed.supportsReasoning, false)
   await capability.resolve('gw', 'thinker')
-  assert.equal(calls, 1, 'the failure is cached too (no retry storm per step)')
+  assert.equal(calls, 2, 'a transient failure is retried, not cached for the process lifetime')
   // Malformed arguments short-circuit without touching the llm service.
   assert.deepEqual(await capability.resolve(undefined, 'm'), UNRESOLVABLE_CAPABILITY)
   assert.deepEqual(await capability.resolve('gw', 42), UNRESOLVABLE_CAPABILITY)

@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.15-rc.4` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.15-rc.5` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
@@ -57,14 +57,17 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives
 
 ## Safety and degradation
 
-- The interceptor is one try/catch: any error passes the request through untouched (fail-open)
+- The interceptor is one try/catch: any error passes a concrete request through untouched; the plugin's virtual `Auto` sentinel is stripped even on that path (fail-open without leaking Auto)
 - Models without reasoning metadata never receive `reasoningEffort` — never an `UNSUPPORTED_REASONING_EFFORT`
 - Automatic routing never emits `off` (thinking continuity on strict thinking-mode APIs). A history PROVEN poisoned — a reasoning-less tool-call turn exists AND the session's decision log recorded a manual `off` step — pins `off` with a warning until compaction removes the offending turn. Shape alone never pins: models like kimi-K3 emit no reasoning blocks before tool calls with thinking on (measured, 2026-10-10). Disable via `poisonRecovery` if your routes are all non-strict
 - Session reads go through `deriveMessages()` + `sessionProjections` only; an empty sample raises an explicit warning instead of silently degrading
 
 ## Authorship & maintenance
 
-- **Authors**: kimi-k3 and DeepSeek-V4.1-Flash-1017 (AI models, co-designing and co-coding through DeepSeek Harness).
+- **AI model authors by version range** (primary participation in each development phase, not exclusive per-commit attribution):
+  - `0.1.0–0.2.14`: `moonshotai-kimi-k3`.
+  - `0.2.15-rc.1–0.2.15-rc.3`: `deepseek-v4.1-flash-1017`.
+  - `0.2.15-rc.4–present`: `moonshotai-kimi-k3.1-pro` (planning and review), `deepseek-v4.1-flash-1017` (implementation and testing).
 - **Producer / repository owner**: KEI.NEO (@neo805) — the human publisher responsible for this repository.
 - **Maintenance scope**: a personal hobby (vibe-coding) project, published for sharing. **No maintenance or updates are promised in response to external demand.**
 - **Contribution policy**: this repository has **Issues disabled and does not accept Pull Requests**. Forks are welcome under the MIT license.

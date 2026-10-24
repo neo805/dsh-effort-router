@@ -9,7 +9,7 @@
  * read-only so the composer never gains a second effort input.
  */
 import { useEffect, useState } from 'react'
-import { badgeForSession, sameBadgeState } from './badge-state.js'
+import { badgeEffortText, badgeForSession, sameBadgeState } from './badge-state.js'
 
 interface DecisionState {
   /** Locally stamped owner; never part of the host payload contract. */
@@ -84,8 +84,8 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
     : modeKey === 'poisoned-unsupported' ? t('badge.poisonedUnsupported')
     : modeKey === 'unsupported' ? t('badge.unsupported')
     : t('badge.auto')
-  const effort = last && (last.effort ?? last.tier)
-  const label = last ? modeLabel + (effort ? ' · ' + String(effort) : '') : modeLabel
+  const effort = badgeEffortText(last)
+  const label = last ? modeLabel + (effort ? ' · ' + effort : '') : modeLabel
 
   const tooltip = !last
     ? t('badge.none')

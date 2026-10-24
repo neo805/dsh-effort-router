@@ -1,6 +1,6 @@
 {
   "name": "dsh-effort-router",
-  "version": "0.2.15-rc.4",
+  "version": "0.2.15-rc.5",
   "publishConfig": {
     "access": "public"
   },
@@ -95,7 +95,7 @@
     "auto-effort"
   ],
   "license": "MIT",
-  "author": "kimi-k3、DeepSeek-V4.1-Flash-1017 (AI co-authors), produced by KEI.NEO (@neo805)",
+  "author": "moonshotai-kimi-k3, moonshotai-kimi-k3.1-pro, deepseek-v4.1-flash-1017 (AI co-authors), produced by KEI.NEO (@neo805)",
   "packageManager": "pnpm@11.18.0",
   "repository": {
     "type": "git",

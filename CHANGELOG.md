@@ -4,6 +4,53 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.15-rc.5] - 2026-10-25
+
+Review-fix release for the rc.4 code audit. No new user-facing option and no
+scheduling-threshold change; the fixes repair behavior where the documented
+contract was not actually enforced.
+
+### Fixed
+
+- **Parallel tool results now share one assistant-call bucket.** Every v4
+  `role:"tool"` result used to seal immediately, so the first result closed a
+  batch while later parallel results became empty buckets. The first error in a
+  two-call batch therefore decayed to weight `0.8` and failed to lift the step.
+  Results now accumulate in the open batch and it is sealed by the next
+  assistant-call batch or task boundary; the orchestration-return event still
+  fires once per batch.
+- **Auto can no longer leak through fixed-level mapping or the interceptor
+  catch.** `mapEffort` excludes the virtual `auto` sentinel, fixing
+  `defaultLevel` / `subagentEffort` values such as `medium` that could resolve
+  back to `auto`. The disabled and error paths now share the same strip helper:
+  concrete requests still fail open by reference, Auto never reaches the host.
+- **Manual-off poison provenance survives the 20-decision ring.** The decision
+  store keeps a per-session `manualOff` flag, migrates it from older `recent`
+  rows, and the interceptor clears it when the reasoning-less tool-call shape
+  disappears. A proven pin therefore lasts until compaction, without arming a
+  later unrelated K3-style shape.
+- **A transient capability-resolution failure is no longer permanent.**
+  Successful no-reasoning resolutions remain cached; a thrown resolution
+  answers conservatively for that request but is not written to the long-lived
+  cache, so the next step can recover without adapter churn.
+- **Adapter churn releases stale Auto wrappers.** Each re-advertise pass disposes
+  the wrappers it installed before wrapping the current adapter set, instead of
+  retaining removed adapters until plugin unload.
+- **Badge shows the effort actually sent.** A missing `effort` no longer falls
+  back to the target `tier`; `poisoned-unsupported` and unsupported schedules
+  show no fabricated level.
+
+### Changed
+
+- **Long-window repeat keys keep full argument equality with a bounded
+  footprint.** Production signals hash the complete canonical argument with
+  SHA-256 and retain `name|digest`; policy remains import-free and receives the
+  fingerprint through injection. A 32×1 MiB probe retained about `0.1 MiB`
+  after collection instead of about `34 MiB`; canonical construction still has
+  a transient peak.
+- Test baseline: 183 → 194 tests; line coverage 99.38%, branch 85.85%, function
+  97.97%.
+
 ## [0.2.15-rc.4] - 2026-10-25
 
 Hardening pass after the 0.2.15-rc.3 code review. No settings UI and no new

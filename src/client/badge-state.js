@@ -13,6 +13,16 @@ export function badgeForSession(state, sessionId) {
   return state.sessionId === sessionId ? state : null
 }
 
+/**
+ * The effort actually stamped on the request. The target tier is NOT a
+ * fallback: `poisoned-unsupported` and unsupported schedules remove the field,
+ * and painting their target as if it ran would misreport what the model saw.
+ */
+export function badgeEffortText(last) {
+  if (!last || typeof last.effort !== 'string' || last.effort === '') return ''
+  return last.effort
+}
+
 /** Same rendered decision? Avoids a re-render for every unchanged 2.5 s poll. */
 export function sameBadgeState(left, right) {
   if (left === right) return true

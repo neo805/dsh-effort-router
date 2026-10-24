@@ -354,6 +354,23 @@ test('stableStringify / toolCallsOf: argument key order cannot hide a repeat (au
   assert.equal(callRaw[0].key, 'read|not json at all', 'unparsable args keep their raw spelling')
 })
 
+test('toolCallsOf: an optional fingerprint replaces only the canonical payload', () => {
+  // The fingerprint is what signals retains in its long window: the tool NAME
+  // stays readable, while the potentially huge canonical arguments become a
+  // fixed-size digest. The full canonical string must reach the function.
+  const seen = []
+  const calls = toolCallsOf(
+    [{ type: 'tool-call', name: 'write', arguments: '{"b":2,"a":1}' }],
+    (canonical) => {
+      seen.push(canonical)
+      return 'digest'
+    },
+  )
+  assert.deepEqual(seen, ['{"a":1,"b":2}'])
+  assert.equal(calls[0].name, 'write')
+  assert.equal(calls[0].key, 'write|digest')
+})
+
 test('toolCallsOf: long arguments that differ only after 400 chars are different calls', () => {
   // Regression: the prefix-only truncation collapsed both writes to one key,
   // so three distinct large edits could masquerade as an identical retry loop.

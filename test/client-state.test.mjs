@@ -5,7 +5,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createPollGuard } from '../src/client/poll-guard.js'
-import { badgeForSession, sameBadgeState } from '../src/client/badge-state.js'
+import { badgeEffortText, badgeForSession, sameBadgeState } from '../src/client/badge-state.js'
 import { sessionIdFromUrl } from '../src/client/ids.js'
 
 test('poll guard: a response captured before a session switch is stale', () => {
@@ -63,6 +63,13 @@ test('same badge view suppresses identical polling renders', () => {
   assert.equal(sameBadgeState(first, { ...first, last: { ...first.last, effort: 'low' } }), false)
   assert.equal(sameBadgeState(first, { ...first, showBadge: false }), false)
   assert.equal(sameBadgeState(first, { ...first, sessionId: 'other' }), false)
+})
+
+test('badge shows the ACTUAL effort, never the target tier as a fallback', () => {
+  assert.equal(badgeEffortText({ effort: 'high', tier: 'max' }), 'high')
+  assert.equal(badgeEffortText({ effort: null, tier: 'off' }), '')
+  assert.equal(badgeEffortText({ effort: undefined, tier: 'high' }), '')
+  assert.equal(badgeEffortText(null), '')
 })
 
 test('sessionIdFromUrl preserves the ordinary session- prefix', () => {

@@ -611,15 +611,16 @@ test('apply: one scheduled request reads the volatile config exactly once', asyn
   assert.equal(reads, 18, 'the interceptor snapshot is passed into signals.collect instead of rebuilt')
 })
 
-test('apply: the interceptor fails OPEN — a broken config still passes the request through', async () => {
+test('apply: the interceptor fails OPEN for a concrete request', async () => {
   // A config whose volatile read throws: the interceptor's outer try/catch must
-  // return the seed untouched (README: degradation is "no opinion", never a
-  // broken request).
+  // return a CONCRETE seed untouched (degradation is "no opinion", never a
+  // broken request). Auto is covered by the rc.5 regression that requires the
+  // plugin's own sentinel to be stripped even on this path.
   const hostile = Object.defineProperty({}, 'enabled', {
     get() { throw new Error('boom') },
   })
   const { onRequest, logs } = interceptorCtx({ config: hostile })
-  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }
+  const seed = { provider: 'gw', model: 'thinker', reasoningEffort: 'high' }
   const out = await onRequest({ agent: plainAgent('s-boom'), turn: 1, step: 1 }, async () => seed)
   assert.equal(out, seed, 'the request is returned by reference')
   assert.ok(
