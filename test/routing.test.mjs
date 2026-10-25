@@ -55,6 +55,20 @@ test('rankOf: inherited object properties are not effort identifiers', () => {
 test('contextPressureRatio / sessionTokensOf', () => {
   assert.equal(contextPressureRatio({ contextWindow: 100, pressureTokens: 80 }), 0.8)
   assert.equal(contextPressureRatio({}), null)
-  assert.equal(sessionTokensOf({ totals: { input: 3, output: 4, reasoning: 5 } }), 12)
+  // The host tokenUsage projection's stateVersion 2 totals are exactly these
+  // four fields; the old input/output/cacheRead fixture was a false contract.
+  assert.equal(sessionTokensOf({
+    totals: {
+      uncachedInputTokens: 3,
+      outputTokens: 4,
+      cacheReadTokens: 5,
+      cacheWriteTokens: 6,
+    },
+  }), 18)
+  // Cache-only traffic still counts: a prompt can be almost entirely cacheRead.
+  assert.equal(sessionTokensOf({
+    totals: { uncachedInputTokens: 0, outputTokens: 0, cacheReadTokens: 900, cacheWriteTokens: 0 },
+  }), 900)
+  assert.equal(sessionTokensOf({ totals: { input: 3, output: 4 } }), 0, 'legacy field names must not leak back')
   assert.equal(sessionTokensOf(undefined), 0)
 })

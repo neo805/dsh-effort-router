@@ -4,6 +4,24 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
+## 0.2.16-rc.2 — projection telemetry contract (LANDED)
+
+Read-only diagnosis of the 0.2.16 data pass found one confirmed bug and one
+unproven gap:
+
+- **Confirmed:** `sessionTokensOf()` used the wrong field names; the host
+  `tokenUsage` totals are `uncachedInputTokens/outputTokens/cacheReadTokens/
+  cacheWriteTokens`, so every total was 0 and `sessionTokenBudget` could never
+  fire. Fixed with tests using the real schema.
+- **Unproven:** `todoBump=0/430` in the 7-day study, but the only
+  projection-enabled 0.2.16 todo transition had no same-turn following request;
+  no valid trigger sample existed. The todo comparison logic is unchanged.
+- **Hardening:** projection access is now resolved per collect instead of
+  frozen at apply. Decision records carry availability/count/transition
+  diagnostics to make the next study conclusive.
+
+No routing-policy change; `sessionTokenBudget` stays 0 by default.
+
 ## 0.2.16-rc.1 — integer rank routing (LANDED)
 
 The four origin classes are now anchors on an integer rank ladder, not the

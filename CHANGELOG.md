@@ -4,6 +4,42 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.16-rc.2] - 2026-10-25
+
+Projection-contract fix release. No routing-policy change: the same signals are
+now read from the host's actual projection schemas and remain available when the
+optional projection service registers after plugin apply.
+
+### Fixed
+
+- `sessionTokensOf()` read nonexistent `input/output/cacheRead/cacheWrite/
+  reasoning` keys from the `tokenUsage` projection. The host
+  (`dsh-token-meter`, stateVersion 2) exposes
+  `uncachedInputTokens/outputTokens/cacheReadTokens/cacheWriteTokens`; the old
+  helper therefore always returned 0, so `sessionTokenBudget` could never fire.
+- `createSignals()` received the sessionProjections service by value at apply
+  time. The plugin declares no hard projection dependency, so a service that
+  registered later stayed `undefined` for the whole process. The service is now
+  resolved lazily at collect time.
+
+### Added
+
+- Decision telemetry: `projectionsAvailable`, `contextPressureAvailable`,
+  `tokenUsageAvailable`, `todosAvailable`, `todosCount`, and
+  `todoTransitions`. These distinguish "no service", "service present but key
+  absent", and "a real todo completion was observed" without reading user text.
+- Tests for the real `tokenUsage` field contract, cache-only token totals, a
+  projection service registered after `createSignals()`, and todo-transition
+  diagnostics. Test baseline 211 → 212.
+
+### Notes
+
+- `sessionTokenBudget` remains 0 (disabled) by default; this release only makes
+  the metric real, it does not choose a budget.
+- `todoBump` logic is unchanged. The 7-day study had no projection-enabled
+  same-turn completion→request sample, so this release adds observability rather
+  than changing the bump rule.
+
 ## [0.2.16-rc.1] - 2026-10-25
 
 The integer-rank routing release. The four origin classes remain the task

@@ -269,13 +269,19 @@ test('todo completion bumps +1 inside the short window', () => {
   signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
   let sig = signals.collect(agent, { turn: 1, step: 1 })
   assert.equal(sig.todoBump, 0, 'the first snapshot only primes the diff')
+  assert.equal(sig.projectionsAvailable, true)
+  assert.equal(sig.todosAvailable, true)
+  assert.equal(sig.todosCount, 2)
+  assert.equal(sig.todoTransitions, 0)
   // One completion fires the bump...
   todos = [
     { status: 'completed', content: '实现缓存层' },
     { status: 'in_progress', content: '补测试' },
   ]
   sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.todoTransitions, 1)
   assert.equal(sig.todoBump, 1)
+  assert.equal(sig.todosCount, 2)
   const d = decideEffort(normalizePolicyConfig({}), sig)
   assert.equal(d.targetRank, 5, 'engineering +1 todo -> xhigh')
   // ...two completions in ONE step still fire a single bump...
@@ -284,7 +290,48 @@ test('todo completion bumps +1 inside the short window', () => {
     { status: 'completed', content: '补测试' },
   ]
   sig = signals.collect(agent, { turn: 1, step: 3 })
+  assert.equal(sig.todoTransitions, 1)
   assert.equal(sig.todoBump, 1, 'several completions, one bump')
+})
+
+test('projection service registered AFTER createSignals is picked up lazily', () => {
+  let service
+  let todos = [{ status: 'in_progress', content: '实现缓存层' }]
+  const signals = createSignals({
+    config: () => normalizePolicyConfig({ contextPressure: 0.75 }),
+    logger: silentLogger,
+    projections: () => service,
+  })
+  const agent = makeAgent([])
+  signals.onClaimed({ agent, message: userMsg('帮我重构这个模块的缓存'), turn: 1 })
+  // The service did not exist when createSignals ran; host apply order can be
+  // either way. It arrives before the first collect.
+  service = {
+    stateOf: (_session, key) => {
+      if (key === 'contextPressure') return { contextWindow: 100, pressureTokens: 90 }
+      if (key === 'tokenUsage') {
+        return { totals: { uncachedInputTokens: 900, outputTokens: 200, cacheReadTokens: 0, cacheWriteTokens: 0 } }
+      }
+      if (key === 'todos') return todos
+      return undefined
+    },
+  }
+  let sig = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(sig.projectionsAvailable, true, 'late service is visible')
+  assert.equal(sig.contextPressureAvailable, true)
+  assert.equal(sig.tokenUsageAvailable, true)
+  assert.equal(sig.sessionTokens, 1100)
+  assert.equal(sig.pressure, 0.9)
+  assert.equal(sig.todosAvailable, true)
+  assert.equal(sig.todosCount, 1)
+  assert.equal(sig.todoTransitions, 0)
+  assert.equal(sig.todoBump, 0, 'first snapshot primes only')
+
+  todos = [{ status: 'completed', content: '实现缓存层' }]
+  sig = signals.collect(agent, { turn: 1, step: 2 })
+  assert.equal(sig.todoTransitions, 1)
+  assert.equal(sig.todoBump, 1)
+  assert.equal(sig.frugal, true)
 })
 
 test('a wholesale todo-list rewrite is NOT a completion (no content lineage)', () => {
@@ -630,7 +677,9 @@ test('origin: a resumed window anchors on the last GENUINE user text (notices ar
 
 test('frugal: the session token budget fires once the projection total crosses it', () => {
   const projections = {
-    stateOf: (_session, key) => (key === 'tokenUsage' ? { totals: { input: 900, output: 200 } } : undefined),
+    stateOf: (_session, key) => (key === 'tokenUsage'
+      ? { totals: { uncachedInputTokens: 900, outputTokens: 200, cacheReadTokens: 0, cacheWriteTokens: 0 } }
+      : undefined),
   }
   const over = makeSignals({ sessionTokenBudget: 1000 }, { projections })
   const sig = over.collect(makeAgent([]), { turn: 1, step: 1 })

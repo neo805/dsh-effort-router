@@ -907,6 +907,11 @@ test('0.2.16 route: decision telemetry carries target rank and mapping', async (
   assert.equal(badge.last.mapping, 'down')
   assert.equal(badge.last.originClass, 'standard')
   assert.equal(badge.last.stepClass, null, 'no synthetic drifted class is logged')
+  assert.equal(badge.last.projectionsAvailable, true, 'the service itself is reachable')
+  assert.equal(badge.last.tokenUsageAvailable, false, 'this fake has no tokenUsage key')
+  assert.equal(badge.last.todosAvailable, false, 'this fake has no todos key')
+  assert.equal(badge.last.todosCount, 0)
+  assert.equal(badge.last.todoTransitions, 0)
 
   const cfg = await harness.asJson('/effort-router/state', '?view=config')
   assert.deepEqual(cfg.allowedEfforts, ['low', 'high', 'max'])
