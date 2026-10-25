@@ -80,4 +80,4 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 
 ## 致谢与许可
 
-MIT。策略内核（分类 / 升级 / 迟滞 / 档位映射 / 信号采集 / 投影 / 存储）移植自 [@neptune810/dsh-model-router](https://github.com/Neptune810/dsh-model-router)（MIT © Neptune810）；能力层与 Auto mask 模式参考 [dsh-thinking-levels](https://github.com/drscrewdriver/dsh-thinking-levels)（MIT © drscrewdriver）；自定义模型默认档思路来自 [@hytime/dsh-thinking-effort](https://github.com/hytime/dsh-thinking-effort)（MIT © hytime）。
+MIT。策略内核（分类 / 升级 / 迟滞 / 档位映射 / 信号采集 / 投影 / 存储）移植自 [@neptune810/dsh-model-router](https://github.com/Neptune810/dsh-model-router)（MIT © Neptune810）；能力层与 Auto mask 模式参考 [dsh-thinking-levels](https://github.com/drscrewdriver/dsh-thinking-levels)（MIT © drscrewdriver）；自定义模型默认档思路来自 [@hytime/dsh-thinking-effort](https://github.com/hytime/dsh-thinking-effort)（MIT © hytime）。上游版权与许可证声明收录于 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

@@ -40,6 +40,13 @@ optional projection service registers after plugin apply.
   same-turn completion→request sample, so this release adds observability rather
   than changing the bump rule.
 
+### License metadata
+
+- Restored the canonical MIT text in `LICENSE`; the embedded upstream
+  adaptation notice made GitHub's Licensee report the repository as
+  `Other/NOASSERTION`. The upstream copyright/permission notices now live in
+  `THIRD_PARTY_NOTICES.md` and are included in the npm package.
+
 ## [0.2.16-rc.1] - 2026-10-25
 
 The integer-rank routing release. The four origin classes remain the task

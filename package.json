@@ -20,7 +20,8 @@
     "README.md",
     "README.zh.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "node build-client.mjs",

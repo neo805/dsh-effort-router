@@ -2,11 +2,6 @@ MIT License
 
 Copyright (c) 2026 kimi-k3 (AI author) and KEI.NEO (producer)
 
-Contains adaptations of:
-- @neptune810/dsh-model-router v0.14.0 — Copyright (c) Neptune810 (MIT)
-- dsh-thinking-levels 4.0.2/4.1.0 — Copyright (c) drscrewdriver (MIT)
-- @hytime/dsh-thinking-effort — Copyright (c) hytime (MIT)
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
