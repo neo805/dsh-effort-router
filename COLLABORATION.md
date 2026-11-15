@@ -34,8 +34,12 @@ personal or machine-specific information.
 > **bundle 装载，宿主缝最小化，没有设置界面。**
 
 - **bundle 装载**：以 DSH bundle 交付，`cordis.patch.yml` 只插一条插件行；
-  `engines.dsh` 与 peer 区间一律写宽（当前 `>=0.2.0-rc.1 <0.3.0-0`），
+  `engines.dsh` 与 peer 区间写成**安装包络**（当前 `>=0.2.0-rc.1 <0.2.3-0`），
   **不写精确 `peerDependencies`**——本项目自己就是被版本闸门伤过的那个。
+  包络之外还有**运行时逐版本认证**：装了哪些宿主由
+  `@deepseek-ai/dsh-app-boot` 的公开 `getDshRuntimeVersion()` 判定，只有实测过
+  的版本在白名单里（`lib/runtime.js`）；未实测版本拒绝加载，而不是猜契约。
+  放宽包络必须同时给出该版本的实机契约证据。
   宿主侧只注册一个 session projection 与两条**只读** web 路由，不提供写接口。
 - **没有设置界面（永久）**：不出面板、不出设置页；所有选项在插件配置文件里，
   客户端只做只读显示（composer 徽标、轨迹胶囊）。这是出品人对本库插件的统一
@@ -68,7 +72,7 @@ personal or machine-specific information.
 
 ## 2. 版本号治理
 
-版本号形如 `X.X.X-rc.X`。**本项目当前版本 `0.2.16-rc.2`；此后所有版本号都必须
+版本号形如 `X.X.X-rc.X`。**本项目当前版本 `0.2.17-rc.1`；此后所有版本号都必须
 带 `rc` 后缀**（`package.json`、`CHANGELOG.md` 标题、README 首屏、git tag 一律
 一致）。
 
@@ -97,10 +101,10 @@ personal or machine-specific information.
   不存在"而失败；直接写出"一次就绿"的测试视为无效，报告里要说明红灯证据。
 - **所有 bug 修复**必须先补一个能复现该 bug 的回归测试，再修。
 - 测试命令固定，显式 glob，不依赖目录参数：
-  `node --test "test/*.test.mjs"`
+  `node --test "test/**/*.test.mjs"`
   （CI 同时跑 Node 22.19 / 24 × ubuntu / windows 四个矩阵。）
 - 报告里给出通过数（如 `142/142`）与覆盖率（`node --test
-  --experimental-test-coverage "test/*.test.mjs"`）；测试数变化时同步更新到
+  --experimental-test-coverage "test/**/*.test.mjs"`）；测试数变化时同步更新到
   交付报告与本文件 §6 的基线，不让它变成过时数字。
 - 纯文档、纯配置变更可豁免测试先行，但必须在交付报告里写明豁免理由。
 - 覆盖率不是目标：**不为凑数字写造作测试**。不可达的防御分支允许留空，
@@ -172,7 +176,7 @@ personal or machine-specific information.
 
 - 关于状态的任何结论都要有**可复核的证据**，而不是记忆或推断：
   - 仓库状态 → 实际跑 `git log` / `git status`；
-  - 功能可用 → 测试实际通过数（本项目当前基线 **212/212**，测试数变化时同步）；
+  - 功能可用 → 测试实际通过数（本项目当前基线 **245/245**，测试数变化时同步）；
   - 安装成功 → **构建产物与已安装文件的哈希逐一比对**，而不是"拷过去了"；
   - 接口可用 → 实际请求一次并把响应读出来。
 - **不确定就说不确定**；失败要如实、完整地报告，包括失败的原始错误文本，
@@ -201,7 +205,7 @@ personal or machine-specific information.
    `4125487`）。依赖声明没动时跳过本步。
 2. `pnpm build` —— 重建客户端 bundle（`build-client.mjs` → `lib/client.js`）。
    构建产物与源码**同批提交**，不得留下"源码已改、产物是旧的"的状态。
-3. `node --test "test/*.test.mjs"` —— 全绿；**用显式 glob**，不要依赖目录参数。
+3. `node --test "test/**/*.test.mjs"` —— 全绿；**用显式 glob**，不要依赖目录参数。
    报告覆盖率与新增测试清单（§3）。
 4. 按 §2 调整版本号；同步 `CHANGELOG.md` 与 README 首屏（中英双版）。
 5. 用 `dsh-plugin-check` 自查打包元数据（§13）。

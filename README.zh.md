@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**当前版本：** `0.2.16-rc.2`（兼容 DSH 0.2.1-rc.2）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
+**当前版本：** `0.2.17-rc.1`（兼容 DSH 0.2.1-rc.2 → 0.2.2-rc.3）· [更新日志](CHANGELOG.md) · [路线图](ROADMAP.md)
 
 DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考档位（reasoning effort）**，并让手写声明的 `llm-pi-ai` 自定义模型也能选档位。
 
@@ -16,6 +16,8 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 - 未知 selector ID：按模型广告的“由弱到强”顺序推断并一次性告警，不再一律当作 `high`
 - 手动优先：选择器里选具体档位 = 完全直通；选 Auto = 交给调度器
 - 子代理继承（0.2.15）：父会话跑 **Auto** 时，子代理按自己的始发简报调度（始发分类 + 暖启动地板 + 节俭降档）；父会话选了**具体档位**时，子代理原样继承该档。种子档位靠**来源**判定——父会话已记录的决策 + 宿主写入的 `parentSession` 血缘——所以人工选择永远不会被误当成调度结果
+- **0.2.2 循环下的整轮 Auto**（0.2.17）：0.2.2 在 `agent/pre-step` 之前就把每一步的模型选择固定下来，`agent/request` 里再改会直接被拒。因此调度器改为在同步的 `agent/inbox/claimed` 钩子里用 `agent.model.select()` 写定该步档位（早于捕获），在 `step/end` 预选下一步，在 `turn/end` 恢复逻辑 `Auto` 哨兵——整轮从首步到末步都是 Auto。旧的 `agent/request` 改写只保留给 0.2.1 宿主；宿主没有 `model.select()` 时在 `agent/pre-step` 失败关闭，绝不回退到被 0.2.2 拒绝的改写
+- **运行时契约闸门**（0.2.17）：宿主版本取自公开 API `@deepseek-ai/dsh-app-boot` 的 `getDshRuntimeVersion()`，再按逐版本白名单选择循环契约（`0.2.1-rc.2`/`0.2.1-rc.5` legacy；`0.2.2-alpha.2`/`0.2.2-rc.3` modern）。`engines.dsh` 区间只是**安装包络**、不是运行时认证：未实测的版本拒绝加载，而不是猜它是哪一种循环
 
 ## 为什么是 Auto mask 而不是面板
 
@@ -63,6 +65,7 @@ DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考�
 ## 安全与降级
 
 - 拦截器整体 try/catch，任何异常都原样放行**具体档位**请求；插件自己的虚拟 `Auto` 哨兵即使在异常路径也会被剥离（fail-open，但不泄漏 Auto）
+- 步选择被宿主固定之后才发生的失败（飞行中 dispose、请求被取消）绝不记录或追加新决策：legacy 路径在每次 `await` 之后重查 `disposed` 并交回已剥离的种子；modern 路径在第一个处置检查点就停止
 - 不支持的模型一律剥离 `reasoningEffort`，绝不触发 `UNSUPPORTED_REASONING_EFFORT`
 - 自动路由永不产出 `off`（严格 thinking-mode API 上的思考连续性）。仅当历史被**确证**毒化——存在无思考块的工具调用消息，且本会话决策日志记录过手动 `off` 步骤——才钉 `off` 并告警，直到压缩移除肇事消息。仅凭消息形态永不钉死：kimi-K3 这类模型思考开启时也可能不产生思考块（2026-10-10 实测）。路由全部非严格时可用 `poisonRecovery` 关闭
 - 信号读取只走 `deriveMessages()` + `sessionProjections`；取不到样本会**显式告警**，不做静默降级

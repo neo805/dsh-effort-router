@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.16-rc.2` (DSH 0.2.1-rc.2 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.17-rc.1` (DSH 0.2.1-rc.2 → 0.2.2-rc.3 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
@@ -16,6 +16,8 @@ A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routi
 - Unknown selector ids: normalized from their advertised weakest-to-strongest order and logged once, never silently treated as `high`
 - Manual wins: a concrete level in the selector passes through verbatim; Auto hands the step to the scheduler
 - Subagent inheritance (0.2.15): a child started from a parent running **Auto** is scheduled from its own spawn brief (origin classification, warm-up floor, frugal demotion); a child started from a parent on a **concrete level** inherits that level verbatim. The seed is classified by provenance — the parent's recorded decision plus the host's `parentSession` lineage — so a human pick is never mistaken for a schedule
+- **Whole-turn Auto on the 0.2.2 loop** (0.2.17): 0.2.2 captures each step's model selection BEFORE `agent/pre-step` and rejects an `agent/request` handler that changes it. The router therefore writes the step's concrete effort through `agent.model.select()` in the synchronous `agent/inbox/claimed` hook (before the capture), preselects the next step after `step/end`, and restores the logical `Auto` sentinel at `turn/end` — the turn stays Auto from first step to last. The `agent/request` rewrite survives only for 0.2.1 hosts. No `model.select()` → the step fails closed in `agent/pre-step` instead of silently rewriting
+- **Runtime contract gate** (0.2.17): the host version comes from the public `@deepseek-ai/dsh-app-boot` `getDshRuntimeVersion()` and selects the loop contract from a per-version allowlist (`0.2.1-rc.2`/`0.2.1-rc.5` legacy; `0.2.2-alpha.2`/`0.2.2-rc.3` modern). The `engines.dsh` range is an install envelope, not a certification: an unverified build refuses to load instead of guessing which loop it has
 
 ## Why an Auto mask instead of a panel
 
@@ -61,6 +63,7 @@ The per-model level → gateway wire-value mapping (e.g. `high → ultra`) lives
 ## Safety and degradation
 
 - The interceptor is one try/catch: any error passes a concrete request through untouched; the plugin's virtual `Auto` sentinel is stripped even on that path (fail-open without leaking Auto)
+- A release after the step selection was captured (dispose mid-flight, an aborted request) never records or appends a new decision: the legacy path re-checks `disposed` after every await and hands back the stripped seed, and the modern path stops at the first disposal check
 - Models without reasoning metadata never receive `reasoningEffort` — never an `UNSUPPORTED_REASONING_EFFORT`
 - Automatic routing never emits `off` (thinking continuity on strict thinking-mode APIs). A history PROVEN poisoned — a reasoning-less tool-call turn exists AND the session's decision log recorded a manual `off` step — pins `off` with a warning until compaction removes the offending turn. Shape alone never pins: models like kimi-K3 emit no reasoning blocks before tool calls with thinking on (measured, 2026-10-10). Disable via `poisonRecovery` if your routes are all non-strict
 - Session reads go through `deriveMessages()` + `sessionProjections` only; an empty sample raises an explicit warning instead of silently degrading

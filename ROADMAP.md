@@ -4,6 +4,39 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
+## 0.2.17-rc.1 — dual-loop Auto (F-01/F-02, LANDED)
+
+0.2.2 captures each step's model selection BEFORE `agent/pre-step` and rejects an
+`agent/request` handler that returns a different effort, so the 0.2.1 rewrite
+cannot schedule there. Delivered:
+
+- **Contract gate:** `getDshRuntimeVersion()` from the public
+  `@deepseek-ai/dsh-app-boot` selects the loop from an allowlist
+  (`0.2.1-rc.2`/`0.2.1-rc.5` legacy, `0.2.2-alpha.2`/`0.2.2-rc.3` modern);
+  unknown builds refuse to load. `engines.dsh`/peers narrowed to
+  `>=0.2.0-rc.1 <0.2.3-0` as an install envelope.
+- **Modern scheduling:** synchronous `agent.model.select()` in
+  `agent/inbox/claimed` (before the capture), preselection after `step/end`,
+  logical-Auto restoration at `turn/end`, provenance-gated echos, and a
+  fail-closed pre-step when the host exposes no `select()`.
+- **Disposal safety:** a disposed plugin records nothing and appends nothing,
+  even when the request was already in flight.
+
+Known host limitation (documented, not a defect in this plugin): 0.2.2 appends
+`step/end` from inside the session publish, and a session may not append while
+publishing. The preselection write at `step/end` therefore lands one tick later,
+which delays a tool-continuation step's re-route by one step instead of dropping
+it; the write is re-applied before the following step. This is measured on the
+real 0.2.2-rc.3 loop (claim/capture ordering, reject behaviour, request
+comparison, finally-block events) and pinned by the executable fixture.
+
+Follow-up (small, next batch): the very first turn after a host restart / plugin
+enable cannot be scheduled because `agent/inbox/claimed` must not await capability
+resolution; that turn is safely stripped (`mode=unsupported`) and the second turn
+schedules again. Warm the capability cache when the session's `model/selection`
+changes so the first turn after a model pick is scheduled too. Real-machine
+evidence for both behaviours is in `MAINTAINER-TESTS.md` §5.
+
 ## 0.2.16-rc.2 — projection telemetry contract (LANDED)
 
 Read-only diagnosis of the 0.2.16 data pass found one confirmed bug and one

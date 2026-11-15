@@ -15,3 +15,6 @@ docs/ops/
 # only reports explicitly cleared by the maintainer are committed.
 docs/
 scripts/session-mining/
+
+# Runtime contract-probe reports (machine-specific paths; never committed).
+.probe/

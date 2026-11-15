@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>dsh-effort-router 产品需求文档</title>
+  <style>
+    :root { --bg:#f5f7fb; --panel:#fff; --ink:#172033; --muted:#5d687a; --line:#dce2ec; --accent:#315efb; --soft:#eaf0ff; --ok:#147d55; --ok-soft:#e7f6ef; --warn:#925b00; --warn-soft:#fff4d8; --shadow:0 8px 30px rgba(28,39,64,.07); }
+    @media (prefers-color-scheme:dark) { :root { --bg:#10141c; --panel:#181e29; --ink:#e9edf5; --muted:#aab4c4; --line:#323b4b; --accent:#91adff; --soft:#202e50; --ok:#66d5a7; --ok-soft:#15392d; --warn:#f2c46d; --warn-soft:#3c301b; --shadow:none; } }
+    * { box-sizing:border-box; } html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
+    a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+    header { background:linear-gradient(135deg,#1d3171,#315efb); color:#fff; padding:50px 24px 44px; }
+    header .wrap,main,footer .wrap { max-width:1160px; margin:auto; }
+    h1 { margin:0 0 10px; font-size:clamp(28px,4vw,42px); line-height:1.2; }
+    header p { max-width:880px; margin:10px 0 0; opacity:.92; font-size:17px; }
+    .meta { display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
+    .meta span,.tag { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:650; }
+    .meta span { background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.2); }
+    main { padding:26px 24px 56px; }
+    nav { position:sticky; top:0; z-index:5; margin:0 -24px 26px; padding:10px 24px; background:color-mix(in srgb,var(--bg) 92%,transparent); backdrop-filter:blur(10px); border-bottom:1px solid var(--line); }
+    nav .inner { max-width:1112px; margin:auto; display:flex; gap:15px; overflow:auto; white-space:nowrap; }
+    nav a { color:var(--muted); font-size:13px; }
+    section { background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:28px; margin:20px 0; }
+    h2 { margin:0 0 18px; font-size:24px; line-height:1.35; } h3 { margin:26px 0 10px; font-size:18px; }
+    p { margin:8px 0 12px; } ul,ol { padding-left:23px; } li { margin:6px 0; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:12px; }
+    .card { border:1px solid var(--line); border-radius:10px; padding:15px; background:color-mix(in srgb,var(--panel) 94%,var(--soft)); }
+    .card strong { display:block; font-size:18px; margin-bottom:4px; }
+    .muted { color:var(--muted); } .small { font-size:13px; }
+    .tag { background:var(--soft); color:var(--accent); vertical-align:middle; }
+    .tag.done { background:var(--ok-soft); color:var(--ok); } .tag.next { background:var(--warn-soft); color:var(--warn); }
+    .callout { border-left:4px solid var(--accent); background:var(--soft); padding:12px 16px; border-radius:6px; margin:14px 0; }
+    .callout.warn { border-left-color:var(--warn); background:var(--warn-soft); }
+    .flow { display:flex; align-items:stretch; gap:8px; overflow-x:auto; padding:10px 0; }
+    .flow .node { min-width:160px; flex:1; border:1px solid var(--line); border-radius:9px; padding:13px; background:var(--soft); }
+    .flow .arrow { align-self:center; color:var(--muted); font-size:22px; }
+    .table-wrap { overflow-x:auto; margin:12px 0 20px; }
+    table { border-collapse:collapse; width:100%; min-width:660px; }
+    th,td { text-align:left; vertical-align:top; padding:10px 12px; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-size:12px; letter-spacing:.03em; background:color-mix(in srgb,var(--panel) 92%,var(--soft)); }
+    tr:last-child td { border-bottom:0; } .req td:first-child { white-space:nowrap; font-weight:700; color:var(--accent); }
+    .calc { text-align:center; margin:18px 0 6px; }
+    .calc-box { border:1px solid var(--accent); background:var(--soft); border-radius:10px; padding:13px 16px; max-width:780px; margin:0 auto; }
+    .calc-box strong { color:var(--accent); }
+    .calc-down { color:var(--accent); font-size:22px; line-height:1.5; margin:3px 0; }
+    .calc-grid,.evidence-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:10px 0; text-align:left; }
+    .evidence-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .calc-card { border:1px solid var(--line); border-radius:10px; padding:14px; background:color-mix(in srgb,var(--panel) 94%,var(--soft)); }
+    .calc-card h4 { margin:0 0 7px; font-size:15px; color:var(--accent); }
+    .calc-card ul { margin:0; padding-left:19px; font-size:13px; }
+    .calc-card .effect { display:inline-block; margin-top:8px; padding:2px 8px; border-radius:999px; background:var(--soft); color:var(--accent); font-weight:700; font-size:12px; }
+    .calc-formula { border:2px solid var(--accent); border-radius:12px; padding:16px; background:var(--soft); font-size:17px; font-weight:700; }
+    .calc-actual { border:2px solid var(--ok); border-radius:12px; padding:16px; background:var(--ok-soft); color:var(--ok); font-size:19px; font-weight:750; }
+    .calc-loop { margin:10px 0 0; color:var(--muted); font-size:13px; text-align:center; }
+    .decision-open { color:var(--warn); font-weight:700; } .decision-done { color:var(--ok); font-weight:700; }
+    footer { border-top:1px solid var(--line); padding:22px 24px 34px; color:var(--muted); }
+    @media(max-width:760px){.calc-grid,.evidence-grid{grid-template-columns:1fr}}
+    @media(max-width:680px){section{padding:20px 16px}main{padding-left:12px;padding-right:12px}nav{margin-left:-12px;margin-right:-12px}}
+    @media print { body{background:#fff;color:#111}header{background:#fff;color:#111;padding:20px 0}nav{display:none}section{box-shadow:none;break-inside:avoid}a{color:inherit} }
+  </style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>dsh-effort-router 产品需求文档</h1>
+  <p>面向使用者与产品验收的非技术性需求说明：它解释产品要做什么、用户会怎样使用、哪些行为必须得到保证；不描述代码结构、变量或接口实现。</p>
+  <div class="meta"><span>当前产品基线 0.2.17-rc.1</span><span>文档更新 2026-11-16</span><span>非技术版</span><span>已实施待验收：0.2.2 支持（首要）；已批准：跨会话档位记忆</span></div>
+</div></header>
+<main>
+<nav aria-label="文档目录"><div class="inner"><a href="#purpose">产品目标</a><a href="#concepts">使用概念</a><a href="#journey">使用流程</a><a href="#auto-engine">Auto 计算流程</a><a href="#functional">功能需求</a><a href="#memory">跨会话记忆</a><a href="#options">用户选项</a><a href="#decisions">裁决登记册</a><a href="#acceptance">验收</a><a href="#boundaries">边界</a></div></nav>
+
+<section id="abstract">
+  <h2>English abstract</h2>
+  <p>dsh-effort-router helps users balance answer quality and reasoning cost for each step of an agent task. A user may either pin a specific reasoning level or choose <strong>Auto</strong>. In Auto mode, the product considers the original task, recent failures, repeated tool activity, information volume, and budget pressure before selecting the actual level for each step. A concrete user choice always takes priority. The product uses the host application's native model selector and read-only displays rather than adding a separate settings interface.</p>
+  <p><strong>Approved, not yet implemented:</strong> DSH 0.2.2 support is the important and urgent priority for the next implementation cycle. It must preserve both the existing DSH 0.2.1 path and continuous Auto scheduling throughout a turn. Official Auto means omitted effort with adapter defaults; it does not replace this evidence-driven scheduler.</p>
+  <p><strong>Also approved:</strong> the product will remember the user's last explicit Auto or concrete-level choice across sessions. It will remember the logical choice, never the temporary level produced by Auto scheduling. Restoring a preference must not override a current explicit choice, subagent inheritance, or an unsupported model's safety constraints.</p>
+</section>
+
+<section id="purpose">
+  <h2>1. 文档目的与产品目标</h2>
+  <p>本文先记录当前版本已经提供的能力，以及已经实现、等待实机验收的 0.2.2 支持和仍待实施的跨会话档位记忆；随后用独立登记册保留全部已批准、已否决与延期选项。不同状态会明确区分，避免把计划能力或讨论项误读为当前能力。技术任务和版本安排见 <a href="DEVELOPMENT-PLAN.md">开发计划</a>。</p>
+  <div class="grid">
+    <div class="card"><strong>按需思考</strong>简单步骤少花预算，复杂、信息量大或失败恢复中的步骤获得更多推理资源。</div>
+    <div class="card"><strong>用户始终可接管</strong>用户选定具体档后，产品不再擅自改变；选择 Auto 才交给调度器。</div>
+    <div class="card"><strong>不增加学习成本</strong>继续使用宿主原生模型选择器，只读展示实际执行情况，不另建控制面板。</div>
+  </div>
+  <h3>1.1 目标用户与场景</h3>
+  <ul>
+    <li>同一任务中既有简单问答，也有编码、检索、排错和多步工具调用，希望按步骤动态调整强度的用户。</li>
+    <li>使用子代理拆分任务，希望父会话的手动选择或 Auto 意图得到正确继承的用户。</li>
+    <li>使用手写自定义模型，希望在未自行配置时获得基本推理档位选择的用户。</li>
+    <li>经常新建会话或重启应用，不希望反复恢复上次档位偏好的用户。</li>
+  </ul>
+  <h3>1.2 明确不做的产品方向</h3>
+  <ol>
+    <li>不替用户选择供应商或模型，只调整所选模型的推理强度。</li>
+    <li>不提供独立设置页、第二套滑条或另一个档位控制中心。</li>
+    <li>不承诺固定的成功率或节省比例；自动调度是辅助策略，不是质量保证。</li>
+    <li><strong>不考虑与 think-level 的共存兼容。</strong>本项目不为该插件保留协同入口、自动让位或联合控制逻辑。</li>
+  </ol>
+</section>
+
+<section id="concepts">
+  <h2>2. 使用概念与基本约定</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>概念</th><th>面向用户的含义</th></tr></thead>
+    <tbody>
+      <tr><td>一轮对话</td><td>从用户提交指令开始，到本轮回答及相关工具活动结束。一轮中可能包含多个模型执行步骤。</td></tr>
+      <tr><td>具体档</td><td>用户明确选择的某个推理强度。它代表人工决定，产品应尊重。</td></tr>
+      <tr><td><strong>Auto</strong></td><td>一种持续的模式选择，而不是某一个固定强度。只要用户没有改选，本轮每个步骤都交给调度器重新判断。</td></tr>
+      <tr><td>实际执行档</td><td>某一步真正使用的强度。Auto 下不同步骤可以不同，但这不会改变用户仍处在 Auto 模式的事实。</td></tr>
+      <tr><td>任务类型</td><td>产品对任务始发需求的理解，例如轻量、一般、工程或高复杂任务。它只决定起点，后续仍看实际证据。</td></tr>
+      <tr><td>逻辑偏好</td><td>用户明确选择的 Auto 或具体档。跨会话记忆保存的是它，而不是 Auto 某一步产生的实际执行档。</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><strong>核心约定：</strong>用户在一轮开始时选择 Auto，整轮就都保持 Auto 持续调度；只有用户主动改选，才退出 Auto。某一步被换算成具体执行档，不等于用户改成了手动模式。</div>
+</section>
+
+<section id="journey">
+  <h2>3. 典型使用流程</h2>
+  <div class="flow" aria-label="用户使用流程">
+    <div class="node"><strong>选择模式</strong><br><span class="small">Auto 或具体档</span></div><div class="arrow">→</div>
+    <div class="node"><strong>理解任务</strong><br><span class="small">判断起点与上下文</span></div><div class="arrow">→</div>
+    <div class="node"><strong>逐步观察</strong><br><span class="small">错误、重复、信息量、预算</span></div><div class="arrow">→</div>
+    <div class="node"><strong>选择实际执行档</strong><br><span class="small">Auto 逐步判断；手动保持原档</span></div><div class="arrow">→</div>
+    <div class="node"><strong>只读反馈</strong><br><span class="small">显示模式、实际档与原因</span></div>
+  </div>
+  <h3>跨会话恢复流程 <span class="tag next">已批准，待实施</span></h3>
+  <div class="flow" aria-label="跨会话记忆恢复流程">
+    <div class="node"><strong>记录人工选择</strong><br><span class="small">只记录 Auto 或具体档</span></div><div class="arrow">→</div>
+    <div class="node"><strong>新会话选择模型</strong><br><span class="small">查找该模型的最近偏好</span></div><div class="arrow">→</div>
+    <div class="node"><strong>检查当前意图</strong><br><span class="small">不覆盖当次选择或明确继承</span></div><div class="arrow">→</div>
+    <div class="node"><strong>恢复逻辑模式</strong><br><span class="small">Auto 仍是 Auto；具体档仍按能力校验</span></div>
+  </div>
+</section>
+
+<section id="auto-engine">
+  <h2>3.1 Auto 实际发送档如何计算 <span class="tag done">核心创新</span></h2>
+  <p>Auto 不是简单地“永远使用最高档”或“记住上次实际档”。它在每个执行步骤重新收集证据：先由任务简报确定起点，再叠加近期困难与有效信息量，扣除节俭信号，最后经过安全约束和模型能力映射，得到<strong>当前步骤真正发送的档位</strong>。</p>
+  <div class="calc" role="img" aria-label="Auto 实际发送档位计算流程：任务起点，错误与事件证据、信息量证据、节俭证据三路合并，经过安全约束和模型能力映射，得到实际发送档位">
+    <div class="calc-box"><strong>用户选择 Auto</strong><br><span class="small">当前步骤开始；逻辑模式始终保持 Auto</span></div>
+    <div class="calc-down">↓</div>
+    <div class="calc-box"><strong>① 任务简报决定起始强度</strong><br><span class="small">轻量 / 一般 / 工程 / 高复杂<br>当前默认起点：较低 / 较低 / 较高 / 最高</span></div>
+    <div class="calc-down">↓ 同时读取三类证据</div>
+    <div class="evidence-grid">
+      <div class="calc-card">
+        <h4>②A 近期困难与事件证据</h4>
+        <ul>
+          <li>工具报错，近期证据权重更高</li>
+          <li>同参数工具调用重复出现</li>
+          <li>待办刚完成，需要推进下一项</li>
+          <li>子代理返回，需要整合结果</li>
+          <li>上下文刚压缩，需要校验信息保真</li>
+          <li>上一任务有未解决失败</li>
+        </ul>
+        <span class="effect">向上调整；合并后默认最多 +2 级</span>
+      </div>
+      <div class="calc-card">
+        <h4>②B 长窗口有效信息量</h4>
+        <ul>
+          <li>累计任务简报的有效信息量</li>
+          <li>累计工具结果的有效信息量</li>
+          <li>重复文本经过压缩折扣，不当作等量新知识</li>
+          <li>两类信息量分别越过分级阈值</li>
+        </ul>
+        <span class="effect">取两类中较强升档信号：0 / +1 / +2 级</span>
+      </div>
+      <div class="calc-card">
+        <h4>②C 实时节俭信号</h4>
+        <ul>
+          <li>当前是子代理执行</li>
+          <li>上下文占用达到压力阈值</li>
+          <li>会话总量超过用户启用的预算</li>
+        </ul>
+        <span class="effect">任一成立可向下调整 1 级</span>
+      </div>
+    </div>
+    <div class="calc-down">↓ 三路证据合成</div>
+    <div class="calc-formula">目标强度 = 任务起点 + 困难与事件升档 + 信息量升档 − 节俭降档</div>
+    <div class="calc-down">↓ 先约束目标，再映射到模型真实能力</div>
+    <div class="calc-grid">
+      <div class="calc-card">
+        <h4>③ 目标强度安全约束</h4>
+        <ul>
+          <li>任务初期不低于合理的起始强度</li>
+          <li>轻量任务的总升档幅度有限</li>
+          <li>不超过高复杂任务所允许的上限</li>
+          <li>普通 Auto 永不主动关闭思考</li>
+        </ul>
+      </div>
+      <div class="calc-card">
+        <h4>④ 模型能力与用户允许范围</h4>
+        <ul>
+          <li>只从当前模型真实提供的档位中选择</li>
+          <li>再应用用户设置的允许档位范围</li>
+          <li>目标不存在时按既定方向取可用档</li>
+          <li>未知档位按模型声明顺序判断强弱</li>
+        </ul>
+      </div>
+    </div>
+    <div class="calc-down">↓</div>
+    <div class="calc-actual">⑤ 得到当前步骤实际发送的档位</div>
+    <p class="calc-loop">只读徽标显示该实际档与理由 → 下一步仍保持 Auto，重新读取最新证据并计算</p>
+  </div>
+  <h3>一个简化示例</h3>
+  <p>某普通任务从“较低”开始；近期出现足够的工具错误证据，向上调整 1 级；信息量没有越档，也没有节俭信号，因此目标变为“中等”。如果当前模型只提供“较低”和“较高”，默认的“接近且偏强”规则最终会选择“较高”作为实际发送档。下一步若错误证据衰减，目标可以重新下降，但用户仍然处于 Auto。</p>
+  <div class="callout"><strong>手动模式不参与上述计算：</strong>用户选择具体档时直接尊重人工选择；只有 Auto 才经过这套证据流程。跨会话记忆恢复的也是 Auto 或具体档这一逻辑选择，而不是流程中某一步的实际发送档。</div>
+</section>
+
+<section id="functional">
+  <h2>4. 功能需求</h2>
+  <p><span class="tag done">当前能力</span> 除特别标注“已批准，待实施”外，本节均描述当前产品应具备并持续保持的行为。</p>
+
+  <h3>4.1 模式选择与用户接管</h3>
+  <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
+    <tr><td>FR-001</td><td>支持推理强度选择的模型应提供 Auto 入口；不支持推理的模型不得出现虚假的强度选择。</td><td>分别检查思考模型、仅关闭档模型和不支持推理的模型。</td></tr>
+    <tr><td>FR-002</td><td>用户选择具体档后，必须按该档执行，不得被自动调度改写。</td><td>在连续步骤、工具调用和子代理中检查人工选择是否保持。</td></tr>
+    <tr><td>FR-003</td><td>模型不接受某个档位时，不得伪造另一档冒充用户选择，应安全忽略该档位并说明。</td><td>使用不支持目标档的模型验证请求仍能继续。</td></tr>
+    <tr><td>FR-004</td><td>插件被关闭或内部判断失败时，普通请求应继续可用，虚拟 Auto 不得误发给模型。</td><td>注入异常、关闭功能并检查请求是否能够安全继续。</td></tr>
+    <tr><td>FR-005</td><td>插件重载或第三方组件变化后，Auto 入口与请求处理不得互相遗留、重复或失效。</td><td>重复挂载、重载及与其他显示组件交替变化后检查。</td></tr>
+  </tbody></table></div>
+
+  <h3>4.2 任务理解与动态调度</h3>
+  <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
+    <tr><td>FR-010</td><td>产品应根据用户最初提交的任务判断难度起点，而不是被后续大段工具输出误导。</td><td>比较多行简报、普通问答、工程需求及只有工具结果的恢复会话。</td></tr>
+    <tr><td>FR-011</td><td>系统通知、技能说明、压缩摘要等自动插入内容不得被当作用户的新任务。</td><td>插入各类通知后，任务起点和预算判断不应被重置。</td></tr>
+    <tr><td>FR-012</td><td>Auto 应考虑近期工具失败和同参数重复调用，在需要排错或摆脱循环时提高强度。</td><td>构造首次失败、连续失败、重复读取与并行工具结果，观察是否按证据调整。</td></tr>
+    <tr><td>FR-013</td><td>Auto 应考虑任务简报和工具结果的有效信息量，重复文本不应等同于新知识。</td><td>比较短任务、长任务、循环日志和多样化内容；多行简报不得被重复计量。</td></tr>
+    <tr><td>FR-014</td><td>待办完成、子代理返回和上下文压缩后的整合步骤，可作为提高强度的证据；被关闭的信号不得在重新开启后补放。</td><td>分别验证信号开启、关闭、重新开启及新事件发生时的行为。</td></tr>
+    <tr><td>FR-015</td><td>上下文或预算紧张，以及子代理执行时，可适当降低强度；任务初期仍应保留合理的难度起点。</td><td>检查预算阈值、子代理和任务初期之间的取舍。</td></tr>
+    <tr><td>FR-016</td><td>Auto 不得主动关闭思考；只有明确证据表明历史已不兼容思考模式时，才可进入保护性恢复。</td><td>普通无推理块消息不得误判；确证的历史问题应可恢复并在解除后释放。</td></tr>
+    <tr><td>FR-017</td><td>不同模型的可用档位不一致时，应选择安全、可解释的实际档，不得选择模型未提供的档位。</td><td>覆盖标准档位、自定义档位、较多未知档位及允许范围为空的情况。</td></tr>
+  </tbody></table></div>
+
+  <h3>4.3 整轮 Auto、子代理与分支连续性</h3>
+  <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
+    <tr><td>FR-040</td><td><strong>用户在一轮开始时选择 Auto 后，整轮都必须保持 Auto 持续调度。</strong>每一步的实际档可以变化，但不得把下一步误认成手动定档。</td><td>同一轮使用多个步骤和工具调用，确认每步都重新调度，模式始终显示 Auto。</td></tr>
+    <tr><td>FR-041</td><td>用户在整轮中途改选具体档，应立即退出 Auto；之后不得因旧记忆或上一步结果自动切回。</td><td>Auto 执行若干步骤后手动改档，检查后续步骤和记忆更新。</td></tr>
+    <tr><td>FR-042</td><td>父会话使用具体档时，子代理应继承该档；父会话使用 Auto 时，子代理按自己的任务独立调度。</td><td>分别验证父手动、父 Auto、父会话继续执行后再返回的子代理。</td></tr>
+    <tr><td>FR-043</td><td>无法确认子代理来源时，应采取保守继承，不得把可能的人工选择当成 Auto。</td><td>缺少父记录、档位不匹配、显式子代理覆盖及关闭思考的血缘。</td></tr>
+    <tr><td>FR-044</td><td>会话恢复或分支切换后，不得把旧分支的错误、信息量和任务起点错误带入新分支。</td><td>切换到内容不同、长度不同或相同的分支，检查证据是否属于当前分支。</td></tr>
+  </tbody></table></div>
+
+  <h3>4.4 自定义模型的基本档位支持</h3>
+  <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
+    <tr><td>FR-050</td><td>对从未配置推理档位的自定义模型，产品可在确认模型确实没有可用档位后，补充一套基本选择。</td><td>未配置模型获得基本档位；已有配置的模型保持不变。</td></tr>
+    <tr><td>FR-051</td><td>用户在模型管理界面明确接管或关闭某个模型后，产品不得在下次启动时擅自补回。</td><td>关闭、保存、重载和重启后，用户选择仍被尊重。</td></tr>
+    <tr><td>FR-052</td><td>自动补充不得增加“关闭思考”选项，也不得覆盖用户明确声明的兼容性限制。</td><td>检查基本档位内容和用户显式关闭推理能力的情况。</td></tr>
+    <tr><td>FR-053</td><td>无法判断模型能力时，应提示用户补充配置，而不是猜测能力或静默失败。</td><td>模型目录缺少信息时能看到明确诊断，原配置不被破坏。</td></tr>
+  </tbody></table></div>
+
+  <h3>4.5 只读反馈与用户选项</h3>
+  <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
+    <tr><td>FR-060</td><td>对话输入区应能只读显示当前模式与最近实际执行档，并可查看调度理由。</td><td>Auto 显示 Auto 而非某一步的固定档；无实际档时不得编造。</td></tr>
+    <tr><td>FR-061</td><td>轨迹视图可显示各步骤实际使用的模型与档位；归属不明时宁可不显示，不得错标到其他会话。</td><td>切换会话、子代理、历史会话及并排视图。</td></tr>
+    <tr><td>FR-062</td><td>对话流中的工具小注默认关闭；用户主动开启后才能显示。</td><td>检查默认状态、开启后刷新及关闭后的恢复。</td></tr>
+    <tr><td>FR-063</td><td>所有选项通过配置文件调整，客户端不新增设置控制；显示开关不影响实际调度。</td><td>修改配置后检查界面与调度是否按各自职责变化。</td></tr>
+    <tr><td>FR-064</td><td>只读诊断应帮助用户理解实际档位与理由，不得提供远程修改配置或会话的入口。</td><td>检查诊断功能没有写操作，且不展示任务正文或凭据。</td></tr>
+  </tbody></table></div>
+</section>
+
+<section id="memory">
+  <h2>5. 跨会话“上次档位”记忆 <span class="tag next">F-06 · 已批准，待实施</span></h2>
+  <p>该功能解决新建会话或重启应用后反复手选的问题。它记忆的是<strong>逻辑偏好</strong>，不是 Auto 在某一步临时选择的实际执行档。默认开启，可通过配置文件关闭，不新增设置界面。</p>
+  <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>已批准需求</th><th>验收方式</th></tr></thead><tbody>
+    <tr><td>FR-070</td><td>用户明确选择 Auto 或具体档后，新建会话及应用重启后都应能恢复最近一次选择。</td><td>分别验证 Auto、具体档、新建会话和完整重启。</td></tr>
+    <tr><td>FR-071</td><td>记忆按接入方式与模型分别保存，不把另一个模型的具体档强行套用到当前模型。</td><td>两个模型交替选择不同档位，再分别新建会话验证恢复结果。</td></tr>
+    <tr><td>FR-072</td><td>记住 Auto 时必须恢复为 Auto 持续调度，不得恢复成上一次某一步的实际执行档。</td><td>Auto 经历多个不同实际档后新建会话，仍显示并执行 Auto。</td></tr>
+    <tr><td>FR-073</td><td>当前会话的明确选择始终优先；用户中途改选后立即生效，并成为新的最近偏好。</td><td>恢复旧偏好后立即改选，检查当前步骤、后续步骤及下一会话。</td></tr>
+    <tr><td>FR-074</td><td>恢复顺序为：当前明确选择与明确继承优先，其次是当前模型的记忆，再次是产品配置的默认方式，最后才是宿主默认。</td><td>覆盖当前选择、子代理继承、有记忆、无记忆及未配置默认值等情况。</td></tr>
+    <tr><td>FR-075</td><td>记忆中的具体档在当前模型上不可用时，应忽略该记忆并使用既有默认方式，不得擅自换算成相邻档冒充人工选择。</td><td>保存一个具体档后切换到不支持它的模型，检查安全回退与提示。</td></tr>
+    <tr><td>FR-076</td><td>只有用户明确选择才能更新记忆；Auto 的计算结果、固定默认值和子代理继承不得被误记为人工偏好。</td><td>连续自动调度、使用默认档和子代理执行后，原记忆不应被污染。</td></tr>
+    <tr><td>FR-077</td><td>记忆仅保存在本机对应用户配置环境中，不同配置环境不得共享；只保存模型、逻辑选择和必要时间信息，不保存任务正文。</td><td>检查两个配置环境互不影响，删除插件数据后记忆消失，记录中无简报正文。</td></tr>
+    <tr><td>FR-078</td><td>恢复结果必须呈现在原生选择器中，不得新增第二套偏好控制或只读展示与实际状态不一致。</td><td>新会话打开原生选择器即可看到恢复结果，徽标、选择器和实际行为一致。</td></tr>
+  </tbody></table></div>
+  <div class="callout"><strong>与整轮 Auto 的关系：</strong>跨会话记忆负责“开始时恢复什么”，整轮 Auto 负责“开始之后是否持续自动”。恢复 Auto 后，整轮仍按 FR-040 持续调度；恢复具体档后，整轮仍按人工选择直通。</div>
+</section>
+
+<section id="options">
+  <h2>6. 用户可配置能力</h2>
+  <p>所有选项都在用户配置文件中，不提供设置页面。下表使用自然语言概括，实际编辑格式以 <a href="README.zh.md">使用说明</a> 为准。</p>
+  <div class="table-wrap"><table><thead><tr><th>能力分组</th><th>当前默认行为</th><th>用户可调整的内容</th></tr></thead><tbody>
+    <tr><td>总体模式</td><td>功能开启，未明确选择时使用 Auto；子代理遵循来源关系。</td><td>可关闭功能、固定默认档，或为子代理指定固定默认档。</td></tr>
+    <tr><td>最终档位范围</td><td>使用模型提供的非关闭档；缺失目标时选择接近且偏强的可用档。</td><td>可限制允许档位，或改为只向上、只向下选择。</td></tr>
+    <tr><td>自定义模型</td><td>在当前声明所有权规则下自动补基本档位。</td><td>可关闭自动补充，完全由用户自行管理。</td></tr>
+    <tr><td>预算与恢复</td><td>允许节俭降档；上下文压力阈值较高；会话总量预算默认关闭；历史保护开启。</td><td>可调整压力与预算阈值，或关闭节俭及历史恢复。</td></tr>
+    <tr><td>任务起点</td><td>轻量和一般任务从较低强度开始，工程任务较高，高复杂任务最高；委托式短简报有善意起点。</td><td>可调整任务类型起点、初期保护步数与轻任务允许升档幅度。</td></tr>
+    <tr><td>错误与事件证据</td><td>关注最近 6 个工具批次；首次错误可升档，重复调用需更多证据；整体升档有上限。</td><td>可调整窗口、衰减、阈值、事件开关和上限。</td></tr>
+    <tr><td>信息量证据</td><td>关注较长窗口，重复文本经过折扣；简报与工具结果分别判断。</td><td>可调整窗口、两档信息量阈值及重复折扣开关。</td></tr>
+    <tr><td>任务词典</td><td>使用内置中英文线索。</td><td>可追加线索，或完整替换某类词典。</td></tr>
+    <tr><td>只读显示</td><td>输入区徽标与轨迹投影开启；对话流工具小注关闭。</td><td>三个显示开关互不影响，均不改变调度。</td></tr>
+    <tr><td>跨会话记忆 <span class="tag next">待实施</span></td><td>批准后默认开启。</td><td>可通过配置文件关闭；不提供新的界面控制。</td></tr>
+  </tbody></table></div>
+</section>
+
+<section id="privacy">
+  <h2>7. 本地记录、隐私与可删除性</h2>
+  <ul>
+    <li><strong>诊断记录：</strong>保存最近调度模式、实际档位和必要信号，用于展示与研究；会话正文不属于公开展示内容。</li>
+    <li><strong>偏好记录：</strong>跨会话记忆只保存模型、逻辑选择和必要时间信息，不保存用户简报或工具输出。</li>
+    <li><strong>配置环境隔离：</strong>不同用户配置环境的调度记录与偏好不得互相覆盖或共享。</li>
+    <li><strong>记录有界：</strong>诊断信息采用有限保留，不因长期使用无限增长；跨会话偏好只保留每个模型的最近选择。</li>
+    <li><strong>可删除：</strong>移除插件及其本地数据后，调度记录与偏好应一并消失，不留下需要手工清理的界面或耦合。</li>
+    <li><strong>公开文档：</strong>不得包含个人路径、账号、密钥、会话全文或供应商凭据。</li>
+  </ul>
+</section>
+
+<section id="quality">
+  <h2>8. 使用体验与安全要求</h2>
+  <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>类别</th><th>要求</th></tr></thead><tbody>
+    <tr><td>NFR-001</td><td>连续性</td><td>Auto 的逻辑模式、原生选择器、只读徽标与实际行为必须一致，不能因单步换算而跳成手动。</td></tr>
+    <tr><td>NFR-002</td><td>故障安全</td><td>内部异常、模型能力不明或显示失败不得阻断正常对话；不得把虚拟 Auto 当成真实档位发送。</td></tr>
+    <tr><td>NFR-003</td><td>会话隔离</td><td>不同会话、分支、子代理和配置环境的数据不得错用；显示不确定时宁可留空。</td></tr>
+    <tr><td>NFR-004</td><td>响应与效率</td><td>长会话中不得反复读取全部历史；不可见视图不做无谓刷新；重复内容不应造成重复计量。</td></tr>
+    <tr><td>NFR-005</td><td>可解释性</td><td>用户能区分任务起点、调度目标、实际执行档及人工选择，关键降级应有原因。</td></tr>
+    <tr><td>NFR-006</td><td>可访问性</td><td>可点击的轨迹信息应支持键盘操作，不能只支持鼠标。</td></tr>
+    <tr><td>NFR-007</td><td>可维护性</td><td>新增行为须有回归验证与真实客户端验收；不能以自动化测试代替产品出口验收。</td></tr>
+  </tbody></table></div>
+</section>
+
+<section id="decisions">
+  <h2>9. 产品需求裁决登记册（F-01～F-12）</h2>
+  <p>此前改写时把详细裁决项留在了开发计划，容易造成“这些需求已经消失”的误解。这里恢复完整登记册：<strong>编号只用于追踪，不代表全部都要实施。</strong>每项都列出你真正需要选择的方向、当前状态与建议。</p>
+  <div class="table-wrap"><table><thead><tr><th>编号与状态</th><th>需要你决断的具体问题</th><th>当前结论或建议</th></tr></thead><tbody>
+    <tr><td><strong>F-01</strong><br><span class="decision-done">已批准 · 已实施 · 待实机验收</span></td><td>是否支持 DSH 0.2.2？如果支持，何时开始、保留多久的旧版双路径？</td><td><strong>已实施（0.2.17-rc.1）。</strong>0.2.1 的旧路径原样保留，0.2.2 走「claimed 同步选档 → 续步预选 → 轮末恢复」的新路径；运行时按实测版本白名单分派，未实测宿主拒绝加载。自动化 245/245，待 Web/Desktop 实机与你的验收。</td></tr>
+    <tr><td><strong>F-02</strong><br><span class="decision-done">已随 F-01 实施 · 待实机验收</span></td><td>不再询问 Auto 应该是哪种语义：整轮持续 Auto 已确定。随 F-01 迁移时，需要选择如何证明它仍是 Auto——依靠内部决策记录，还是每步后把选择器恢复为 Auto？</td><td><strong>两方案合并采用：</strong>调度依赖内部决策记录与证据，轮末把选择器恢复为 Auto（恢复前确认用户没有手动接管）。整轮 Auto 未被切断。</td></tr>
+    <tr><td><strong>F-03</strong><br><span class="decision-open">延期裁决 · 中等重要/中等紧急</span></td><td>自定义模型“没有档位表”时，谁有权补？三选一：①保持只提示、不扩大自动补写；②用持久墓碑区分从未配置与主动关闭；③提供明确的用户自选模式，允许补写用户自管行。</td><td><strong>暂时保持现状，未来再议。</strong>有很高讨论价值；届时先只读验证墓碑能否经模型管理界面保存和重启后仍存在，再决定是否采用；当前不扩大写路径。</td></tr>
+    <tr><td><strong>F-04</strong><br><span class="decision-done">已否决</span></td><td>是否投入 think-level 共存兼容，包括自动填充协调、入口适配和自动让位？</td><td><strong>已决定不考虑。</strong>不再安排相关工作，也无需继续裁决。</td></tr>
+    <tr><td><strong>F-05</strong><br><span class="decision-open">延期裁决 · 中等重要/中等紧急</span></td><td>固定基本档位不够用时，是否引入：①本地静态模型能力知识库；②直接读取供应商原始模型列表的能力探测；③两者组合？</td><td><strong>暂时保持现有能力来源，未来再议。</strong>有很高讨论价值；重新讨论时仍需权衡知识维护、网络请求、隐私与错误能力声明风险。</td></tr>
+    <tr><td><strong>F-06</strong><br><span class="decision-done">已批准</span></td><td>是否增加跨会话“上次档位”记忆？</td><td><strong>已批准，待实施。</strong>只记忆用户的 Auto 或具体档，不记忆 Auto 单步输出；详见第 5 节。</td></tr>
+    <tr><td><strong>F-07</strong><br><span class="decision-done">Auto 不改名；徽标迁移延期</span></td><td>是否把动态徽标迁到官方模型标签位置？是否给插件 Auto 改名，以避免和官方默认方式混淆？</td><td><strong>Auto 名称保持不变。</strong>0.2.2 官方模型选择界面把省略具体档显示为“Default”，并非“Auto”，不存在两个官方 Auto 字样的直接冲突。动态徽标位置也保持现状；是否迁移徽标为低重要、低紧急的延期讨论项。</td></tr>
+    <tr><td><strong>F-08</strong><br><span class="decision-open">延期裁决 · 低重要/低紧急</span></td><td>是否调整：简报/工具信息量阈值、错误与重复升档阈值、节俭降档、会话总量预算，以及四部任务词典的新增、迁移或剪枝？</td><td><strong>暂时全部保持不变。</strong>有讨论价值，未来取得独立第二周期、任务结果和触发分布证据后再裁决。</td></tr>
+    <tr><td><strong>F-09</strong><br><span class="decision-open">延期裁决 · 低重要/低紧急</span></td><td>是否为重复文本压缩增加 512KiB 上限？超限后按原始信息量计算会改变升档结果；是否值得改用异步压缩？</td><td><strong>暂时保持现状。</strong>有讨论价值，未来出现单次超过 8ms 或至少 1MiB 的真实结果时再决定。</td></tr>
+    <tr><td><strong>F-10</strong><br><span class="decision-open">延期裁决 · 低重要/低紧急</span></td><td>子代理目前固定可降低 1 级，是否增加一个允许用户关闭该节俭行为的选项？</td><td><strong>暂时保持固定行为。</strong>有讨论价值，未来出现需要关闭的实际用例时再决定。</td></tr>
+    <tr><td><strong>F-11</strong><br><span class="decision-open">延期裁决 · 低重要/低紧急</span></td><td>是否进一步处理两个已接受残留：①重启后旧错误首桶仍可能使最初几步偏高；②手动关闭思考的历史来源不能精确关联到某条工具消息？</td><td><strong>暂时保持现状。</strong>有讨论价值，未来出现实际影响证据时，再考虑持久水位、按时间衰减或精确消息关联。</td></tr>
+    <tr><td><strong>F-12</strong><br><span class="decision-open">延期裁决 · 低重要/低紧急</span></td><td>是否公开本地研究产物？是否升级研究数据格式并重新计算冻结基线？如果公开，如何做完整脱敏？</td><td><strong>暂时保持私有和现有研究格式。</strong>有讨论价值，未来再决定公开、完整脱敏或重跑；现有“关闭正文”开关不等于脱敏。</td></tr>
+  </tbody></table></div>
+  <h3>F-03 与 F-05：同一个背景，两项不同职责</h3>
+  <p>你的理解抓住了共同背景：模型真实能接收的档位名称、数量或语义，与本项目使用的低—高—最高强度并不总是一致，因此需要能力识别与映射。但两项不能合并为一个需求：<strong>F-03 决定“谁有权改写用户配置”</strong>，涉及自动补写、主动关闭与持久墓碑；<strong>F-05 决定“从哪里知道模型真实能力”</strong>，涉及本地知识库或供应商原始列表。即使 F-05 能准确发现能力，也仍要由 F-03 决定能否写配置；反过来，即使 F-03 获得写权限，也仍需要可靠的能力来源。</p>
+  <h3>F-07 背景：官方 Auto 与本项目 Auto 不是同一种机制</h3>
+  <p><strong>有官方证据，但要精确理解。</strong><a href="https://www.npmjs.com/package/@deepseek-ai/dsh-agent/v/0.2.2-alpha.2">dsh-agent 0.2.2-alpha.2 的 Model selection 文档</a>明确说明：省略 effort 使用适配器默认值；Web/ACP 用户选择直接记录选择，因此省略 effort 意味着 Auto。<a href="https://www.npmjs.com/package/@deepseek-ai/dsh-agent-loop/v/0.2.2-alpha.2">dsh-agent-loop 同版本文档</a>也说明，步骤准备前固定模型选择，省略的 effort 由适配器默认解析。由此可确认官方 Auto 语义存在，<strong>但不能把它理解为本项目这种注入到档位列表中的实体档位，更不是动态调度器。</strong></p>
+  <p><strong>界面字样也已直接核实：</strong><a href="https://www.npmjs.com/package/@deepseek-ai/dsh-client-ui-model-selection/v/0.2.2-alpha.2">0.2.2 官方模型选择界面</a>在“未选择具体档、使用供应商默认”时，将选项和当前档位标题显示为 <strong>Default</strong>，中文界面也同样显示 Default；该官方界面代码没有把这项显示为 Auto。因此，本项目的 Auto 不需要因官方命名而变更。</p>
+  <div class="table-wrap"><table><thead><tr><th>比较维度</th><th>官方 Auto</th><th>本项目 Auto</th></tr></thead><tbody>
+    <tr><td>界面字样</td><td>默认方式显示为 Default。</td><td>动态调度选择显示为 Auto，保持不变。</td></tr>
+    <tr><td>本质</td><td>省略具体 effort，让供应商适配器采用默认方式。</td><td>一个持续的逻辑选择；内部每一步算出具体档。</td></tr>
+    <tr><td>决策依据</td><td>公开文档未表明存在任务分类、错误、信息量或节俭证据调度。</td><td>任务起点 + 困难与事件 + 信息量 − 节俭，再映射到真实档位。</td></tr>
+    <tr><td>变化方式</td><td>记录的选择持续有效，直到用户或程序重新选择。</td><td>用户保持 Auto 不变，实际执行档可随步骤变化。</td></tr>
+    <tr><td>二者关系</td><td>提供模型选择与适配器默认机制。</td><td>把官方选择机制当作未来迁移接缝，而不是用官方 Auto 替代调度器。</td></tr>
+  </tbody></table></div>
+  <div class="callout warn"><strong>当前有效决策：</strong>F-01 已实施（0.2.17-rc.1，待实机与出品人验收），整轮 Auto（F-02）已随其交付；F-06 已批准、尚未实施；F-04 已否决；F-07 的 Auto 名称保持不变。F-03、F-05 为中等重要、中等紧急的延期裁决项，有很高讨论价值；F-07 的徽标迁移与 F-08～F-12 均为低重要、低紧急的延期项。所有延期项暂时保持不变，不在本轮实施。</div>
+</section>
+
+<section id="acceptance">
+  <h2>10. 产品验收场景</h2>
+  <div class="table-wrap"><table><thead><tr><th>验收场景</th><th>预期结果</th><th>关联需求</th></tr></thead><tbody>
+    <tr><td>一整轮 Auto 包含多个不同难度步骤</td><td>实际执行档可以变化，但整轮始终保持 Auto，不被误判为人工定档。</td><td>FR-040</td></tr>
+    <tr><td>Auto 中途改为具体档</td><td>立即退出 Auto，后续不再自动切回；新的选择成为最近偏好。</td><td>FR-041、FR-073</td></tr>
+    <tr><td>多行任务简报与长工具结果</td><td>简报只计一次，工具结果不冒充用户任务，重复内容不被当成新增信息。</td><td>FR-010、FR-013</td></tr>
+    <tr><td>父会话分别使用 Auto 与具体档启动子代理</td><td>Auto 子代理独立调度，具体档子代理原样继承。</td><td>FR-042、FR-043</td></tr>
+    <tr><td>新会话恢复 Auto</td><td>原生选择器恢复 Auto，整轮持续调度，而不是恢复上一步的具体档。</td><td>FR-070、FR-072、FR-078</td></tr>
+    <tr><td>两个模型分别记忆不同具体档</td><td>各自新会话恢复各自偏好；不支持记忆中的档位时安全使用默认方式。</td><td>FR-071、FR-075</td></tr>
+    <tr><td>重启应用、切换配置环境、删除插件数据</td><td>同一环境可恢复，不同环境不共享，删除后记忆与诊断消失。</td><td>FR-077</td></tr>
+    <tr><td>自定义模型曾被用户主动关闭</td><td>重启后不擅自补回；无法判断时给出提示而非猜测。</td><td>FR-051、FR-053</td></tr>
+    <tr><td>切换会话与历史轨迹</td><td>只读信息属于当前会话；不确定时不显示，不能错标。</td><td>FR-060～FR-062</td></tr>
+  </tbody></table></div>
+  <p class="small muted">具体的人工操作、失败判定与回滚方式见 <a href="MAINTAINER-TESTS.md">维护者验收备忘录</a>。新增记忆功能实施后，应在该备忘录中补充对应实机场景。</p>
+</section>
+
+<section id="boundaries">
+  <h2>11. 当前边界与后续待定事项</h2>
+  <ol>
+    <li><strong>宿主版本：</strong>当前已发布基线是 DSH 0.2.1 系列；0.2.2 支持已获批准，必须在下一次施工中与旧版兼容、整轮 Auto 持续调度一起交付。</li>
+    <li><strong>自定义模型声明权：</strong>“从未配置”和“用户主动关闭”在某些情况下外观相同。当前宁可提示而不扩大自动写入；持久墓碑只是待讨论方案，不是当前能力。</li>
+    <li><strong>模型能力来源：</strong>当前不维护外部模型知识库，也不直接读取供应商原始模型列表；是否增加另行裁决。</li>
+    <li><strong>分支与重启：</strong>分支证据隔离和重启后早期证据仍有个别边界，已列入技术修复计划。</li>
+    <li><strong>校准：</strong>首轮研究不支持下意识调整阈值或词典；需要独立第二周期和任务结果证据。</li>
+    <li><strong>只读界面：</strong>对话流工具小注默认关闭且仍需集中实机复测；轨迹视觉与 Auto/手动行为保留人工验收。</li>
+    <li><strong>社区插件：</strong>不开展 think-level 共存兼容工作，也不将其功能集纳入本项目。</li>
+  </ol>
+  <div class="callout warn"><strong>状态提示：</strong>功能主线 0.2.2 支持（F-01，含 F-02 整轮 Auto）已实施，版本 0.2.17-rc.1，自动化 245/245，等待 Web/Desktop 实机与出品人验收；跨会话记忆（F-06）已批准、尚未实施。F-04 已否决；F-07 的 Auto 不改名；F-03、F-05 中等重要、中等紧急但延期，F-07 的徽标迁移及 F-08～F-12 低优先延期。除 0.2.2 支持外，其余功能提案均已否决、局部裁决或延期。</div>
+</section>
+
+<section id="references">
+  <h2>12. 相关文档</h2>
+  <ul>
+    <li><a href="README.zh.md">中文使用说明</a>：当前功能与配置方式。</li>
+    <li><a href="DEVELOPMENT-PLAN.md">开发计划</a>：技术任务、已批准功能的实施步骤与待定事项。</li>
+    <li><a href="ROADMAP.md">路线图</a>：历史决策、已接受残留和研究状态。</li>
+    <li><a href="MAINTAINER-TESTS.md">维护者验收备忘录</a>：真实客户端的人工验收场景。</li>
+    <li><a href="CHANGELOG.md">更新日志</a>：已经交付的行为变化。</li>
+    <li><a href="COLLABORATION.md">协作规范</a>：决策权、版本与交付闸门。</li>
+  </ul>
+</section>
+</main>
+<footer><div class="wrap">dsh-effort-router · 产品需求（非技术版） · 当前能力 + 已批准的跨会话记忆需求</div></footer>
+</body>
+</html>

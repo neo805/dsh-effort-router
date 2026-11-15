@@ -4,6 +4,54 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.17-rc.1] - 2026-11-16
+
+Whole-turn Auto on the 0.2.2 agent loop, plus a runtime contract gate. No
+routing-policy change: the same classification, evidence channels and rank
+mapping drive the choice; only the seam that applies it is per-runtime now.
+
+### Added
+
+- Dual-loop dispatch through the public `@deepseek-ai/dsh-app-boot`
+  `getDshRuntimeVersion()` API: `0.2.1-rc.2` / `0.2.1-rc.5` keep the legacy
+  `agent/request` rewrite, `0.2.2-alpha.2` / `0.2.2-rc.3` schedule through
+  `agent.model.select()`. An unverified runtime refuses to load
+  (`EFFORT_ROUTER_UNSUPPORTED_RUNTIME`) instead of guessing its loop.
+- Modern scheduling path (`lib/turn-auto.js`): the first step of a turn is fixed
+  synchronously inside `agent/inbox/claimed` (before the host captures the
+  selection), the next step is preselected after `step/end`, and the durable
+  logical `Auto` sentinel is restored at `turn/end` — but only when the user did
+  not take the selection over mid-turn.
+- `capability.peek()`: synchronous cache read for the claimed hook; a miss
+  degrades to a safe omission instead of awaiting inside the host's
+  `claimed` emission.
+- Fail-closed guard: a 0.2.2 host whose session model exposes no `select()` is
+  rejected in `agent/pre-step`; the plugin never falls back to the request
+  rewrite 0.2.2 rejects, and never leaks the private Auto sentinel into a
+  request.
+- 33 contract tests (`test/f01`, `test/f02`) against an executable 0.2.2 host
+  fixture: claimed/capture ordering, same-step retry, manual takeover,
+  disposition, resume across hosts, branch generations, capability misses,
+  fixed subagent levels, and mid-flight disposal.
+
+### Changed
+
+- `engines.dsh` and all seven peers narrowed to `>=0.2.0-rc.1 <0.2.3-0`;
+  `@deepseek-ai/dsh-app-boot` is a new optional peer (the seventh). The range is
+  an install envelope, not a runtime certification — certification stays
+  per-version in the allowlist.
+- `pnpm test` and CI now run `test/**/*.test.mjs`, so nested suites are part of
+  the gate; baseline 212 → 245 tests.
+- Real-host probe of agent-loop 0.2.2-rc.3: a session cannot append while
+  `step/end` is publishing, so the preselection write is retried on the next
+  tick (and re-applied before the following step) instead of failing the turn.
+
+### Fixed
+
+- A request still awaiting downstream when the plugin was disposed could record
+  a decision and append a logical-Auto selection. Both loop paths now re-check
+  disposal after every await and hand back the stripped seed.
+
 ## [0.2.16-rc.2] - 2026-10-25
 
 Projection-contract fix release. No routing-policy change: the same signals are
