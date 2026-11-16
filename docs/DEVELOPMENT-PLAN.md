@@ -93,3 +93,21 @@
 - 不把 store 决策遥测当作原生人工选择事实，不建立第二份模型偏好库。
 - 不提前实施 F-03/F-05，不新增设置 UI，不扩大客户端写权限。
 - 不在本轮改 minor/major，不自行 push/tag。
+
+## 6. 交付状态与出品人验收
+
+- **代码与自动化：** 提交 `79adfa3`；标准命令 **369/369、0 skip**；`pnpm build` 产出 `lib/client.js` 32,761 bytes。
+- **发布包：** `artifacts/dsh-effort-router-0.2.18-agent.2.tgz`（20 files，SHA256
+  `58CBB13E603AA372AFE51CAED6A8D3638DDA25A730B21626140F7552F9EAF005`）。
+- **Web 已验：** 完整重启后安装 `.2`，13 个 `lib/*.js` 哈希与源码一致。连续 Auto
+  `session-f65bf558…` 三步均为 `auto/low`，宿主日志只有建立时一条显式 `select auto`，
+  `turn/end` 后无补写；人工接管 `session-7b2c00e9…` 在 step 1 后显式切 `high`，
+  后续步及下一轮保持 `manual/high`，无回写 `auto`。
+- **Web 证据限制：** 人工接管会话的 step 1 被分类器判为 `high`，并非“从 low 接管”；
+  后续档位来自插件 full 视图，宿主只记录了 step 1 的 `request/header`。报告未把缺省
+  header 当作通过。
+- **Desktop 待验收：** 关闭 Desktop 后，将 desktop profile 的插件依赖指向
+  `<repo>/artifacts/dsh-effort-router-0.2.18-agent.2.tgz`，安装并完整重启；随后按
+  `MAINTAINER-TESTS.md` 第 5 项确认连续 Auto、人工保持、零轮末写回、双模型切换、
+  finished history、多会话轨迹、后台标签休眠与视觉呈现。
+- **未做：** 未 push、未 tag；Desktop profile 正在运行，未在其上安装或重启。
