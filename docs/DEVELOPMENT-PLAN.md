@@ -96,9 +96,9 @@
 
 ## 6. 交付状态与出品人验收
 
-- **代码与自动化：** 提交 `79adfa3`；标准命令 **369/369、0 skip**；`pnpm build` 产出 `lib/client.js` 32,761 bytes。
+- **代码与自动化：** 提交 `79adfa3`（其后清理了一处生产调试残留并重新打包）；标准命令 **369/369、0 skip**；`pnpm build` 产出 `lib/client.js` 32,761 bytes。
 - **发布包：** `artifacts/dsh-effort-router-0.2.18-agent.2.tgz`（20 files，SHA256
-  `58CBB13E603AA372AFE51CAED6A8D3638DDA25A730B21626140F7552F9EAF005`）。
+  `8A5C683AC39DC04AE8D8375225F5014DDA81845F1909A628C81BD751C76F7727`）。
 - **Web 已验：** 完整重启后安装 `.2`，13 个 `lib/*.js` 哈希与源码一致。连续 Auto
   `session-f65bf558…` 三步均为 `auto/low`，宿主日志只有建立时一条显式 `select auto`，
   `turn/end` 后无补写；人工接管 `session-7b2c00e9…` 在 step 1 后显式切 `high`，
