@@ -54,7 +54,7 @@ personal or machine-specific information.
 | 角色 | 职责 |
 |---|---|
 | **出品人**（人类） | 提交需求、裁定未决事项、批准版本位变化、批准 push / 打 tag、在 Desktop 上做产品出口验收 |
-| **AI 第一作者** | 撰写需求与开发计划、测试先行实现、构建打包、安装到 Web、与 Web 实机通信验证、安装到 Desktop、出具证据报告、提交（commit） |
+| **AI 第一作者** | 撰写需求与开发计划、测试先行实现、构建打包、安装到 Web、与 Web 实机通信验证、经出品人批准后安装到 Desktop、出具证据报告、提交（commit） |
 
 - **演进节奏由出品人控制**，控制手段只有两个：**需求提交**与**产品出口验收**。
   没有走完验收阶梯的版本不算交付。
@@ -119,6 +119,8 @@ personal or machine-specific information.
 
 每次交付按以下四级推进，**上一级未通过不得进入下一级**：
 
+项目默认生产开发环境为 DSH Desktop，下述验证阶梯以此为前提将 DSH Web 作为影子检测 profile；如果发现生产开发环境异常（例如特殊情况下运行在 DSH Web 下的会话），应当向出品人核实，确认测试验证环境。
+
 1. **标准化测试**：单元/集成测试全绿；构建通过；打包通过；`plugin_check`
    自查通过（必要非充分，边界见 §13）。
 2. **安装到 DSH Web**：先备份 profile 的 `package.json`、`cordis.patch.yml`
@@ -144,7 +146,8 @@ personal or machine-specific information.
    - **取证**：读该 profile 里插件自己的落盘状态与产物，做"预期 vs 实际"比对
      （本项目：`$DSH_HOME/profiles/<profile>/.effort-router/state.json`），不要只看
      RPC 返回 `ok`。通道确实不通时如实报告阻塞，把可复制的验收步骤交回出品人。
-4. **安装到 Desktop + 出品人验收**：AI 负责安装与自查，出品人负责产品出口验收。
+4. **安装到 DSH Desktop（仅限出品人批准）**：未经出品人批准，禁止更新安装到 DSH Desktop；
+   如果出品人明确指示更新安装到 DSH Desktop，则应提醒用户先将本会话切换到手动档位，随后由Agent经 plugin-manager 安装启用。
 
 **Web 实机测试闸门（防止测试成本爆炸）**：
 
@@ -225,8 +228,9 @@ personal or machine-specific information.
    （disable → enable）或重启宿主；对已启用的条目做同值 `set_plugin` 不会触发重载
    （返回 `changed: false`）。是否已生效要用**可观测行为**判定（例如起一个子代理
    读决策日志），不要用"文件已替换"推断。
-9. 安装到 **Desktop profile**：同样备份 → 安装 → 哈希比对（Desktop 通常可热
-   生效；不可热生效时按 §5 报告待重启）。
+9. **安装到 Desktop profile（仅限出品人批准）**：未获批准不得安装；获批后先提醒
+   出品人把本会话切到手动档，再经 `plugin-manager` 安装，同样备份 → 哈希比对
+   （Desktop 通常可热生效；不可热生效时按 §5 报告待重启）。
 10. `git add -A && git commit` —— **本机提交，不需要出品人验收**：提交信息说明
     **改了什么、为什么**（可带版本号）。工作区不长期挂着一堆未提交改动。
 11. 向出品人报告：结论、证据（数值/哈希/会话 id/**commit 号**）、Desktop 验收
@@ -248,8 +252,8 @@ personal or machine-specific information.
 - **`git push` 必须先问。** 本机已与出品人的 GitHub 仓库
   `neo805/dsh-effort-router` 建立链接并授予 AI 通过 `git` CLI 直接操作推送的
   权限；权限存在**不等于**可以自行推送。提交（commit）可自行完成并保持本地
-  领先（按 §8 第 10 步，装到 Desktop 之后即提交，**无需出品人验收**）；推送、
-  打 tag、改远程属于对外动作，须经出品人明确批准。
+  领先（按 §8 第 10 步，**无需出品人验收**）；Desktop 安装须先经出品人明确
+  批准并把本会话切到手动档；推送、打 tag、改远程属于对外动作，须经出品人明确批准。
 - **不得**：未经批准 push、自行升大版本号、静默丢弃已知问题、把未验证的事说成
   已完成、在会话内直接替换正在运行的宿主或自身。
 - 仓库**不开启 Issues、不接受 Pull Requests**（见 `CONTRIBUTING.md`）。
