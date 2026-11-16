@@ -65,7 +65,7 @@
 <header><div class="wrap">
   <h1>dsh-effort-router 产品需求文档</h1>
   <p>面向使用者与产品验收的非技术性需求说明：它解释产品要做什么、用户会怎样使用、哪些行为必须得到保证；不描述代码结构、变量或接口实现。</p>
-  <div class="meta"><span>当前产品基线 0.2.17-agent.1</span><span>文档更新 2026-11-16</span><span>非技术版</span><span>本轮已完成：0.2.2 连续步同步解析、证据链/配置解析硬化、客户端资源与无障碍</span></div>
+  <div class="meta"><span>当前产品基线 0.2.18-agent.0</span><span>文档更新 2026-11-16</span><span>非技术版</span><span>本轮已完成：0.2.2 连续步同步解析、证据链/配置解析硬化、客户端资源与无障碍</span></div>
 </div></header>
 <main>
 <nav aria-label="文档目录"><div class="inner"><a href="#purpose">产品目标</a><a href="#concepts">使用概念</a><a href="#journey">使用流程</a><a href="#auto-engine">Auto 计算流程</a><a href="#functional">功能需求</a><a href="#memory">跨会话记忆</a><a href="#options">用户选项</a><a href="#decisions">裁决登记册</a><a href="#acceptance">验收</a><a href="#boundaries">边界</a></div></nav>
@@ -323,7 +323,7 @@
   <h2>9. 产品需求裁决登记册（F-01～F-12）</h2>
   <p>此前改写时把详细裁决项留在了开发计划，容易造成“这些需求已经消失”的误解。这里恢复完整登记册：<strong>编号只用于追踪，不代表全部都要实施。</strong>每项都列出你真正需要选择的方向、当前状态与建议。</p>
   <div class="table-wrap"><table><thead><tr><th>编号与状态</th><th>需要你决断的具体问题</th><th>当前结论或建议</th></tr></thead><tbody>
-    <tr><td><strong>F-01</strong><br><span class="decision-open">已批准 · 连续步修复待施工</span></td><td>是否支持 DSH 0.2.2？如果支持，何时开始、保留多久的旧版双路径？</td><td><strong>0.2.17-agent.1 已把 0.2.2 连续步调度改为「宿主读取当前选择时同步解析本步实际档」，不再依赖 step/end 后的补写。</strong>0.2.1 路径保留；未在允许清单内的宿主版本仍拒绝加载；连续步、接管、dispose 与第三方包装矩阵均由自动化测试覆盖。</td></tr>
+    <tr><td><strong>F-01</strong><br><span class="decision-open">已批准 · 已交付</span></td><td>是否支持 DSH 0.2.2？如果支持，何时开始、保留多久的旧版双路径？</td><td><strong>0.2.18-agent.0（起始于 0.2.17-agent.1）已把 0.2.2 连续步调度改为「宿主读取当前选择时同步解析本步实际档」，不再依赖 step/end 后的补写。</strong>0.2.1 路径保留；未在允许清单内的宿主版本仍拒绝加载；连续步、接管、dispose 与第三方包装矩阵均由自动化测试覆盖。</td></tr>
     <tr><td><strong>F-02</strong><br><span class="decision-open">整轮 Auto 保持批准 · 实现路线已重选</span></td><td>如何证明 Auto 在多步执行中仍是 Auto，同时让每一步使用新的实际档？</td><td><strong>采用当前选择同步解析路线：</strong>原生逻辑选择保持 Auto，每次宿主捕获本步选择时返回对应 concrete 实际档；不再逐步改写原生选择，也不再依赖轮末恢复。用户改选具体档后立即直通。</td></tr>
     <tr><td><strong>F-03</strong><br><span class="decision-open">延期裁决 · 中等重要/中等紧急</span></td><td>自定义模型“没有档位表”时，谁有权补？三选一：①保持只提示、不扩大自动补写；②用持久墓碑区分从未配置与主动关闭；③提供明确的用户自选模式，允许补写用户自管行。</td><td><strong>暂时保持现状，未来再议。</strong>有很高讨论价值；届时先只读验证墓碑能否经模型管理界面保存和重启后仍存在，再决定是否采用；当前不扩大写路径。</td></tr>
     <tr><td><strong>F-04</strong><br><span class="decision-done">已否决</span></td><td>是否投入 think-level 共存兼容，包括自动填充协调、入口适配和自动让位？</td><td><strong>已决定不考虑。</strong>不再安排相关工作，也无需继续裁决。</td></tr>
@@ -378,7 +378,7 @@
     <li><strong>只读界面：</strong>对话流工具小注默认关闭且仍需集中实机复测；轨迹视觉与 Auto/手动行为保留人工验收。</li>
     <li><strong>社区插件：</strong>不开展 think-level 共存兼容工作，也不将其功能集纳入本项目。</li>
   </ol>
-  <div class="callout warn"><strong>状态提示：</strong>当前版本 0.2.17-agent.1 已修复 0.2.2 连续步调度（捕获时同步解析），证据链/配置解析/存储与客户端资源生命周期同步硬化；F-06 已冻结，跨会话记忆复用 DSH 原生全局选择。F-04 已否决；F-07 的 Auto 不改名；F-03、F-05 中等重要、中等紧急但延期，F-07 的徽标迁移及 F-08～F-12 低优先延期。</div>
+  <div class="callout warn"><strong>状态提示：</strong>当前版本 0.2.18-agent.0 已修复 0.2.2 连续步调度（捕获时同步解析），证据链/配置解析/存储与客户端资源生命周期同步硬化；F-06 已冻结，跨会话记忆复用 DSH 原生全局选择。F-04 已否决；F-07 的 Auto 不改名；F-03、F-05 中等重要、中等紧急但延期，F-07 的徽标迁移及 F-08～F-12 低优先延期。</div>
 </section>
 
 <section id="references">

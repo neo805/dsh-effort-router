@@ -4,7 +4,7 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
-## 0.2.17-agent.1 — synchronous current-selection Auto (LANDED)
+## 0.2.18-agent.0 — synchronous current-selection Auto (LANDED)
 
 Delivered 2026-11-16 (test baseline 320/320). What shipped on top of the
 decisions below:

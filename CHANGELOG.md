@@ -4,6 +4,19 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.18-agent.0] - 2026-11-16
+
+First published `-agent` release (producer-approved push). The shipped code
+equals `0.2.17-agent.1` — the full D-contract change list is in that section
+below. This entry only records the version-governance bump: a
+producer-approved push increments the patch and resets the agent counter.
+
+### Changed
+
+- Version only: `0.2.17-agent.1` → `0.2.18-agent.0` in `package.json`, the two
+  README first screens, the ROADMAP heading, `test/version-policy.test.mjs`,
+  and the next-construction-version declaration in `COLLABORATION.md`.
+
 ## [0.2.17-agent.1] - 2026-11-16
 
 First `-agent` construction release (the `rc` line ends at `0.2.17-rc.1`). This

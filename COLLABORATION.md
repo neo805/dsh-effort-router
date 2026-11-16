@@ -74,7 +74,7 @@ personal or machine-specific information.
 ## 2. 版本号治理
 
 自下一版本起，版本号形如 `X.X.X-agent.X`。`0.2.17-rc.1` 是最后一个使用 `rc`
-后缀的版本；下一施工版本从 `0.2.17-agent.1` 开始。此后所有新版本号都必须带
+后缀的版本；下一施工版本从 `0.2.18-agent.0` 开始（`0.2.18-agent.0` 是首个推送版）。此后所有新版本号都必须带
 `agent` 后缀（`package.json`、`CHANGELOG.md` 标题、README 首屏、git tag 一律一致）。
 DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影响，不得机械替换。
 
