@@ -11,6 +11,7 @@ import { build } from 'esbuild'
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const SESSION_A = 'session-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 const SESSION_B = 'session-bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+const SESSION_C = 'session-cccccccc-cccc-cccc-cccc-cccccccccccc'
 const ANCHOR_ID = 'assistant\0' + '1' + '\0' + '1'
 
 let outDir
@@ -338,17 +339,9 @@ class FakeElement {
   }
 }
 
-function trajectoryWorld(sessionId = SESSION_A) {
-  const body = new FakeElement('body')
-  const document = {
-    body,
-    visibilityState: 'visible',
-    createElement: (tag) => new FakeElement(tag),
-    querySelector: (selector) => body.querySelector(selector),
-    querySelectorAll: (selector) => body.querySelectorAll(selector),
-  }
+function addTrajectoryRoot(body, sessionId) {
   const root = new FakeElement('div')
-  root.setAttribute('data-conversation-session', sessionId)
+  if (sessionId !== null) root.setAttribute('data-conversation-session', sessionId)
   const row = new FakeElement('tr')
   row.setAttribute('data-kind', 'message')
   row.setAttribute('data-trajectory-row-key', encodeURIComponent(ANCHOR_ID))
@@ -364,9 +357,31 @@ function trajectoryWorld(sessionId = SESSION_A) {
   root.appendChild(row)
   body.appendChild(root)
   return {
-    document, root, row, dot, eventCell,
+    root, row, dot, eventCell,
     caption: () => eventCell.children.find((child) => child.getAttribute('data-er-trj') !== null) || null,
   }
+}
+
+function trajectoryWorld(sessionId = SESSION_A) {
+  const body = new FakeElement('body')
+  const document = {
+    body,
+    visibilityState: 'visible',
+    createElement: (tag) => new FakeElement(tag),
+    querySelector: (selector) => body.querySelector(selector),
+    querySelectorAll: (selector) => body.querySelectorAll(selector),
+  }
+  return {
+    document,
+    body,
+    ...addTrajectoryRoot(body, sessionId),
+    addRoot: (id) => addTrajectoryRoot(body, id),
+  }
+}
+
+function domText(node) {
+  if (!node) return ''
+  return String(node.textContent || '') + node.children.map(domText).join('')
 }
 
 function anchorsPayload(effort = 'high') {
@@ -377,20 +392,33 @@ function anchorsPayload(effort = 'high') {
   }
 }
 
-function setupTrajectory(t, sessionId = SESSION_A) {
-  const world = trajectoryWorld(sessionId)
+function setupTrajectory(t, sessionOrWorld = SESSION_A) {
+  const world = typeof sessionOrWorld === 'string' ? trajectoryWorld(sessionOrWorld) : sessionOrWorld
   const { fetch, requests } = deferredFetch()
   const timers = fakeTimers()
   const frames = fakeFrames()
   const observers = []
   class TestMutationObserver {
     constructor(callback) { this.callback = callback; observers.push(this) }
-    observe() {}
+    observe(target, options) { this.target = target; this.options = options }
     disconnect() { this.disconnected = true }
+  }
+  const mutate = (records) => {
+    for (const observer of observers) {
+      const owned = records.filter((record) => {
+        if (observer.target === record.target) return true
+        if (!observer.options || !observer.options.subtree) return false
+        for (let node = record.target; node; node = node.parentElement) {
+          if (node === observer.target) return true
+        }
+        return false
+      })
+      if (owned.length > 0) observer.callback(owned)
+    }
   }
   installGlobals(t, {
     document: world.document,
-    location: { href: 'http://localhost/' + sessionId },
+    location: { href: 'http://localhost/' + (typeof sessionOrWorld === 'string' ? sessionOrWorld : SESSION_A) },
     localStorage: { getItem: () => null },
     fetch,
     setTimeout: timers.setTimeout,
@@ -399,7 +427,7 @@ function setupTrajectory(t, sessionId = SESSION_A) {
     cancelAnimationFrame: frames.cancelAnimationFrame,
     MutationObserver: TestMutationObserver,
   })
-  return { ...world, requests, frames, observers }
+  return { ...world, requests, frames, observers, mutate }
 }
 
 test('Badge unmount aborts its in-flight request and ignores a late response', { concurrency: false }, async (t) => {
@@ -456,7 +484,7 @@ test('client apply cleanup aborts config loading and stale config cannot registe
   assert.equal(requests[0].signal && requests[0].signal.aborted, true, 'config cleanup must abort the fetch')
 })
 
-test('client re-apply refreshes CSS and disposals remove only the style node they own', { concurrency: false }, async (t) => {
+function installStyleWorld(t) {
   const head = new FakeElement('head')
   const document = {
     head,
@@ -465,41 +493,59 @@ test('client re-apply refreshes CSS and disposals remove only the style node the
   }
   const { fetch, requests } = deferredFetch()
   installGlobals(t, { document, fetch })
-  const makeContext = () => {
+  const style = () => head.descendants().find((node) => node.id === 'effort-router-styles') || null
+  const applyNext = async () => {
     const cleanups = []
-    return {
-      cleanups,
-      ctx: {
-        locale: { bind: () => (key) => key, register: () => () => {} },
-        slots: { inject: (_name, register) => register(), register: () => () => {} },
-        effect(create) { const cleanup = create(); if (typeof cleanup === 'function') cleanups.push(cleanup) },
-        inject() { throw new Error('chatAnnotate=false must not inject') },
-      },
+    const ctx = {
+      locale: { bind: () => (key) => key, register: () => () => {} },
+      slots: { inject: (_name, register) => register(), register: () => () => {} },
+      effect(create) { const cleanup = create(); if (typeof cleanup === 'function') cleanups.push(cleanup) },
+      inject() { throw new Error('chatAnnotate=false must not inject') },
     }
+    applyClient(ctx)
+    requests.at(-1).respond({ chatAnnotate: false })
+    await flushPromises()
+    return { cleanups }
   }
-  const first = makeContext()
-  applyClient(first.ctx)
-  requests[0].respond({ chatAnnotate: false })
-  await flushPromises()
-  const style = head.descendants().find((node) => node.id === 'effort-router-styles')
+  const dispose = (generation) => {
+    for (const cleanup of [...generation.cleanups].reverse()) cleanup()
+  }
+  return { head, style, applyNext, dispose }
+}
+
+test('client HMR keeps refreshed CSS when the old generation disposes first', { concurrency: false }, async (t) => {
+  const world = installStyleWorld(t)
+  const first = await world.applyNext()
+  const style = world.style()
   assert.ok(style, 'first apply should install its style node')
   style.textContent = 'stale-hmr-css'
+  const second = await world.applyNext()
+  assert.equal(style.textContent, CSS, 're-apply must replace stale CSS')
 
-  const second = makeContext()
-  applyClient(second.ctx)
-  requests[1].respond({ chatAnnotate: false })
-  await flushPromises()
-  const refreshed = style.textContent
-  for (const cleanup of second.cleanups.reverse()) cleanup()
-  const survivesForeignCleanup = head.children.includes(style)
-  for (const cleanup of first.cleanups.reverse()) cleanup()
-  const survivesOwnerCleanup = head.children.includes(style)
+  world.dispose(first)
+  world.dispose(first)
+  assert.ok(world.head.children.includes(style), 'old and repeated cleanup must not remove the live generation style')
+  world.dispose(second)
+  world.dispose(second)
+  assert.equal(world.style(), null, 'the last live generation cleanup must release the style node')
+})
 
-  assert.deepEqual(
-    { refreshed, survivesForeignCleanup, survivesOwnerCleanup },
-    { refreshed: CSS, survivesForeignCleanup: true, survivesOwnerCleanup: false },
-    're-apply must replace stale CSS; non-owner cleanup keeps it and owner cleanup removes it',
-  )
+test('client HMR style ownership survives three generations and repeated disposal', { concurrency: false }, async (t) => {
+  const world = installStyleWorld(t)
+  const first = await world.applyNext()
+  const second = await world.applyNext()
+  const style = world.style()
+  style.textContent = 'stale-third-generation-css'
+  const third = await world.applyNext()
+  assert.equal(style.textContent, CSS)
+
+  world.dispose(first)
+  world.dispose(second)
+  world.dispose(second)
+  assert.ok(world.head.children.includes(style), 'middle/old cleanup must not remove the third generation style')
+  world.dispose(third)
+  world.dispose(third)
+  assert.equal(world.style(), null, 'last generation cleanup must be idempotent and remove the style')
 })
 
 test('trajectory cleanup aborts polling and a late anchor table cannot paint', { concurrency: false }, async (t) => {
@@ -521,7 +567,7 @@ test('trajectory session change aborts old polling and stale anchors cannot pain
   t.after(stop)
   assert.equal(world.requests.length, 1)
   world.root.setAttribute('data-conversation-session', SESSION_B)
-  world.observers[0].callback([{
+  world.mutate([{
     type: 'attributes', target: world.root, attributeName: 'data-conversation-session',
     addedNodes: [], removedNodes: [],
   }])
@@ -530,6 +576,53 @@ test('trajectory session change aborts old polling and stale anchors cannot pain
   world.frames.flush()
   assert.equal(world.caption(), null, 'old session anchors must not paint after the session switch')
   assert.equal(world.requests[0].signal && world.requests[0].signal.aborted, true, 'session change must abort old polling')
+})
+
+test('trajectory isolates side-by-side roots, session switches, removal, and unknown ownership', { concurrency: false }, async (t) => {
+  const base = trajectoryWorld(SESSION_A)
+  const second = base.addRoot(SESSION_B)
+  const unknown = base.addRoot(null)
+  const world = setupTrajectory(t, base)
+  const stop = startTrajectoryDecorator()
+  t.after(stop)
+
+  const requestsFor = (sessionId) => world.requests.filter((request) =>
+    new URL(request.url, 'http://localhost').searchParams.get('sessionId') === sessionId)
+  assert.equal(requestsFor(SESSION_A).length, 1, 'first root must request its own anchors')
+  assert.equal(requestsFor(SESSION_B).length, 1, 'second root must not be shed in favor of the first document row')
+  assert.equal(world.requests.length, 2, 'an ownerless root must not invent a third session request')
+
+  requestsFor(SESSION_A)[0].respond(anchorsPayload('high'))
+  requestsFor(SESSION_B)[0].respond(anchorsPayload('low'))
+  await flushPromises()
+  world.frames.flush()
+  assert.match(domText(world.caption()), /high/, 'A must render A effort')
+  assert.match(domText(second.caption()), /low/, 'B must render B effort')
+  assert.equal(unknown.caption(), null, 'unknown ownership must remain unlabelled when other roots are present')
+
+  const bRequest = requestsFor(SESSION_B)[0]
+  world.root.setAttribute('data-conversation-session', SESSION_C)
+  world.mutate([{
+    type: 'attributes', target: world.root, attributeName: 'data-conversation-session',
+    addedNodes: [], removedNodes: [],
+  }])
+  assert.equal(requestsFor(SESSION_C).length, 1, 'A session change must start only A replacement polling')
+  assert.equal(requestsFor(SESSION_B).length, 1, 'A session change must not restart B')
+  assert.equal(bRequest.signal.aborted, false, 'A session change must not abort B')
+  requestsFor(SESSION_C)[0].respond(anchorsPayload('medium'))
+  await flushPromises()
+  world.frames.flush()
+  assert.match(domText(world.caption()), /medium/)
+  assert.match(domText(second.caption()), /low/, 'A session change must not repaint B')
+  assert.equal(unknown.caption(), null)
+
+  world.root.remove()
+  world.mutate([{ type: 'childList', target: world.body, addedNodes: [], removedNodes: [world.root] }])
+  await flushPromises()
+  world.frames.flush()
+  assert.equal(bRequest.signal.aborted, false, 'removing A must not abort B')
+  assert.match(domText(second.caption()), /low/, 'removing A must not remove or repaint B')
+  assert.equal(unknown.caption(), null)
 })
 
 test('trajectory boundary chip click forwards to the native request dot', { concurrency: false }, async (t) => {
@@ -545,7 +638,7 @@ test('trajectory boundary chip click forwards to the native request dot', { conc
   assert.equal(world.dot.clickCount, 1)
 })
 
-test('trajectory boundary chip Enter and Space are equivalent to click', { concurrency: false }, async (t) => {
+test('trajectory boundary chip keyboard activation follows native button semantics', { concurrency: false }, async (t) => {
   const world = setupTrajectory(t)
   const stop = startTrajectoryDecorator()
   t.after(stop)
@@ -554,26 +647,57 @@ test('trajectory boundary chip Enter and Space are equivalent to click', { concu
   world.frames.flush()
   const caption = world.caption()
   assert.ok(caption, 'anchor response should paint a real chip')
+  const nativeButton = caption.tagName === 'BUTTON'
   const role = caption.getAttribute('role')
-  const hasTabStop = caption.tabIndex === 0 || caption.getAttribute('tabindex') === '0'
+  const hasTabStop = nativeButton || caption.tabIndex === 0 || caption.getAttribute('tabindex') === '0'
+  const dispatchKey = (event) => {
+    caption.dispatchEvent(event)
+    if (!nativeButton) return
+    if (event.type === 'keydown' && event.key === ' ') event.preventDefault()
+    if (!event.repeat && ((event.type === 'keydown' && event.key === 'Enter')
+      || (event.type === 'keyup' && event.key === ' '))) caption.click()
+  }
+
   caption.dispatchEvent({ type: 'click' })
-  const enter = { type: 'keydown', key: 'Enter' }
-  caption.dispatchEvent(enter)
+  const enter = { type: 'keydown', key: 'Enter', repeat: false }
+  dispatchKey(enter)
   const afterEnter = world.dot.clickCount
-  const space = { type: 'keydown', key: ' ' }
-  caption.dispatchEvent(space)
-  const afterSpace = world.dot.clickCount
+  dispatchKey({ type: 'keydown', key: 'Enter', repeat: true })
+  const afterRepeatedEnter = world.dot.clickCount
+  const spaceDown = { type: 'keydown', key: ' ', repeat: false }
+  dispatchKey(spaceDown)
+  const afterSpaceDown = world.dot.clickCount
+  dispatchKey({ type: 'keydown', key: ' ', repeat: true })
+  const afterRepeatedSpaceDown = world.dot.clickCount
+  const spaceUp = { type: 'keyup', key: ' ', repeat: false }
+  dispatchKey(spaceUp)
+  const afterSpaceUp = world.dot.clickCount
+
   assert.deepEqual(
     {
-      role, hasTabStop, afterEnter, afterSpace,
+      nativeSemantics: nativeButton || role === 'button',
+      hasTabStop,
+      afterEnter,
+      afterRepeatedEnter,
+      afterSpaceDown,
+      afterRepeatedSpaceDown,
+      afterSpaceUp,
       enterPrevented: enter.defaultPrevented === true,
-      spacePrevented: space.defaultPrevented === true,
+      spaceDownPrevented: spaceDown.defaultPrevented === true,
       focusVisible: CSS.includes('.er-trj-boundary:focus-visible'),
     },
     {
-      role: 'button', hasTabStop: true, afterEnter: 2, afterSpace: 3,
-      enterPrevented: true, spacePrevented: true, focusVisible: true,
+      nativeSemantics: true,
+      hasTabStop: true,
+      afterEnter: 2,
+      afterRepeatedEnter: 2,
+      afterSpaceDown: 2,
+      afterRepeatedSpaceDown: 2,
+      afterSpaceUp: 3,
+      enterPrevented: true,
+      spaceDownPrevented: true,
+      focusVisible: true,
     },
-    'chip must be Tab-focusable, visible on focus, and Enter/Space must prevent default while invoking the click action',
+    'Enter activates on keydown; Space prevents scrolling on keydown and activates once on keyup; repeats are inert',
   )
 })

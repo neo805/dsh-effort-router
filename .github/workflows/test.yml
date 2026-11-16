@@ -31,17 +31,45 @@ jobs:
       - name: bundle diff
         shell: bash
         run: git diff --exit-code -- lib/client.js
-      # Pack must keep every artifact the manifest promises (files[]).
+      # Pack must keep every artifact the manifest promises (files[]). A
+      # working-tree existence check cannot catch a file that files[] silently
+      # drops from the published tarball, so pack the real artifact, read its
+      # listing, and assert every promised file is inside it.
       - name: pack contents
         shell: bash
         run: |
-          node -e "
-            const { readFileSync, existsSync } = require('node:fs');
-            const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-            const mains = [pkg.main, 'lib/client.js', 'cordis.patch.yml'].filter(Boolean);
-            for (const file of mains) if (!existsSync(file)) { console.error('missing packed artifact: ' + file); process.exit(1); }
-            for (const file of ['README.md', 'README.zh.md', 'CHANGELOG.md', 'LICENSE']) {
-              if (!existsSync(file)) { console.error('missing packaged doc: ' + file); process.exit(1); }
-            }
-          "
+          set -euo pipefail
+          PACK_DIR="$(mktemp -d)"
+          trap 'rm -rf "$PACK_DIR"' EXIT
+          pnpm pack --pack-destination "$PACK_DIR"
+          TGZ="$(find "$PACK_DIR" -maxdepth 1 -name '*.tgz')"
+          if [ -z "$TGZ" ] || [ "$(printf '%s\n' "$TGZ" | wc -l | tr -d ' ')" -ne 1 ]; then
+            echo "::error::expected exactly one packed tarball, got: ${TGZ:-none}"
+            exit 1
+          fi
+          # GNU tar (ubuntu) and bsdtar (windows-latest) both print a gzip
+          # listing for -tzf; no bsdtar-only flags are used.
+          tar -tzf "$TGZ" > "$PACK_DIR/contents.txt"
+          PACK_LIST="$PACK_DIR/contents.txt" node - <<'NODE'
+          const { readFileSync } = require('node:fs')
+          const entries = new Set(
+            readFileSync(process.env.PACK_LIST, 'utf8').split(/\r?\n/).filter(Boolean),
+          )
+          const required = [
+            'package/lib/index.js',
+            'package/lib/client.js',
+            'package/cordis.patch.yml',
+            'package/README.md',
+            'package/README.zh.md',
+            'package/CHANGELOG.md',
+            'package/LICENSE',
+            'package/THIRD_PARTY_NOTICES.md',
+          ]
+          const missing = required.filter((entry) => !entries.has(entry))
+          if (missing.length > 0) {
+            console.error('::error::tarball is missing ' + missing.join(', '))
+            process.exit(1)
+          }
+          console.log('packed artifact: ' + entries.size + ' entries, all manifest files present')
+          NODE
       - run: node --test "test/**/*.test.mjs"

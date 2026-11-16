@@ -765,6 +765,53 @@ test('route: /effort-router/dictionaries reports effective, builtin, override, a
   assert.deepEqual(full.dictionaries.strong.effective, ['only-this'])
 })
 
+test('route: a finished stored history is not reread after the polling TTL', async (t) => {
+  const realNow = Date.now
+  let now = 1_000
+  Date.now = () => now
+  t.after(() => { Date.now = realNow })
+  let reads = 0
+  const h = routeHarness(entry.Config({}), {
+    sessionQuery: {
+      async readSession() {
+        reads += 1
+        return { events: storedEvents }
+      },
+    },
+  })
+  await h.asJson('/effort-router/state', '?sessionId=s&view=anchors')
+  now += 31_000
+  await h.asJson('/effort-router/state', '?sessionId=s&view=anchors')
+  now += 31_000
+  const third = await h.asJson('/effort-router/state', '?sessionId=s&view=anchors')
+  assert.equal(third.anchors.call_cached.effort, 'low')
+  assert.equal(reads, 1, 'polling a non-live finished log must not reread and refold its full history every 30 seconds')
+})
+
+test('route: live activity invalidates a previously cached stored history', async () => {
+  let live = false
+  let reads = 0
+  const liveAnchors = { call_live: { provider: 'gw', model: 'thinker', effort: 'high' } }
+  const h = routeHarness(entry.Config({}), {
+    sessions: { get: (id) => (live ? { id } : undefined) },
+    projections: { stateOf: () => ({ anchors: liveAnchors }), register: () => () => {} },
+    sessionQuery: {
+      async readSession() {
+        reads += 1
+        return { events: storedEvents }
+      },
+    },
+  })
+  const stored = await h.asJson('/effort-router/state', '?sessionId=s&view=anchors')
+  assert.equal(stored.anchors.call_cached.effort, 'low')
+  live = true
+  const active = await h.asJson('/effort-router/state', '?sessionId=s&view=anchors')
+  assert.equal(active.anchors.call_live.effort, 'high')
+  live = false
+  await h.asJson('/effort-router/state', '?sessionId=s&view=anchors')
+  assert.equal(reads, 2, 'a resumed session must not reuse the pre-live static snapshot after it becomes stored again')
+})
+
 test('route: a history session reads through observeSession when readSession is absent', async () => {
   const events = [
     { type: 'request/header', data: { header: { config: { provider: 'gw', model: 'thinker', reasoningEffort: 'high' } } } },

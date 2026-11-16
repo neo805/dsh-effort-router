@@ -4,6 +4,78 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.18-agent.1] - 2026-11-16
+
+The T-01…T-09 construction pass on top of `0.2.18-agent.0`. Every change below
+is observable; the internal seams stayed put (one loop per runtime contract, no
+new settings surface, no schema change).
+
+### Changed
+
+- **Per-step Auto never materializes a durable selection (T01).** A pinned
+  `defaultLevel` or a fixed `subagentEffort` is now a per-turn projection only:
+  the step runs at the mapped level, the host's native selection state is not
+  written, and no selection is restored at `turn/end`. A fixed default therefore
+  leaves zero `model/selection` events and zero `select()` calls behind.
+- **Selection capture is keyed by its raw source (T02).** The cached capture now
+  carries the raw native selection it was planned from; if the native value
+  changes inside the step (a pick made while the step is being prepared), the
+  stale capture is dropped and the newer native value wins — the step is not
+  re-scheduled and no second rank decision is logged.
+- **Trust only the current native selection on takeover (T02).** The persisted
+  decision witness explains a concrete selection only while the native option is
+  still the Auto sentinel; a replacement generation re-created with a concrete
+  effort is a native manual fact, and a concrete `pending` pick is never
+  overridden. The `state.lastDurable` cross-turn echo is gone.
+- **Delegation inheritance is frozen at child creation (T03).** The child's seed
+  is classified against the parent's era *as of `agent/created`*: a parent on a
+  manual pick or pinned default makes the seed native, and a later Auto era on
+  the parent never reclassifies it. Inside one continuous Auto era any matching
+  witness still counts (delegation is non-blocking).
+- **`allowedEfforts` filters the final selector ids (T04).** Both loops now map
+  the allow-list onto the advertised ids themselves instead of converting the
+  labels to a rank ceiling, so an id that is not advertised can never be
+  selected. The legacy `allowMax:false` + `maxFallback` pin keeps its rank-ceiling
+  meaning, and an explicit list still wins when both are set.
+- **Unknown selector ids are strictly ordered (T04).** Leading/trailing unknown
+  ids at a mixed boundary get fractional ranks instead of clamped ties, so every
+  advertised id stays exactly addressable and the total order is strict.
+- **Brief accounting is claim/projection aware (T05).** A claim whose text is
+  already waiting as a projection brief marks that brief claimed instead of
+  adding a second volume, late claims add no volume, and per-turn claims are kept
+  as lists so a multiline brief keeps its line boundaries.
+- **Projection replacement rebuilds derived state (T05).** A new
+  `session.surface.replaceGeneration` resets the origin, seen map, ring, error
+  window and brief ledger in one step, so a replaced branch is classified from
+  its own messages; a same-generation shrink still only resyncs.
+- **Stored history is cached until it is live again (T06).** A finished stored
+  session's folded anchor table no longer expires after 30 s; it is dropped when
+  the session becomes live (and refetched after it returns to history). Failed
+  reads keep their 5 s backoff, the 64-entry LRU and single-flight read are
+  unchanged. Polling a history pane no longer refolds the whole log.
+- **Trajectory state is per conversation root (T07).** Anchors, polling,
+  observation, abort and caption caches belong to the root they were discovered
+  in; an unresolved owner omits anchors instead of borrowing a neighbour's.
+- **Style ownership and chip semantics (T08).** The injected stylesheet is
+  reference-counted across generations (created/refreshed/disposed, deleted at
+  zero, surviving a repeated dispose), and the boundary chip behaves like a
+  native button: Enter on keydown (repeats ignored), Space on keyup (once),
+  `preventDefault` where the browser would scroll or submit, focus-visible
+  preserved.
+- **CI inspects the real artifact (T09).** The pack step now runs `pnpm pack`,
+  lists the tarball and asserts every manifest-promised file (bundle, patch,
+  both READMEs, CHANGELOG, LICENSE, THIRD_PARTY_NOTICES) is inside it.
+
+### Fixed
+
+- Custom-model effort fill no longer treats missing model metadata as a
+  confirmed "no reasoning levels": a `null`/`undefined` reply (or a failing
+  resolver) warns and skips the model, so the settings document is never
+  rewritten on a guess. A resolved empty effort list still fills as before.
+- The decision store's unwritable-path test is platform-neutral: it asserts the
+  write warning fires once per run instead of counting the POSIX-only read
+  warning, which made Ubuntu CI red while Windows stayed green.
+
 ## [0.2.18-agent.0] - 2026-11-16
 
 First published `-agent` release (producer-approved push). The shipped code

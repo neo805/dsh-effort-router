@@ -70,12 +70,17 @@ test('createStore: an unwritable path warns ONCE and keeps serving in memory', (
   const store = createStore(join(blocker, 'state.json'), { info() {}, warn: (m) => warns.push(m) })
   store.record('s1', { at: 1, turn: 1, step: 1, mode: 'auto', effort: 'low' })
   store.flush()
-  assert.equal(warns.length, 1, 'a permanently unwritable store must be visible')
-  assert.match(warns[0], /decision store is not writable/)
+  // The READ path warning is platform-specific: reading `<regular file>/state.json`
+  // raises ENOTDIR on POSIX (warned once as "could not be read … starting empty")
+  // but ENOENT on Windows (silently an empty store). Only the WRITE warning is
+  // this test's contract, so count that one and let the platforms differ above.
+  const unwritable = () => warns.filter((line) => /decision store is not writable/.test(line))
+  assert.equal(unwritable().length, 1, 'a permanently unwritable store must be visible')
+  assert.match(unwritable()[0], /decision store is not writable/)
   // In-memory state still answers, and the warning is not repeated every flush.
   assert.equal(store.last('s1').effort, 'low')
   store.record('s1', { at: 2, turn: 1, step: 2, mode: 'auto', effort: 'high' })
   store.flush()
-  assert.equal(warns.length, 1, 'the warning fires once per run, not per write')
+  assert.equal(unwritable().length, 1, 'the warning fires once per run, not per write')
   assert.equal(store.last('s1').effort, 'high')
 })

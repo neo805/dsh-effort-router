@@ -40,30 +40,47 @@ export const CSS = [
   '.er-trj-boundary:focus-visible{outline:1px solid var(--dsw-alias-border-accent,currentColor);outline-offset:1px}',
 ].join('')
 
+/**
+ * Reference-counted installer. HMR can dispose generations in ANY order, so
+ * the node is shared and the count lives ON the element (a re-evaluated
+ * module keeps counting the same node). Every call — a fresh install or a
+ * refresh of an existing node — takes one reference; every returned cleanup
+ * releases at most once, and the node is removed only when the last
+ * reference goes away. That makes "old generation disposes first" and
+ * repeated disposal both safe: the live generation keeps the CSS, and the
+ * old generation can never remove what it no longer owns.
+ */
 export function ensureStyles() {
   if (typeof document === 'undefined' || !document.head) return () => {}
-  // CSS is a live asset: HMR re-installs without a full page reload, so an
-  // existing node is REFRESHED rather than trusted. Ownership stays with the
-  // generation that CREATED the node: a later apply refreshes the rules but
-  // never adopts the node, so cleanup only removes what this apply installed.
-  const owner = {}
-  const existing = document.getElementById(STYLE_ID)
+  type RefCountedStyle = HTMLElement & { __erStyleRefs?: number }
+  const existing = document.getElementById(STYLE_ID) as RefCountedStyle | null
+  let node: RefCountedStyle
   if (existing) {
+    // CSS is a live asset: an existing node is REFRESHED rather than trusted,
+    // so a stale HMR generation cannot leave old rules behind.
     if (existing.textContent !== CSS) existing.textContent = CSS
-    if (!existing.__erOwner) existing.__erOwner = owner
-    return () => {}
+    node = existing
+  } else {
+    const created = document.createElement('style')
+    created.id = STYLE_ID
+    created.textContent = CSS
+    document.head.appendChild(created)
+    node = created as RefCountedStyle
   }
-  const style = document.createElement('style')
-  style.id = STYLE_ID
-  style.textContent = CSS
-  style.__erOwner = owner
-  document.head.appendChild(style)
+  node.__erStyleRefs = (node.__erStyleRefs || 0) + 1
+  let released = false
   return () => {
-    if (style.__erOwner !== owner) return
-    style.__erOwner = null
-    if (style.remove) style.remove()
+    if (released) return
+    released = true
+    const refs = (node.__erStyleRefs || 0) - 1
+    if (refs > 0) {
+      node.__erStyleRefs = refs
+      return
+    }
+    node.__erStyleRefs = 0
+    if (typeof node.remove === 'function') node.remove()
     else if (document.head && Array.isArray(document.head.children)) {
-      const at = document.head.children.indexOf(style)
+      const at = document.head.children.indexOf(node)
       if (at >= 0) document.head.children.splice(at, 1)
     }
   }

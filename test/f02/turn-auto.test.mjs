@@ -132,7 +132,7 @@ test('F02-06 fixed subagentEffort bypasses scheduling and preserves parent Auto'
   assert.equal(result.config.reasoningEffort, 'max')
   assert.equal(parent.agent.model.current().reasoningEffort, 'auto')
   assert.equal(child.agent.model.current().reasoningEffort, 'max')
-  assert.equal(child.selectionEvents.some((event) => event.reasoningEffort === 'auto'), false)
+  assert.equal(child.selectionEvents.length, 0, 'FR-076: a fixed subagent capture must not write native selection memory')
   assert.equal(host.logs.filter((line) => line.includes('rank ') && line.includes(child.session.id)).length, 0)
 })
 
@@ -160,6 +160,6 @@ test('F02-08 an explicit fixed subagent off is honored without entering Auto sch
   const result = await host.runStep(child.agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(result.config.reasoningEffort, 'off')
   assert.equal(child.agent.model.current().reasoningEffort, 'off')
-  assert.equal(child.selectionEvents.some((event) => event.reasoningEffort === 'auto'), false)
+  assert.equal(child.selectionEvents.length, 0, 'FR-076: a fixed subagent capture must not write native selection memory')
   assert.equal(host.logs.filter((line) => line.includes('rank ') && line.includes(child.session.id)).length, 0)
 })

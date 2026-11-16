@@ -205,7 +205,28 @@ test('F01-10 modern path preserves capability allow-list and nearest-up mapping'
   assert.equal(effort(result), 'high')
 })
 
-test('F01-11 subagent with Auto parent schedules from its own brief without changing parent', async (t) => {
+test('F01-10b explicit allowedEfforts filters final ids, not interpolated ranks', async (t) => {
+  const host = await autoModern(t, { allowedEfforts: ['medium', 'max'] }, {
+    llm: {
+      adapters: new Map(),
+      async resolveModelInfo() {
+        return { reasoning: { efforts: [
+          { id: 'low' },
+          { id: 'vendor-3' },
+          { id: 'vendor-4' },
+          { id: 'vendor-5' },
+          { id: 'max' },
+        ] } }
+      },
+    },
+  })
+  const { agent } = await announced(host, 'f01-allow-final-ids')
+  const result = await host.runStep(agent, { claimed: [userMessage(ENGINEERING)] })
+  assert.equal(effort(result), 'max',
+    'an unknown vendor id must not borrow an allowed canonical rank to escape the final-id allow-list')
+})
+
+test('F01-11 subagent with Auto parent schedules from its own brief without native selection writes', async (t) => {
   const host = await autoModern(t)
   const parent = await announced(host,'f01-parent')
   await host.runStep(parent.agent, { claimed: [userMessage(TRIVIAL)] })
@@ -216,9 +237,10 @@ test('F01-11 subagent with Auto parent schedules from its own brief without chan
   const result = await host.runStep(child.agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(effort(result), 'high')
   assert.equal(parent.agent.model.current().reasoningEffort, 'auto')
-  assert.equal(child.agent.model.current().reasoningEffort, 'auto')
-  assert.equal(child.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
-  assert.equal(child.selectionEvents.every((event) => event.reasoningEffort === 'auto'), true, 'the child retains logical Auto without concrete select writes')
+  assert.equal(child.agent.model.current().reasoningEffort, 'high',
+    'a concrete inherited child must not be restored to Auto at turn/end')
+  assert.equal(child.agent.session.projection('modelSelection').pending, null)
+  assert.equal(child.selectionEvents.length, 0, 'FR-076: scheduled delegation output never enters native selection memory')
 })
 
 test('F01-12 subagent inherits a concrete parent selection verbatim', async (t) => {

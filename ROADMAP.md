@@ -4,6 +4,53 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
+## 0.2.18-agent.1 — per-step projection only (LANDED)
+
+Delivered 2026-11-16 (test baseline 356/356, no skips). The construction batch
+T-01…T-10 in `DEVELOPMENT-PLAN.md`; what changed on top of `0.2.18-agent.0`:
+
+- **T-01** a pinned `defaultLevel` / fixed `subagentEffort` is a per-turn
+  projection only — the step runs at the mapped level, the native selection is
+  never written, and nothing is restored at `turn/end` (zero `model/selection`
+  events, zero `select()` calls).
+- **T-02** the capture cache is keyed by the RAW source selection it was planned
+  from, so a newer native pick inside the step wins and is not overwritten; the
+  persisted decision witness now explains a concrete selection only while the
+  native option is still the Auto sentinel (a replacement generation's concrete
+  effort is a native manual fact). `state.lastDurable` is gone.
+- **T-03** delegation inheritance is classified against the parent era frozen at
+  `agent/created`: a manual pick or pinned default at that instant makes the
+  child's seed native, and a later Auto era never reclassifies it. Custom-model
+  fill warns and skips when `resolveModelInfo` answers `null`/`undefined`
+  (missing metadata is not an empty reasoning list); the settings document is
+  untouched on a guess.
+- **T-04** an explicit `allowedEfforts` list filters the FINAL advertised
+  selector ids in both loops; `allowMax:false` + `maxFallback` keeps its
+  rank-ceiling meaning. `normalizeEfforts` gives leading/trailing unknown ids
+  fractional ranks (strict total order, no clamped ties).
+- **T-05** brief accounting: a claim matching a brief the projection already
+  holds claims that brief instead of adding volume, per-turn claims are lists
+  (multiline briefs keep boundaries), and `session.surface.replaceGeneration`
+  rebuilds origin/seen/ring/error/brief state in one step.
+- **T-06** a finished stored session's folded anchors are cached without a time
+  limit and dropped when the session becomes live again; failures keep the 5 s
+  backoff and the 64-entry LRU/single-flight read.
+- **T-07 / T-08** trajectory state is per conversation root (unknown ownership
+  omits), styles are reference-counted across generations, and the boundary chip
+  follows native button keyboard semantics.
+- **T-09** the CI pack gate inspects the real `pnpm pack` tarball for every
+  manifest-promised file.
+
+Accepted residue (not a defect, do not re-open without a producer decision):
+
+- The delegation era is only frozen when this controller observes
+  `agent/created`; a child created before the plugin loaded falls back to the
+  contiguous-era scan of the parent's decision log.
+- `normalizeEfforts` keeps at most `7 + (count−1)` for an all-unknown advertised
+  vector (documented behaviour since 0.2.16, pinned by tests).
+- The legacy 0.2.1 loop still writes `model/selection` via `markAutoPending` and
+  the manual restoration path; only the 0.2.2 loop is projection-only.
+
 ## 0.2.18-agent.0 — synchronous current-selection Auto (LANDED)
 
 Delivered 2026-11-16 (test baseline 320/320). What shipped on top of the
@@ -37,9 +84,11 @@ Maintainer decisions recorded 2026-11-16:
   writes. The wrapper is capture-scoped: outside an active turn, `current()` still
   returns the native logical selection so configuration restoration cannot pin a
   temporary concrete effort. Request headers and decision
-  records carry the actual concrete effort. The former step/end preselection and
-  turn/end restoration route is retired after its replacement passes the full
-  continuous-step, takeover, disposal and third-party-wrapper matrix.
+  records carry the actual concrete effort. The former step/end preselection
+  route is retired after its replacement passes the full continuous-step,
+  takeover, disposal and third-party-wrapper matrix; the only `turn/end` write
+  that survives is the guarded restore of the durable intent described above
+  (one microtask after the turn closes, skipped when the native selection moved).
 - **G-02 / native global memory selected:** DSH 0.2.2-rc.3 natively saves and
   restores the latest provider/model/reasoningEffort selection, including the
   plugin-advertised `auto` ID. F-06 is frozen: no plugin preference store,

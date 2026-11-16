@@ -1,121 +1,102 @@
-# dsh-effort-router 下一阶段开发计划（决断定稿版）
+# 下一阶段开发计划 — 0.2.18-agent.1
 
-> 状态：规划与测试先行阶段；尚未施工生产代码。
+> 状态：**TEST-FIRST / 待施工**。基线为 `0.2.18-agent.0`。本轮只提交开发计划与行为/契约测试；生产实现交由下一位施工代理完成。实际 push/tag 仍须出品人另行批准。
 >
-> 当前发布基线：`0.2.17-rc.1`，原标准命令 `node --test "test/**/*.test.mjs"` 为 **245/245**。
-> 下一施工版本：`0.2.17-agent.1`。本文件取代此前的 A/B/C 降级方案与插件 F-06 建设方案。
+> 需求优先级：`REQUIREMENTS.html` > 已批准技术路线 > `ROADMAP.md` > 旧测试与旧注释。旧测试若锁定与需求冲突的行为，应按需求改写，不得为了保绿继续保留错误行为。
 
-## 1. 本轮目标与已锁定边界
+## 1. 审查结论
 
-1. **G-01 已选 D：** DSH 0.2.2 不再依赖 `step/end` 后补写选择；按 Agent 包装 `model.current()`，把原生逻辑 Auto 同步解析为本次 capture 的 concrete effort。完整保留逐步 Auto，不做安全降级，不修改宿主。
-2. **G-02 已选原生全局记忆：** 使用 DSH 原生最近全局 `provider/model/reasoningEffort` 选择；F-06 冻结，不开发插件偏好库、`rememberLastEffort` 配置或 provider+model 记忆表。
-3. 先红后绿。测试必须执行真实行为或真实宿主时序；不得用文本检查冒充行为，也不得为了保留旧实现断言而要求新路线继续 `model.select()`。
-4. 保留 0.2.1 legacy、手动直通、普通 Auto 不路由 off、profile 隔离、客户端只读、bundle 装载和无设置 UI。
-5. 不无证据重写 gzip、轨迹投影、增量 DOM、store 或分类器；本轮只做计划、文档与测试，实际 push/tag 仍需出品人批准。
+1. **继续 current() 同步 capture 路线，不再逐步 select 是正确方向。** 需要截弯取直的是现代路径中遗留的轮末 durable 恢复、store witness 猜测和跨轮 echo 残态，不是推翻 capture。
+2. **现代与 legacy 的宿主缝必须分开。** 0.2.1 的 request interceptor 可以保留原有 echo/fixed 兼容；0.2.2 以原生 raw selection、pending 与 capture 为准。不得为了去重把两条路径重新揉成一条。
+3. **本轮有实证，不做感觉型重构。** 保留有界 signals ring、store debounce、客户端增量 observer、anchors 上限与 current 路线；不重写 gzip、分类器、store 或徽标轮询。
+4. **基线：** 原始 `node --test "test/**/*.test.mjs"` 为 320/320。新增测试必须只因下述缺失行为而红；施工结束后全量转绿，不能 skip 或删除红灯。
 
-## 2. 审查结论与截弯取直方向
+## 2. 施工任务与验收目标
 
-| 优先级 | 证据与根因 | 需求影响 | 已定修复方向 |
-|---|---|---|---|
-| P0 | 真实 0.2.2 loop 在 `agent/pre-step` 前 capture `model.current()`；`lib/turn-auto.js:224-238` 又在 append publish 内预选下一步，microtask 重试晚于下一次 capture | FR-040、FR-060；续步计划值不是请求实际值 | 在 capture 本身同步解析；移除逐步 `model.select`、step/end 预选和 turn/end 恢复，不再修补 append 时序 |
-| P0 | `lib/index.js:900-1033` 主要按 claim 记录，continuation 没有独立实际记录 | FR-042、FR-060 | 每次 capture 只调度一次并记录实际 effective selection；request/header 用于一致性证据，不二次调度 |
-| P1 | `lib/signals.js:400-409` 按行比较 claim，`:680-692` 按完整消息累加 | FR-010、FR-013 | 统一为完整消息/消息身份的一次性消费，不再增加逐行特判 |
-| P1 | `lib/routing.js:45-50` 全未知分支取整，已知锚点分支使用严格插值 | FR-017 | 统一严格全序数学表达，保持 1..7、去重和 allow-list |
-| P1 | 数字向量在 `lib/index.js:275-278` 与 `lib/policy.js:413-417` 双重且不同语义清洗 | 配置与告警真实性 | 配置边界一次严格整组解析；policy 不再抢救部分合法值 |
-| P1 | `lib/policy.js:229-247` 声明词干，`:383-394` 却给所有英文词加双侧词边界 | FR-010 | 只对显式词干做受控前缀匹配，不扩词典、不改阈值 |
-| P1 | resumed fallback 把 source-less user-role tool-result 当 brief；旧测试锁定该行为 | FR-010 | 真实用户文本优先；纯工具结果只表示恢复工作 |
-| P1 | subagent 事件在开关关闭时仍累积，重开后 replay | FR-014 | 与 compaction/todo 一致：关闭即清空并重置水位 |
-| P1 | `lib/capability.js:145,168-176` marker 与函数所有权脱节 | FR-005 | active flag 停用旧 wrapper；dispose 不覆盖第三方后包装 |
-| P1 | `lib/runtime.js:73-83` 把所有 app-boot import 错误都解释为 0.2.1 | fail-closed | 只有目标模块自身 `ERR_MODULE_NOT_FOUND` 才 legacy，内部错误原样抛出 |
-| P1 | 自定义模型两个入口重复解析，user provider `compat=false` 未优先 | FR-050～053 | canonical key 去重；先合并用户限制再补默认 |
-| P1 | store 浅验根对象，坏行到 record 才爆，`__proto__` 可写原型 | NFR-003 | 行级 plain-object 校验、告警跳过、own/null-prototype 存储 |
-| P1 | 三处 fetch 无取消；全局 style 不归 effect 所有；chip 仅鼠标 | FR-005、NFR-004/006 | 在现有 owner 中 abort；style 可更新且按 ownership 清理；补完整键盘语义 |
-| P2 | CI 只 install/test | 交付真实性 | 增加 build、pack/diff、超时和最小权限 |
+### T01 — 现代路径不再写 durable 选择（P0，路线截弯取直）
 
-### 明确不重写的部分
+- **技术路线：** modern Auto 只投影到本次 `model.current()` 返回值；删除 scheduled Auto 的 turn/end `model.select(Auto)` 恢复。modern 的 fixed `defaultLevel` / `subagentEffort` 也只走本次 projection，不写全局选择；legacy 的 request 写法和人工不支持档恢复保持不变。pending 标记只描述真实 logical Auto，不记录插件计算出的 concrete effort。
+- **验收：** Auto 轮结束后原生选择保持原样；无原生选择/defaultLevel:auto 不被写成 Auto；fixed 默认值与 concrete 子代理不写全局记忆；DSH 原生最近全局 provider/model/reasoningEffort 只由用户明确选择更新。对应 modern durable/restore 测试与 FR-070～078 测试全绿。
 
-- `src/client/trajectory.ts:493-601` 的增量 observer、WeakMap、rAF 与 DOM cleanup 保留。
-- 同步 gzip 首轮压缩 p99 约 0.417ms，无生产阻塞证据，不引入 async zlib 或全局限额。
-- longWindow 的 N 个 sealed + 1 个 open brief 有既有测试背书，不改窗口语义。
-- F-06 原 20 项逐模型偏好测试不再是指引施工的红灯；它们改写为原生全局选择兼容契约。
+### T02 — modern capture 与人工接管只认当前原生事实（P0）
 
-## 3. 下一阶段任务、技术路线与验收
+- **技术路线：** capture cache 除 `turn:step` 外核对 raw source selection，raw 改变立即重算。删除 modern `lastDurable` 跨轮 echo 和 `store.last` witness 猜测；replacement 没有 pending 时以 raw selection 为准，legacy `isSelectionEcho` 不动。
+- **验收：** 同一步 Auto→插件 high→用户 max 后，再次 `current()` 必须返回 max；fixed default 第二轮不被第一轮残留误判为 Auto；replacement 的人工 low 不被旧 decision 再调度；raw 未变的重复 capture 仍复用缓存。
 
-### T-01　现代 `current()` 同步解析与连续步真实记录（P0）
+### T03 — delegation 与自定义模型安全边界（P0）
 
-- **路线：** 以真实 0.2.2 harness 锁定 append 重入锁、`step/end → 下一 preStep` 无等待顺序、capture 早于 pre-step 及 claimed=[] 的工具续步。现代控制器按 Agent 保存 bound raw `current()`，并仅在 `turn/start` 后的真实 capture 窗口把 raw Auto 同步解析成 effective concrete；回合外 current 保持原生逻辑选择。raw concrete 直通，插件内部规划只读 raw selection，避免递归和人工误判。
-- **截弯取直：** 新路线生效后，不再为每个 Auto step 调 `model.select()`，删除 step/end 预选、pendingWrite/retry 和 turn/end Auto 恢复。原生 pending/logical Auto 不因 concrete request/header 被清除；徽标继续表示 Auto，记录和轨迹使用本步 concrete。
-- **先行测试：** 连续步实际 `['low','medium']`、每步 store 实际值、同一 capture 重复 current 不重复收集/记录、raw Auto 跨 header 保留、手动 concrete/off 即时接管、default/subagent/disabled/unsupported、无 select 但可 current 的宿主正常工作、无 current 或仍捕获 Auto 时 fail closed、dispose/HMR/第三方 wrapper 所有权。另测回合外 `applyConfiguredRoute` 读取 current 后仍恢复 Auto，不把 effective concrete 固化进原生选择。旧 F-01/F-02 中依赖补写和轮末恢复的断言同步改成新契约。
-- **验收：** 不修改宿主、不发逐步 model/selection 写事件；立即续步的 capture/request/store 一致，Auto 不泄漏，手动接管不被后续 capture 覆盖，回合外公共 current 语义不被改写，卸载恢复原方法且旧 wrapper 不再调度。
+- **技术路线：** delegation echo 只扫描最近连续 auto/subagent 时代，遇 manual/default 即停止，保留 non-blocking delegation 正例。自定义模型只有确认 `efforts:[]` 才可自动补档；`resolveModelInfo` 返回 null/undefined 或异常时只警告、不写 settings，已解析 `reasoning:null` 的正常 fill 不受影响。
+- **验收：** 人工时代之后迟到的 child echo 不恢复 Auto；连续 auto/subagent echo 仍能路由。信息未知时 `settings.update` 调用为 0，确认无档与已解析无 reasoning 的现有行为不变。
 
-### T-02　证据链与 rank 正确性（P0/P1）
+### T04 — final-id allow-list 与严格 effort 全序（P0）
 
-- **路线：** 修复多行 claim/projection 重复计量、resumed tool-result、subagent 关闭期积累；统一全未知 efforts 的严格全序。保留有界窗口和公开导出。
-- **先行测试：** 多行 brief 只开启一次且体积/warmup 不重复，不同 turn 同文仍各算；1/2/3/4/5/6/8 个未知 ID 全可达；工具结果不成为 origin；开关重开不 replay。
-- **验收：** origin、briefVolumeRaw、warmup、rank/mapping/final effort 全符合断言；单行、已知锚点、重复 ID、allow-list 与三种 fallback 不回归。
+- **技术路线：** 显式 `allowedEfforts` 按最终 selector ID 过滤，不能再只转成 rank；legacy `deprecatedAllowMax` 继续按 rank ceiling。`normalizeEfforts` 在 known/unknown 混合边界使用严格有序的内部插值表示，避免 clamp 造成同 rank；保留 canonical 优先、fallback 矩阵和公开返回形状。
+- **验收：** `allowed=['medium','max']`、`levels=['low','vendor-3','vendor-4','vendor-5','max']` 在 modern/legacy 均选 max，不能泄漏 vendor-3；legacy allowMax 仍可选 vendor-4。`['a','b','low']` 与 `['max','a','b']` 均严格升序，每个广告档位的精确映射可达，现有全未知/canonical 测试不回归。
 
-### T-03　配置解析与英文词干（P1）
+### T05 — evidence 分支代际与 brief 双向去重（P0）
 
-- **路线：** 数字字符串向量严格整组解析；显式 migrat/optimiz/diagnos/integr 等词干使用受控前缀匹配。其余词表与分类阈值不动。
-- **先行测试：** errorDecay/briefRamp/toolRamp 的混合非法、空片段、全非法、负值、重复 rung、CJK 分隔符及告警；词干原形/派生词和 capital≠api 等反例。
-- **验收：** 非法向量使用对应默认并告警；派生词命中而普通完整词不错误扩张。
+- **技术路线：** 使用宿主 `session.surface.replaceGeneration` 识别 projection replacement；代际变化时原子重建 origin、seen、ring、error、brief 等派生状态，同 generation 的 append/compaction 继续增量。brief 用“projection 待 claimed 认领计数”抵消同一条物理消息，不按 turn/text 全局去重。
+- **验收：** 同对象等长替换和 shrink 都不保留旧 effort/error/brief；同 generation compaction 不重置信号。claimed→projection 与 projection→claimed 的同一多行 brief 均只计一次，同 turn 两条真实同文消息仍各计一次。
 
-### T-04　宿主装配、模型填充与存储硬化（P1）
+### T06 — stored history 不做周期性强制的全史重读（P1）
 
-- **路线：** wrapper active ownership；runtime import fail loud；custom-model 合并限制后按 key 去重；store 行级校验与原型安全。每项独立小改，不合并成重写。
-- **先行测试：** 第三方包装后的重 apply/dispose、目标缺失/内部 throw/嵌套依赖缺失、compat=false、models[]/overrides 同 key、malformed JSON、scalar/array/null row、`__proto__`。
-- **验收：** 卸载后不再注入 Auto，不覆盖第三方 wrapper；坏行可跳过且后续可写；profile 隔离与 compact JSON 保持。
+- **技术路线：** 非 live 的 finished stored session 成功折叠后复用缓存，取消成功项 30 秒强制过期；一旦该 session 进入 live projection 就删除旧 stored 项，避免恢复会话后重新成为历史时读到旧快照。失败仍保留 5 秒退避，64 项 LRU、single-flight 和 hint 安全规则不变。插件代际外或外部进程同时写同一持久日志的新鲜度不在本轮扩展。
+- **验收：** 连续三次 anchors 轮询并两次越过旧 30 秒 TTL，`readSession` 仍只调用 1 次；stored→live→stored 后必须重读，不得复用 live 前旧表；已有 unreadable/error、observeSession fallback、single-flight 与 view 裁剪测试不回归。
 
-### T-05　冷缓存首轮能力预热（P1）
+### T07 — 多会话并排轨迹隔离（P1）
 
-- **路线：** 复用 `lib/capability.js` 的 resolve/peek/generation，把 fire-and-forget prime 前移到公开 `model/selection` 或 `agent/created`；`current()` 和 claimed 仍只同步 peek，不等待网络。
-- **先行测试：** 新会话首轮不靠测试 helper 人工预热即可 Auto；失败不缓存、provider/model 切换 generation、dispose 后不回写。
-- **验收：** 首次选模型后的首轮即可调度；保留 claimed/current 不 await 契约；Web 实机核对原生选择器、请求和日志。
+- **技术路线：** 将全局单 session/table/controller 改为按 conversation root 管理的独立状态；每行归属最近 conversation root，owner 不明时安全省略。每个 root 独立 load、observer、abort/dispose，不引入跨会话共享 concrete cache。
+- **验收：** A/B 并排展示不同 session/effort，B 的请求实际发生；A 切换或卸载不影响 B；重复 mount/dispose 无重复 observer、定时器或跨会话误绘。现有增量 DOM、20 秒 sweep 与 keyboard 行为不回归。
 
-### T-06　客户端资源、HMR 与键盘语义（P1）
+### T08 — client style 所有权与键盘语义（P1）
 
-- **路线：** Badge/trajectory/config 三处 fetch 在现有 effect/cleanup/session owner 中增加 AbortController；chip 增加 role/tabIndex/Enter/Space 与 focus-visible；styles 纳入 effect 所有权并允许 HMR 更新。
-- **先行测试：** cleanup/session change abort 且 stale 不回写；键盘与点击等价且 preventDefault；style 更新、重复 apply 与卸载归属。
-- **验收：** 不改变轮询频率、session guard、增量 DOM 与默认只读界面；键盘焦点可见，无重复监听和残留样式。
+- **技术路线：** style 元素按 create/refresh 获取引用、按 dispose 释放，最后引用归零才删除，并覆盖世代刷新与重复 dispose。chip 使用原生 button，或严格实现 Enter keydown、Space keyup 且过滤 repeat，保持现有样式与 aria-label。
+- **验收：** G1 create→G2 refresh→G1 dispose 后 style 仍存在，G2 dispose 后才删除；三代与重复 dispose 不提前删除。Enter/Space 各激活一次，Space 长按不重复触发，鼠标点击不回归。
 
-### T-07　DSH 原生全局选择兼容（F-06 冻结后的验收包）
+### T09 — CI 真实 pack 门禁与文档清直（P1）
 
-- **路线：** 不新建 preferences store，不增加 `rememberLastEffort`。只让插件正确消费原生恢复的 concrete/Auto：concrete 按人工直通；Auto 在 modern 经 T-01 持续解析、在 legacy 走既有 request 调度；插件不写第二份全局或逐模型偏好。
-- **先行测试：** modern+legacy 的原生 concrete/Auto 新会话与重启、Auto 不泄漏、手动改选优先、原生选择缺失时的既有 default、自动输出/default/子代理不写回、切换模型不恢复旧模型独立偏好、profile 隔离且无正文。
-- **验收：** FR-070～078 按修订后的原生语义通过；同值 no-op 不伪造插件事件；原生全局记忆的清理由 DSH 负责，不再要求删除插件数据清除它。
-- **实机门：** Web/Desktop 验证原生选择器在重启后显示最近 Auto/concrete；Auto 下选择器保持 Auto，Badge/轨迹显示各步实际档。若原生行为与代码契约不符，回报宿主差异，不另建插件偏好库绕行。
+- **技术路线：** CI 执行真实 `pnpm pack`，枚举 tarball 并核对 package manifest 承诺的入口、bundle、patch 与发布文档，不再只检查工作树 `existsSync`。同步修正 turn-auto durable 注释、trajectory assistant\\0turn\\0step/inline selector 注释，以及 ROADMAP 中“恢复已 retired”与旧路线互相矛盾的描述；纯注释修正不伪造红灯。
+- **验收：** pack 契约测试先红后绿；Node 22.19/24 × ubuntu/windows、bundle diff 与 15 分钟门禁保留。文档不再声称 modern 依赖轮末恢复，也不再把历史计划当作当前状态。
 
-### T-08　工程闭环与文档对齐（P2）
+### T10 — 构建、实机与交付验收（P0，最后执行）
 
-- **路线：** CI 增加 build、pack/files、bundle diff、timeout、contents:read；清理临时目录与固定等待；更新 ROADMAP、MAINTAINER-TESTS、README/CHANGELOG/REQUIREMENTS 当前基线。
-- **验收：** 标准测试、Node 22.19/24 × ubuntu/windows、build、pack、生成物一致；文档不再宣称旧 step/end 预选满足连续步，也不再把 F-06 描述为待开发插件功能。
+- **技术路线：** 先全量测试，再 `pnpm build`、真实 pack、`plugin_check`；随后按 `MAINTAINER-TESTS.md` 做 Web 安装/RPC 与 Desktop smoke。成熟项目实机预算 15 分钟，环境阻塞要明示，不能用单元测试替代实机结论。
+- **验收：** 标准测试全绿、0 skip，bundle 与源一致，tarball 完整；验证 Auto 不写全局记忆、人工立即接管、fixed/subagent、多会话轨迹、history route 与禁用插件消失。版本只升至 `0.2.18-agent.1`；push 时若获批再由出品人规则转为 `0.2.19-agent.0`。
 
-## 4. 后续 backlog 与触发条件（不属于本轮施工 todo）
+## 3. 测试清单
 
-- **R-01 第二周期校准与私有研究：** 独立会话联合 targetRank/mapping/final effort；session-mining 先修脱敏说明、stale source 隔离和 INCONCLUSIVE/失败退出语义，原始正文不进公开仓库。
-- **T-H5 同对象 branch rewrite：** 真实触发与可靠 generation 未证实；禁止用 length shrink 粗暴清零。
-- **gzip 单 buffer、分类器 lazy clues、scan 复杂度：** 只有基准收益且全行为等价才合并，不写伪正确性红灯。
-- **F-03/F-05：** 继续延期；**F-06：** 冻结，除非出品人明确重开；**F-07 Badge、F-08～F-12：** 保持低优先；**F-04：** 已否决。
+- `test/f01/dual-path.test.mjs`：final-id allow-list；modern 原生记忆、capture raw 变化、replacement/fixed/manual 行为。
+- `test/f01/legacy-path.test.mjs`：final-id allow-list 与 legacy allowMax 守护；legacy echo 兼容不因 modern 清理而改。
+- `test/next-host.test.mjs`、`test/f02/turn-auto.test.mjs`：durable 写、capture/replacement、delegation 时代、自定义模型未知信息；`test/f01/lifecycle.test.mjs`、`test/f06/preferences.test.mjs`、`test/optimization-host.test.mjs` 做邻近回归。
+- `test/next-engine.test.mjs`：严格 rank、brief 双向认领、replaceGeneration 重置与 compaction 守护；`test/rank-v2.test.mjs`、`test/optimization-engine.test.mjs`、`test/policy.test.mjs` 做邻近回归。
+- `test/optimization-client.test.mjs`：双 root 并排、style 引用所有权、chip 键盘契约；`test/client-ids.test.mjs`、`test/client-state.test.mjs` 做邻近回归。
+- `test/index.smoke.test.mjs`：stored history 越过 TTL 不重读，以及 stored→live→stored 的缓存失效。
+- `test/ci-pack-contract.test.mjs`：真实 tarball 门禁及既有 CI matrix/bundle 守护。
 
-## 5. 版本与交付阶梯
+**红灯基线（2026-11-16，Node v24.22.1）：** 标准命令 `node --test "test/**/*.test.mjs"` 实测 **356 tests / 326 pass / 30 fail / 0 skip / 0 cancelled**。30 项失败全部属于上述待施工行为：宿主与原生记忆 13、final-id allow-list 2、严格 rank / brief / replaceGeneration 8、客户端 4、stored history 2、真实 pack 门禁 1。施工目标为同批及既有测试全部转绿，不得 skip、删除红灯或把测试装配错误算作产品缺陷。
 
-1. 本阶段施工从 `0.2.17-agent.1` 起；agent 修改可递增最后一段。
-2. 出品人明确指示 push 时，按新规范 patch+1、agent=0，即 `0.2.18-agent.0`；不得由 agent 自行升 minor/major。
-3. `package.json`、双语 README、CHANGELOG 当前版本同步；DSH 的 rc 宿主区间原样保留。
-4. semver 中 `agent < rc`，同基三位不能被 npm 视为升级；本地精确 tarball 可用，对外发布通过 patch 推进消除歧义。
-5. 每批执行：红灯证据 → 标准测试 → build/pack → Web 安装与 RPC 实机 → Desktop/出品人验收。
-6. **实际 push/tag 前必须再次取得出品人批准。**
+## 4. ROADMAP 后续与决策门
 
-## 6. 测试先行移交说明
+### R01 — 第二周期校准：先观察，不直接调参
 
-- `test/optimization-host.test.mjs`：真实连续 capture、raw/effective Auto、实际记录、runtime、capability/custom-model/store、冷缓存。
-- `test/f01/**`、`test/f02/**`：保留行为编号，移除对逐步 model.select、step/end 补写和 turn/end 恢复的旧实现耦合。
-- `test/optimization-engine.test.mjs`：claim/origin/subagent/rank/config/词干。
-- `test/optimization-client.test.mjs`：abort、键盘与样式生命周期。
-- `test/f06/preferences.test.mjs`：仅保留原生全局选择兼容；原逐模型自建偏好红灯全部移除。
-- `test/version-policy.test.mjs`：下一施工版与文档/宿主区间约束。
-- `test/signals.test.mjs`：修正原先把 resumed tool-result 当 trivial brief 的错误断言。
+- 收集独立第二周期真实日志，联合审查 briefRamp/toolRamp、error/repeat/frugal/todo 的分布。旧样本 453 条中 toolRamp 两档均 0 触发不足以证明阈值错误；没有新样本前不改词典、gzip 或 ramp。
 
-**最终红灯基线（2026-11-16，Node v24.22.1）：** 标准命令实测 **320 tests / 259 pass / 61 fail / 0 skip / 0 cancelled**。61 个预期红灯为：F-01/F-02 的 D 新契约 12；`optimization-host` 20（D 契约 6、runtime 2、H1 2、H8 6、H7 2、H6 1、冷缓存 1）；`optimization-engine` 18；`optimization-client` 7；修正后的 resumed tool-result 1；版本治理 3。原生全局选择兼容 **12/12** 为绿；unresolved Auto fail-closed 与无 `current()` 的 Agent 防护也为绿。测试语法和 `git diff --check` 已通过，生产代码未改。
+### R02 — F-03 自定义模型配置写权限：建议保持“诊断，不写用户配置”
 
-施工者先运行定向红灯，再运行标准全套；逐组修复后更新本文件的实际计数与实机证据。G-01/G-02 已决断，不得再自行改成安全降级、宿主补丁或插件逐模型偏好库。
+- 当前 FR-050～053 已允许在“确认无档”时补档，但 F-03 的持久 tombstone / 显式 opt-in 仍是新产品权限。建议默认保持现状，只有出现真实重复诊断成本时再讨论显式 opt-in；不引入隐式 tombstone 或第二偏好库。
+
+### R03 — F-05 能力来源：建议“已解析宿主能力优先，静态知识库兜底”
+
+- 暂不接供应商动态列表。未来若接入，也只把供应商元数据作为能力证据，不自动覆盖用户限制；需另立兼容与失败安全测试。
+
+### 暂不进入本轮
+
+- F-07 徽标迁移、F-08 词典校准、F-09 gzip、F-10 子代理 frugal 新开关、F-11 重启旧错误关联、F-12 研究公开/脱敏。F-09 当前 p99 约 0.417ms，未达到 ROADMAP 的 >8ms 或 ≥1MiB 门槛；其余项缺少新证据或属于独立产品决策。
+
+## 5. 明确不做
+
+- 不推翻 current() capture，不恢复逐步 concrete `model.select()`。
+- 不为“代码好看”合并 modern/legacy，不重写 gzip、store、signals ring、anchors projection 或客户端 observer。
+- 不因 cold capability 省略合法人工 concrete 档；人工直通优先。
+- 不提前实施 F-03/F-05，不新增设置 UI，不扩大客户端写权限。
+- 不在本轮改 minor/major，不自行 push/tag。

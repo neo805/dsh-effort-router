@@ -8,7 +8,7 @@ const legacyEntries = new Map(await Promise.all(
   ['0.2.1-rc.2', '0.2.1-rc.5'].map(async (runtime) => [runtime, await loadApplyForRuntime(runtime)]),
 ))
 
-async function verifyLegacy(runtime) {
+async function verifyLegacy(runtime, options = {}) {
   const entry = legacyEntries.get(runtime)
   setTestRuntimeVersion(runtime)
   const listeners = new Map()
@@ -18,7 +18,7 @@ async function verifyLegacy(runtime) {
   const llm = {
     adapters: new Map(),
     async resolveModelInfo() {
-      return { reasoning: { efforts: [{ id: 'low' }, { id: 'high' }, { id: 'max' }] } }
+      return { reasoning: { efforts: (options.levels ?? ['low', 'high', 'max']).map((id) => ({ id })) } }
     },
   }
   const ctx = {
@@ -38,9 +38,9 @@ async function verifyLegacy(runtime) {
     inject() {},
     effect(fn) { const off = fn(); if (off) effects.push(off); return () => {} },
   }
-  entry.apply(ctx, entry.Config({}))
+  entry.apply(ctx, entry.Config(options.config ?? {}))
   const agent = {
-    sessionId: `f01-legacy-single-path-${runtime}`,
+    sessionId: `f01-legacy-${options.id ?? 'single-path'}-${runtime}`,
     session: {
       header: {},
       deriveMessages: () => [{ role: 'user', content: ENGINEERING }],
@@ -58,7 +58,7 @@ async function verifyLegacy(runtime) {
     next = (current) => handler(current, downstream)
   }
   const result = await next({ agent, turn: 1, step: 1 })
-  assert.equal(result.reasoningEffort, 'high')
+  assert.equal(result.reasoningEffort, options.expected ?? 'high')
   assert.equal(selected, 0, `${runtime} must not use the 0.2.2 selection writer`)
   assert.equal(appended <= 1, true, 'at most the existing logical-Auto witness is appended')
   for (const off of effects.reverse()) off()
@@ -68,4 +68,28 @@ test('F01-16 tested 0.2.1 runtimes keep request interception single-path even if
   // rc.2 is the installed Desktop baseline; rc.5 is the researched 0.2.1
   // compatibility target. Neither is mislabeled as an untested stable 0.2.1.
   for (const runtime of ['0.2.1-rc.2', '0.2.1-rc.5']) await verifyLegacy(runtime)
+})
+
+const interpolatedLevels = ['low', 'vendor-3', 'vendor-4', 'vendor-5', 'max']
+
+test('F01-17 legacy explicit allowedEfforts also filters final ids, not interpolated ranks', async () => {
+  for (const runtime of ['0.2.1-rc.2', '0.2.1-rc.5']) {
+    await verifyLegacy(runtime, {
+      id: 'allow-final-ids',
+      levels: interpolatedLevels,
+      config: { allowedEfforts: ['medium', 'max'] },
+      expected: 'max',
+    })
+  }
+})
+
+test('F01-18 migrated allowMax remains a rank ceiling for unknown advertised ids', async () => {
+  for (const runtime of ['0.2.1-rc.2', '0.2.1-rc.5']) {
+    await verifyLegacy(runtime, {
+      id: 'legacy-rank-ceiling',
+      levels: interpolatedLevels,
+      config: { allowMax: false, maxFallback: 'high' },
+      expected: 'vendor-4',
+    })
+  }
 })

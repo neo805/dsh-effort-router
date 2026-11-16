@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.18-agent.0` (DSH 0.2.1-rc.2 → 0.2.2-rc.3 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.18-agent.1` (DSH 0.2.1-rc.2 → 0.2.2-rc.3 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 

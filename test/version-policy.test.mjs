@@ -7,12 +7,12 @@ const read = (name) => readFileSync(fileURLToPath(new URL('../' + name, import.m
 const collaboration = read('COLLABORATION.md')
 const pkg = JSON.parse(read('package.json'))
 const policyMatch = collaboration.match(/下一施工版本从 `(\d+\.\d+\.\d+-agent\.\d+)` 开始/)
-const nextVersion = policyMatch ? policyMatch[1] : '0.2.18-agent.0'
+const nextVersion = policyMatch ? policyMatch[1] : '0.2.18-agent.1'
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 test('package version follows the next construction version declared in COLLABORATION.md', () => {
   assert.ok(policyMatch, 'COLLABORATION.md must declare the next X.X.X-agent.X construction version')
-  assert.equal(nextVersion, '0.2.18-agent.0')
+  assert.equal(nextVersion, '0.2.18-agent.1')
   assert.equal(pkg.version, nextVersion)
 })
 
