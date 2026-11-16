@@ -138,7 +138,18 @@
   注意宿主本次只为该会话记录了 step 1 的 `request/header`，后续步的档位证据来自插件
   full 视图的 `recent` 决策记录，而不是把缺省 header 当作通过。
   本轮尚未覆盖：same-step 模型切换的真实宿主（自动测试覆盖）、finished history 双宿主、
-  多会话轨迹与后台标签休眠的真实视觉；Desktop 重启验收仍由出品人完成。
+  多会话轨迹与后台标签休眠的真实视觉；Desktop 动态 Auto 仍待出品人完成。
+- **Desktop 安装证据（2026-11-17 04:22，desktop profile，DSH 0.2.2-rc.3）**：
+  出品人重启 Desktop 后，经 `plugin_manager` 的 `install_bundle` 安装
+  `artifacts/dsh-effort-router-0.2.18-agent.2.tgz`（stage=enable、application=applied）。
+  profile 依赖已指向该 artifact，安装版本为 `0.2.18-agent.2`，13 个 `lib/*.js`
+  与源码哈希一致，`GET /effort-router/state?view=config` 返回 enabled=true、
+  defaultLevel=auto、trajectoryAnnotate=true。此步只证明安装与加载状态，不替代
+  Desktop 动态 Auto 冒烟；安装前会话的 Auto 轮次不计入 `.2` 证据。
+- **Desktop 动态 Auto 待验**：请在 Desktop 把模型选择器切到 Auto 后发一个多步任务，
+  预期原生选择器保持 Auto、请求头/徽标显示具体档位、`turn/end` 后无插件写回的
+  `model/selection`。Desktop 的 session RPC 需要 GUI 认证，不能从外部 PowerShell
+  伪造该会话。
 - **未实测宿主**：插件会拒绝加载并在日志给出
   `[effort-router] unsupported DSH runtime "…"`；升级宿主后必须先补该版本的契约
   证据，再往 `lib/runtime.js` 白名单里加。
@@ -161,7 +172,7 @@
 | 0.2.17-rc.1 | 2026-11-16 | 未复测（无 UI 改动） | 未测 | AI 已在 Web 实机验证（见第 5 项证据） | 双路径 + 整轮 Auto；Web 侧已验「整轮 Auto、轮末回 Auto、只读路由正常」（当时语义；0.2.18-agent.2 起轮末不再写回）；「中途手动不被改写」由自动测试覆盖，请在 Desktop 按第 5 项顺手确认徽标实际档位 |
 | 0.2.17-agent.1 | 2026-11-16 | 自动测试覆盖资源清理、会话切换与键盘操作；视觉待出品人确认 | 未测 | 待出品人验收 | 捕获时同步解析（不再 step/end 补写）；续步逐步重算；badge/config/trajectory 均带 AbortController；轨迹胶囊 Tab 可聚焦、Enter/Space 等价点击；冷缓存预热前移 |
 | 0.2.18-agent.0 | 2026-11-16 | 与 0.2.17-agent.1 同代码；320/320 全绿 | 未测 | 待出品人重启 Desktop 后验收 | 首个推送版（0.2.17-agent.1 → 0.2.18-agent.0 仅版本治理 bump）；请在 Desktop 按第 5 项确认徽标实际档位、轨迹胶囊键盘操作与悬停/焦点样式 |
-| 0.2.18-agent.2 | 2026-11-16 | 自动测试 369/369；视觉待出品人 | 未测（默认关） | Web RPC 已验连续 Auto / 人工保持 / 零轮末写回；Desktop 待验收 | T01–T07 施工完成；Web 证据见第 5 项两个会话。same-step 模型切换、finished history、多会话轨迹、hidden 标签的真实视觉仍待验收 |
+| 0.2.18-agent.2 | 2026-11-16（Desktop 安装 11-17） | 自动测试 369/369；视觉待出品人 | 未测（默认关） | Web RPC 已验连续 Auto / 人工保持 / 零轮末写回；Desktop 已安装 .2，动态 Auto 待验 | 安装经 plugin-manager，13 个 lib 哈希一致；Web 证据见第 5 项两个会话；same-step 模型切换、finished history、多会话轨迹、hidden 标签的真实视觉仍待验收 |
 |  |  |  |  |  |  |
 
 ---

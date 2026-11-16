@@ -1,6 +1,6 @@
 # 开发计划 — 0.2.18-agent.2（已施工，待实机验收）
 
-> 状态：**T01–T07 已施工，自动化 369/369 绿；T08 Web RPC 冒烟已通过，Desktop 与剩余真机矩阵待出品人验收**。基线为 `0.2.18-agent.1`；本轮只修有复现证据的行为缺陷，不做感觉型重写。实际 push/tag 须出品人另行批准。
+> 状态：**T01–T07 已施工，自动化 369/369 绿；T08 Web RPC 冒烟已通过、Desktop 已安装 0.2.18-agent.2；Desktop 动态 Auto 冒烟与视觉验收待出品人**。基线为 `0.2.18-agent.1`；本轮只修有复现证据的行为缺陷，不做感觉型重写。实际 push/tag 须出品人另行批准。
 >
 > 需求优先级：`REQUIREMENTS.html` > 已批准技术路线 > `ROADMAP.md` > 旧测试与旧注释。旧测试若锁定与需求冲突的行为，应按需求改写，不得为了保绿继续保留错误行为。
 
@@ -107,8 +107,17 @@
 - **Web 证据限制：** 人工接管会话的 step 1 被分类器判为 `high`，并非“从 low 接管”；
   后续档位来自插件 full 视图，宿主只记录了 step 1 的 `request/header`。报告未把缺省
   header 当作通过。
-- **Desktop 待验收：** 关闭 Desktop 后，将 desktop profile 的插件依赖指向
-  `<repo>/artifacts/dsh-effort-router-0.2.18-agent.2.tgz`，安装并完整重启；随后按
-  `MAINTAINER-TESTS.md` 第 5 项确认连续 Auto、人工保持、零轮末写回、双模型切换、
-  finished history、多会话轨迹、后台标签休眠与视觉呈现。
-- **未做：** 未 push、未 tag；Desktop profile 正在运行，未在其上安装或重启。
+- **Desktop 已安装：** 2026-11-17 04:22（Asia/Shanghai），出品人重启 Desktop 后，经
+  `plugin_manager` 的 `install_bundle` 安装
+  `<repo>/artifacts/dsh-effort-router-0.2.18-agent.2.tgz`。结果为 stage=enable、
+  application=applied；desktop profile 依赖已指向该 artifact，安装版本
+  `0.2.18-agent.2`，13 个 `lib/*.js` 哈希与源码一致；`/effort-router/state?view=config`
+  返回 enabled=true、defaultLevel=auto、trajectoryAnnotate=true。
+- **Desktop 动态验收待完成：** 本次安装采用运行中热应用，未把安装前会话的旧 Auto
+  轮次当作 `.2` 证据；安装后尚未在 Desktop 产生新的 Auto 轮。请出品人在 Desktop
+  把选择器切到 Auto 并发送一个多步任务，再按 `MAINTAINER-TESTS.md` 第 5 项确认
+  连续 Auto、人工保持、零轮末写回、双模型切换、finished history、多会话轨迹、
+  后台标签休眠与视觉呈现。Desktop 的 session RPC 需要 GUI 认证，AI 无法从
+  外部 PowerShell 伪造该会话。
+- **未做：** 未 push、未 tag；Desktop 只完成安装与静态/运行状态校验，动态 Auto
+  和产品出口视觉仍归出品人验收。

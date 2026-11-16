@@ -4,11 +4,15 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
-## 0.2.18-agent.2 — capture revisions, occurrence accounting, cached history (BUILT; Web smoke verified, Desktop pending)
+## 0.2.18-agent.2 — capture revisions, occurrence accounting, cached history (BUILT; Web smoke verified, Desktop installed, live Desktop smoke pending)
 
 Built 2026-11-16 (test baseline 369/369, no skips; Web RPC smoke verified on DSH
-0.2.2-rc.3). Desktop acceptance remains with the producer. This batch closes the
-modern-loop residue left after 0.2.18-agent.1:
+0.2.2-rc.3). Installed into the running Desktop profile on 2026-11-17 04:22 via
+`plugin_manager` (`install_bundle`, stage=enable, application=applied); the
+profile now resolves the artifact tarball, all 13 `lib/*.js` hashes match source,
+and `/effort-router/state?view=config` reports enabled=true with defaultLevel=auto.
+Live Desktop Auto evidence and producer visual acceptance remain open. This batch
+closes the modern-loop residue left after 0.2.18-agent.1:
 
 - **T01** a raw-selection revision inside one step invalidates the stale capture
   and re-plans it against the new provider/model/effort; Auto → Auto on another
@@ -31,7 +35,8 @@ modern-loop residue left after 0.2.18-agent.1:
 - **T07 / T08** maintainer documents distinguish the delivered modern no-write
   semantics from the historical 0.2.17 behaviour; the release is packed, the
   bundle hash matches source, and Web RPC smoke evidence is recorded. Desktop
-  smoke and producer visual acceptance stay open.
+  installation and static/runtime checks are complete; a fresh Desktop Auto turn
+  and producer visual acceptance stay open.
 
 ## 0.2.18-agent.1 — per-step projection only (LANDED)
 
