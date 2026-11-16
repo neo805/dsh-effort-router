@@ -4,6 +4,37 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.18-agent.2] - 2026-11-16
+
+Documentation-only release: the repository layout and the collaboration body were
+reorganized. No code, schema, packaging or runtime behaviour changed.
+
+### Changed
+
+- Maintainer documents moved from the repository root into `docs/`:
+  `COLLABORATION.md`, `DEVELOPMENT-PLAN.md`, `MAINTAINER-TESTS.md`, `ROADMAP.md`
+  and `REQUIREMENTS.html`. `docs/README.md` is the new index; the root keeps only
+  the files that ship in the npm package and the source directories.
+- `COLLABORATION.md` is now written as the **norm currently in force** rather
+  than as a record of its own revisions: historical annotations and provenance
+  notes were removed, the `rc` → `agent` suffix switch is kept as a note under
+  version governance (the semver ordering trap is why it stays), the test-count
+  baseline is no longer hard-coded, and revisions are to be recorded here
+  instead of in the body.
+- Version numbering is `agent`-suffixed throughout (`rc` remains the property of
+  the DSH host and its dependencies); the next construction version is
+  `0.2.18-agent.2`.
+- A collaboration rule was added after an incident: never enable/disable a
+  plugin on the profile the running session lives in (`plugin_manager` targets
+  the current session's profile); real-machine checks use a separate `dsh web`
+  instance or accept "files installed, host restart pending".
+- `.gitignore` no longer excludes `docs/` wholesale: only `docs/ops/` (machine
+  operations logs and audit reports) and `docs/archive/` (superseded planning
+  notes) stay local, so published documents can live under `docs/` with relative
+  links.
+- Local release tarballs were collected into `artifacts/` (still untracked);
+  `docs/ops/` files were sorted into `logs/` and `reports/`.
+
 ## [0.2.18-agent.1] - 2026-11-16
 
 The T-01…T-09 construction pass on top of `0.2.18-agent.0`. Every change below

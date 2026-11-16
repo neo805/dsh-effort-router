@@ -1,14 +1,10 @@
 # 人机协作规范 / Human–AI Collaboration Norms
 
 > 本文件记录本项目的**出品人**（人类决策者）与 **AI 第一作者**（在 DSH 中工作的
-> 编码 agent，当前为 `deepseek-v4.1-flash-1017`）在 Vibe Coding 模式下共同约定的
-> 协作规范。它是**双向约定**：双方都按它执行，不是单方面的流程说明书。
+> 编码 agent）在 Vibe Coding 模式下共同约定的协作规范。它是**双向约定**：双方都
+> 按它执行，不是单方面的流程说明书。
 >
 > 要改规范，先改这份文件。
->
-> 本版于 2026-10-19 按姊妹项目 `2026.10_dsh-auto-upgrade` 升级后的规范同步：
-> 角色改称**出品人 / AI 第一作者**、版本号**全量带 `rc`**、新增**测试先行**与
-> **四级验证阶梯（含 Web 实机测试闸门）**、交付清单改为**验收通过后才提交**。
 
 **English abstract.** This repository is developed in a human–AI pair-programming
 ("vibe coding") mode. The human is the **producer** (requirements intake,
@@ -50,8 +46,8 @@ personal or machine-specific information.
   不留下任何需要手工清理的耦合。
 - **防失效优先于补救**：每次宿主升级观察到的失效模式（合成 user 消息、
   settings 分层、`sessionQuery` 公开面收窄等），都要沉淀为下一次升级的前置
-  检查项（症状 → 检查 → 判据），写进 `ROADMAP.md` 与
-  `MAINTAINER-TESTS.md`，而不是把「有兜底」当成不修的理由。
+  检查项（症状 → 检查 → 判据），写进 `docs/ROADMAP.md` 与
+  `docs/MAINTAINER-TESTS.md`，而不是把「有兜底」当成不修的理由。
 
 ## 1. 角色与决策权
 
@@ -67,20 +63,18 @@ personal or machine-specific information.
 - **AI 对技术判断负责。** 出品人不承担"这个 API 还能不能用"这类判断；AI 也不
   把技术取舍包装成需求让出品人拍板。
 - 本项目由 AI 作为**第一作者**：计划、对外说明、变更日志的主要撰写人。
-  出品人保留否决与改写权。
-- 历史沿革：本项目的代码与文档由 `kimi-k3` 与 `deepseek-v4.1-flash-1017` 两代
-  AI 接力完成；规范中的"AI 第一作者"指当前在任者。
+  出品人保留否决与改写权。规范中的"AI 第一作者"指当前在任者。
 
 ## 2. 版本号治理
 
-自下一版本起，版本号形如 `X.X.X-agent.X`。`0.2.17-rc.1` 是最后一个使用 `rc`
-后缀的版本；下一施工版本从 `0.2.18-agent.1` 开始（`0.2.18-agent.0` 是首个推送版）。此后所有新版本号都必须带
-`agent` 后缀（`package.json`、`CHANGELOG.md` 标题、README 首屏、git tag 一律一致）。
-DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影响，不得机械替换。
+版本号形如 `X.X.X-agent.X`，**一律带 `agent` 后缀**（`package.json`、`CHANGELOG.md`
+标题、README 首屏、git tag 四处一致）。`rc` 后缀只属于 DSH 宿主及其依赖包，
+不得机械替换。**下一施工版本从 `0.2.18-agent.2` 开始**；当前生效版本以
+`package.json` 为准。
 
 | 情形 | 做法 | 示例 |
 |---|---|---|
-| agent 自主修改（通常对应 bug 修复，也包括施工中的参数、文案、UI 修正） | **可自由递增 agent 序号**，不动基三位 | `0.2.17-agent.1` → `0.2.17-agent.2` |
+| agent 自主修改（通常对应 bug 修复，也包括施工中的参数、文案、文档、UI 修正） | **可自由递增 agent 序号**，不动基三位 | `0.2.18-agent.1` → `0.2.18-agent.2` |
 | 出品人明确指示 push 到 GitHub 的版本（通常对应小功能演进） | **第 3 位 +1，agent 重置为 0**，再按审批执行 push/tag | `0.2.17-agent.4` → `0.2.18-agent.0` |
 | 大功能演进（需动第 2 位） | **仅当出品人明确指示**，批准后 `0.x.0-agent.0` | `0.2.x` → `0.3.0-agent.0` |
 | 核心架构演进（需动第 1 位） | **仅当出品人明确指示**，批准后 `X.0.0-agent.0` | `0.x` → `1.0.0-agent.0` |
@@ -99,6 +93,11 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
   不受影响，但不得把同基三位的 `agent` 包当作比旧 `rc` 更高的 npm 版本；对外
   发布应通过上述第 3 位推进消除该歧义。
 
+> **附注（后缀切换的语义，长期保留）**：`rc` → `agent` 的切换发生在 `0.2.17`
+> 之后；`0.2.17-rc.1` 是最后一个使用 `rc` 后缀的项目版本，`0.2.18-agent.0` 是
+> 首个以 `agent` 后缀推送的版本。保留这条附注的唯一理由是上一条迁移陷阱：混用
+> 两种后缀会让"谁更新"的判断出错。
+
 [Keep a Changelog]: https://keepachangelog.com/
 
 ## 3. 测试先行（Test-first，硬性）
@@ -109,9 +108,9 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
 - 测试命令固定，显式 glob，不依赖目录参数：
   `node --test "test/**/*.test.mjs"`
   （CI 同时跑 Node 22.19 / 24 × ubuntu / windows 四个矩阵。）
-- 报告里给出通过数（如 `142/142`）与覆盖率（`node --test
-  --experimental-test-coverage "test/**/*.test.mjs"`）；测试数变化时同步更新到
-  交付报告与本文件 §6 的基线，不让它变成过时数字。
+- 报告里给出通过数（如 `356/356`）与覆盖率（`node --test
+  --experimental-test-coverage "test/**/*.test.mjs"`）；测试数变化时同步更新交付
+  报告，不在本文件维护数字基线。
 - 纯文档、纯配置变更可豁免测试先行，但必须在交付报告里写明豁免理由。
 - 覆盖率不是目标：**不为凑数字写造作测试**。不可达的防御分支允许留空，
   但要在报告里点名。
@@ -125,8 +124,7 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
 2. **安装到 DSH Web**：先备份 profile 的 `package.json`、`cordis.patch.yml`
    （戳 `yyyyMMdd-HHmmss`），再安装，再逐文件哈希比对。
 3. **Web 实机验证**：由 AI **直接与 DSH Web 通信**（建会话、发指令、读回结果）
-   完成，不能只看日志。`/` 与 `/api` 对没有 cookie 的请求一律 `401`，但链路是通的
-   （2026-10-18 在本机跑通，做法沿用姊妹项目 `dsh-auto-upgrade` 的会话记录）：
+   完成，不能只看日志。`/` 与 `/api` 对没有 cookie 的请求一律 `401`，但链路是通的：
    - **取 token 换 cookie**：`dsh web` 启动行是
      `dsh web: http://127.0.0.1:<port>/?token=…`；stdout 已被重定向就直接读那个文件
      （本项目 `$DSH_HOME/web-portable.stdout.log`），否则重启宿主并重定向后再读。
@@ -142,7 +140,7 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
    - **两个坑**：PowerShell 的 `ConvertTo-Json` 会把空嵌套对象序列化成网关不认的形状
      （报 `Remote payload must contain exactly one plain-object args field`），故 body
      手写；**换 `node_modules` 不会让运行中的宿主换代码** —— Web 重启 `dsh web`，
-     Desktop 用 `plugin_manager` disable→enable 重挂载。
+     Desktop 重挂载（disable→enable）或重启应用。
    - **取证**：读该 profile 里插件自己的落盘状态与产物，做"预期 vs 实际"比对
      （本项目：`$DSH_HOME/profiles/<profile>/.effort-router/state.json`），不要只看
      RPC 返回 `ok`。通道确实不通时如实报告阻塞，把可复制的验收步骤交回出品人。
@@ -164,7 +162,7 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
 - 实机验证的证据形态：会话 id、工具调用与返回摘要、耗时、UI 类附截图或结构描述。
 - **UI 类改动的最终验收权归出品人**：自动化测试通过 ≠ 功能可用。仅当出品人
   明确表示"该项留到大版本升级时复测"，AI 才可以把该项挂起，并登记到
-  `MAINTAINER-TESTS.md`（含开启方式、预期、失败判定、回滚）。
+  `docs/MAINTAINER-TESTS.md`（含开启方式、预期、失败判定、回滚）。
 
 ## 5. 环境纪律与回滚优先
 
@@ -175,6 +173,10 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
   先说明影响范围并取得确认。
 - **升级 DSH 本体时**：先按备份停用第三方插件，确认本体能启动，再逐批启用并
   逐批验证；全程随时可回滚（回滚 = 恢复备份 + 装回上一版 tarball）。
+- **不要在正在运行的宿主 profile 上启停插件**：`plugin_manager` 作用于
+  **当前会话所在 profile**；若 AI 的会话正跑在那个 profile 里，禁用它等于切断自己
+  的调度链（Auto 哨兵无人解析，当前 step 直接失败）。真机验证一律另起独立
+  `dsh web` 实例，或明确接受"已装文件、待宿主重启生效"。
 - 不在进程内替换正在运行的宿主或自身；需要重启才能生效的改动，如实报告
   "已装文件、待重启生效"，不把待生效说成已生效。
 
@@ -182,7 +184,8 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
 
 - 关于状态的任何结论都要有**可复核的证据**，而不是记忆或推断：
   - 仓库状态 → 实际跑 `git log` / `git status`；
-  - 功能可用 → 测试实际通过数（本项目当前基线 **245/245**，测试数变化时同步）；
+  - 功能可用 → 测试实际通过数（以 `node --test "test/**/*.test.mjs"` 的实际输出
+    为准，本文件不维护会过期的数字基线）；
   - 安装成功 → **构建产物与已安装文件的哈希逐一比对**，而不是"拷过去了"；
   - 接口可用 → 实际请求一次并把响应读出来。
 - **不确定就说不确定**；失败要如实、完整地报告，包括失败的原始错误文本，
@@ -206,27 +209,24 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
    `pnpm install --lockfile-only` 同步 `pnpm-lock.yaml`，再
    `pnpm install --frozen-lockfile --ignore-scripts` 复现 CI 的安装检查，**必须通过**。
    CI 默认冻结锁文件，声明与锁文件不一致会直接
-   `ERR_PNPM_OUTDATED_LOCKFILE` 失败（rc.6 换 `ui-settings`、rc.7 加
-   `ui-conversation` 时漏更新锁文件，导致 rc.7 推送后 CI 红；修复见提交
-   `4125487`）。依赖声明没动时跳过本步。
+   `ERR_PNPM_OUTDATED_LOCKFILE` 失败。依赖声明没动时跳过本步。
 2. `pnpm build` —— 重建客户端 bundle（`build-client.mjs` → `lib/client.js`）。
    构建产物与源码**同批提交**，不得留下"源码已改、产物是旧的"的状态。
 3. `node --test "test/**/*.test.mjs"` —— 全绿；**用显式 glob**，不要依赖目录参数。
    报告覆盖率与新增测试清单（§3）。
 4. 按 §2 调整版本号；同步 `CHANGELOG.md` 与 README 首屏（中英双版）。
 5. 用 `dsh-plugin-check` 自查打包元数据（§13）。
-6. `pnpm pack` —— 出 tarball。
+6. `pnpm pack` —— 出 tarball（产物归入 `artifacts/`，本机保留、不入库）。
 7. 安装到 **Web profile**：备份 → 安装 → **逐文件哈希比对**（构建产物 vs
    `$DSH_HOME/profiles/<profile>/node_modules/<plugin>` 下的实际文件）。
 8. **Web 实机验证**（§4 第 3 级，受 15 分钟闸门约束）。宿主若需重启才能加载
    新代码，如实报告"已装文件、待重启"，并给出重启后的一次性验证步骤。
-   **实测结论（0.2.15 系列）：只替换 `node_modules` 里的文件不会让运行中的宿主换
-   代码**——必须走一次 `plugin_manager` 重挂载（disable → enable）或重启宿主；
-   对已启用的条目做同值 `set_plugin` 不会触发重载（返回 `changed: false`）。是否
-   已生效要用**可观测行为**判定（例如起一个子代理读决策日志），不要用"文件已
-   替换"推断。
+   只替换 `node_modules` 里的文件不会让运行中的宿主换代码——必须走一次重挂载
+   （disable → enable）或重启宿主；对已启用的条目做同值 `set_plugin` 不会触发重载
+   （返回 `changed: false`）。是否已生效要用**可观测行为**判定（例如起一个子代理
+   读决策日志），不要用"文件已替换"推断。
 9. 安装到 **Desktop profile**：同样备份 → 安装 → 哈希比对（Desktop 通常可热
-   生效）。
+   生效；不可热生效时按 §5 报告待重启）。
 10. `git add -A && git commit` —— **本机提交，不需要出品人验收**：提交信息说明
     **改了什么、为什么**（可带版本号）。工作区不长期挂着一堆未提交改动。
 11. 向出品人报告：结论、证据（数值/哈希/会话 id/**commit 号**）、Desktop 验收
@@ -237,8 +237,9 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
 
 ## 9. 已知残留必须公示
 
-- 无法立即解决、或经权衡后**有意接受**的问题，写入 `ROADMAP.md`，
-  标明现象、影响范围与缓解手段，**不得静默丢弃**；具体条目以 `ROADMAP.md` 为准。
+- 无法立即解决、或经权衡后**有意接受**的问题，写入 `docs/ROADMAP.md`，
+  标明现象、影响范围与缓解手段，**不得静默丢弃**；具体条目以
+  `docs/ROADMAP.md` 为准。
 - 上游问题与本项目问题要分开定性；确认属上游的，记录结论与证据后结案，
   不要挂在本项目的待办里冒充未完成工作。
 
@@ -251,7 +252,7 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
   打 tag、改远程属于对外动作，须经出品人明确批准。
 - **不得**：未经批准 push、自行升大版本号、静默丢弃已知问题、把未验证的事说成
   已完成、在会话内直接替换正在运行的宿主或自身。
-- 仓库**不开启 Issues、不接受 Pull Requests**（见 CONTRIBUTING）。
+- 仓库**不开启 Issues、不接受 Pull Requests**（见 `CONTRIBUTING.md`）。
 
 ## 11. 文档与隐私
 
@@ -261,9 +262,15 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
   - 绝对路径中的用户名、真实姓名、邮箱、账号、token / 密钥；
   - 机器专属的运维日志、provider 凭据、回滚记录、会话全文。
 - 写路径时用环境变量或占位符表达，例如 `$DSH_HOME/profiles/<profile>/…`。
-- 本仓库的 `.gitignore` **已刻意整体排除 `docs/` 与 `docs/ops/`**（机器专属运维
-  日志与研究草稿）。因此**需要公开追踪的文档放在仓库根目录**（如 `ROADMAP.md`、
-  `MAINTAINER-TESTS.md`），不要放进 `docs/`。
+- **仓库布局**：根目录只放包元数据与随包发布的文件（`README*.md`、
+  `CHANGELOG.md`、`LICENSE`、`THIRD_PARTY_NOTICES.md`、`package.json`、
+  `cordis.patch.yml`、`CONTRIBUTING.md`）以及源码目录；面向维护者的文档在
+  `docs/` 下（`COLLABORATION.md`、`DEVELOPMENT-PLAN.md`、`ROADMAP.md`、
+  `MAINTAINER-TESTS.md`、`REQUIREMENTS.html`、索引 `docs/README.md`）。
+- `.gitignore` **只排除本机材料**：`docs/ops/`（机器专属运维日志与审计报告）、
+  `docs/archive/`（已被取代的规划草稿）、`scripts/session-mining/`、`.probe/`、
+  `artifacts/` 里的 `*.tgz` 与各类 `.tmp-*`。**需要公开追踪的文档放 `docs/` 并在
+  其中保持相对链接**，不要放到被忽略的目录里。
 - 提交前自检：这份文档如果被陌生人看到，会不会暴露出品人的个人信息或本机结构？
 
 ## 12. 沟通约定
@@ -286,8 +293,8 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
   user-actions、verification、mcp-bundle）与 `templates/`（decoration、mcp 等骨架）。
 - 开工前先读技能与对应 reference，再决定扩展点；**不要凭记忆写 API**，
   用 `cordis_inspect_query` 读实际契约，或直接读宿主产物核对。
-- 宿主参考副本要与**运行中的宿主版本**对齐：仓库根目录的镜像可能过期
-  （0.2.0-rc.2 vs 运行中的 0.2.1-rc.2），核对宿主缝前先确认版本。
+- 仓库里的宿主参考副本要与**运行中的宿主版本**对齐：镜像可能落后于运行时，
+  核对宿主缝前先确认版本号，不要拿过期镜像当契约。
 - 设计与评审类任务**只报告结论**：不改文件、不装 bundle、不动 profile 状态。
 
 **验收工具：`dsh-plugin-check`（必要非充分）。** 每次交付用 `plugin_check`
@@ -305,4 +312,5 @@ DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影�
 
 ---
 
-_本规范随项目演进；每次修订请在本文件中直接改动，并在提交信息中说明原因。_
+_本文件描述**当前生效**的规范，保持准静态：修订直接改本文件，变更内容与原因记入
+`CHANGELOG.md`，不在本文件保留历史批注。_
