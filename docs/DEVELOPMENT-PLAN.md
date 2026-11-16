@@ -1,6 +1,6 @@
-# 开发计划 — 0.2.18-agent.2（已施工，待实机验收）
+# 开发计划 — 0.2.18-agent.2（已施工，待产品出口验收）
 
-> 状态：**T01–T07 已施工，自动化 369/369 绿；T08 Web RPC 冒烟已通过、Desktop 已安装 0.2.18-agent.2；Desktop 动态 Auto 冒烟与视觉验收待出品人**。基线为 `0.2.18-agent.1`；本轮只修有复现证据的行为缺陷，不做感觉型重写。实际 push/tag 须出品人另行批准。
+> 状态：**T01–T08 已施工，自动化 369/369 绿；Web RPC 与 Desktop 动态 Auto 冒烟均已通过，Desktop 安装后完整重启并验证轮末零写回；产品出口视觉与剩余边缘矩阵待出品人验收**。基线为 `0.2.18-agent.1`；本轮只修有复现证据的行为缺陷，不做感觉型重写。实际 push/tag 须出品人另行批准。
 >
 > 需求优先级：`REQUIREMENTS.html` > 已批准技术路线 > `ROADMAP.md` > 旧测试与旧注释。旧测试若锁定与需求冲突的行为，应按需求改写，不得为了保绿继续保留错误行为。
 
@@ -113,11 +113,13 @@
   application=applied；desktop profile 依赖已指向该 artifact，安装版本
   `0.2.18-agent.2`，13 个 `lib/*.js` 哈希与源码一致；`/effort-router/state?view=config`
   返回 enabled=true、defaultLevel=auto、trajectoryAnnotate=true。
-- **Desktop 动态验收待完成：** 本次安装采用运行中热应用，未把安装前会话的旧 Auto
-  轮次当作 `.2` 证据；安装后尚未在 Desktop 产生新的 Auto 轮。请出品人在 Desktop
-  把选择器切到 Auto 并发送一个多步任务，再按 `MAINTAINER-TESTS.md` 第 5 项确认
-  连续 Auto、人工保持、零轮末写回、双模型切换、finished history、多会话轨迹、
-  后台标签休眠与视觉呈现。Desktop 的 session RPC 需要 GUI 认证，AI 无法从
-  外部 PowerShell 伪造该会话。
-- **未做：** 未 push、未 tag；Desktop 只完成安装与静态/运行状态校验，动态 Auto
-  和产品出口视觉仍归出品人验收。
+- **Desktop 动态 Auto 已验：** 安装后由出品人完整重启 Desktop（DSH 0.2.2-rc.3）。
+  当前会话 `session-8666b805…` 使用原生 Auto；重启后唯一 `model/selection` 是
+  seq 3251 的显式 `select auto`。turn 9 从 seq 3253 启动，到 turn 9 结束、turn 10
+  启动之间新增 284 条 session 事件，**没有新的 `model/selection`**；turn 9 / step 26
+  路由为 `auto/high`（targetRank=3，nearest-up），`request/header` 为
+  `reason=resume, reasoningEffort=high`。由此确认 scheduled Auto 在轮内与 `turn/end`
+  均无写回，请求仍按 concrete 档位发出。
+- **仍待产品出口验收：** same-step 双模型切换、finished history、多会话轨迹、
+  hidden 后台标签与徽标视觉仍需出品人实机确认；不把自动测试或安装成功当作已验收。
+- **未做：** 未 tag；产品出口视觉仍归出品人验收，push 以出品人明确批准为前提。
