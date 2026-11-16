@@ -4,6 +4,54 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
+## 0.2.17-agent.1 — synchronous current-selection Auto (LANDED)
+
+Delivered 2026-11-16 (test baseline 320/320). What shipped on top of the
+decisions below:
+
+- `lib/turn-auto.js` now wraps each agent's public `model.current()`; inside an
+  active turn the wrapper returns the effort planned for THIS step, while the
+  durable session selection stays the logical `Auto`. No per-step
+  `agent.model.select()` write remains.
+- `turn/end` restores the durable `Auto` only when the native selection still
+  equals the capture the turn planned from — a user pick made after the step
+  wins, and a disposed plugin never writes.
+- Capability warm-up moved to `agent/created` plus a fire-and-forget resolve
+  from the claimed plan; `current()`/`claimed` still peek synchronously, so a
+  cold cache omits the effort instead of awaiting.
+- Evidence/config hardening: strict fractional rank order, whole-group vector
+  parsing with named warnings, English stems, resumed tool-result exclusion,
+  subagent bump gating, decision-store row/prototype validation.
+- Client: one AbortController per read (badge, config, trajectory polling),
+  HMR-safe style ownership, and a Tab-focusable boundary chip with
+  Enter/Space parity.
+- Version governance moved to the `X.X.X-agent.X` line; CI now builds, diffs
+  the shipped bundle, checks packed artifacts, and runs with a 15-minute
+  timeout and `contents: read`.
+
+Maintainer decisions recorded 2026-11-16:
+
+- **G-01 / D selected:** on DSH 0.2.2, wrap each agent's `model.current()` and
+  synchronously resolve a raw logical Auto selection into that step's concrete
+  effort. Do not modify the host and do not append per-step `model/selection`
+  writes. The wrapper is capture-scoped: outside an active turn, `current()` still
+  returns the native logical selection so configuration restoration cannot pin a
+  temporary concrete effort. Request headers and decision
+  records carry the actual concrete effort. The former step/end preselection and
+  turn/end restoration route is retired after its replacement passes the full
+  continuous-step, takeover, disposal and third-party-wrapper matrix.
+- **G-02 / native global memory selected:** DSH 0.2.2-rc.3 natively saves and
+  restores the latest provider/model/reasoningEffort selection, including the
+  plugin-advertised `auto` ID. F-06 is frozen: no plugin preference store,
+  `rememberLastEffort` option, or per-provider+model map. Only native-restored
+  Auto/concrete compatibility remains in scope.
+- **Cold capability warm-up remains:** `current()` must stay synchronous, so
+  capability resolution still uses the existing cache plus earlier fire-and-forget
+  warm-up; a cold miss fails safe rather than awaiting in the capture path.
+
+The exact implementation tasks and acceptance gates are in
+`DEVELOPMENT-PLAN.md`; that document is now a historical record of the batch.
+
 ## 0.2.17-rc.1 — dual-loop Auto (F-01/F-02, LANDED)
 
 0.2.2 captures each step's model selection BEFORE `agent/pre-step` and rejects an
@@ -22,20 +70,21 @@ cannot schedule there. Delivered:
 - **Disposal safety:** a disposed plugin records nothing and appends nothing,
   even when the request was already in flight.
 
-Known host limitation (documented, not a defect in this plugin): 0.2.2 appends
-`step/end` from inside the session publish, and a session may not append while
-publishing. The preselection write at `step/end` therefore lands one tick later,
-which delays a tool-continuation step's re-route by one step instead of dropping
-it; the write is re-applied before the following step. This is measured on the
-real 0.2.2-rc.3 loop (claim/capture ordering, reject behaviour, request
-comparison, finally-block events) and pinned by the executable fixture.
+Post-release finding (supersedes the earlier “one-step delay” interpretation):
+0.2.2 appends `step/end` from inside the session publish, and a session may not
+append while publishing. More importantly, the next step can capture
+`model.current()` synchronously before that append returns and before a microtask
+retry runs. The old preselection therefore misses the immediate continuation;
+the original two-await harness produced a false green. This is a defect in the
+plugin's scheduling route, not an accepted host limitation. The next batch
+replaces it with the synchronous current-selection resolver described above.
 
-Follow-up (small, next batch): the very first turn after a host restart / plugin
-enable cannot be scheduled because `agent/inbox/claimed` must not await capability
-resolution; that turn is safely stripped (`mode=unsupported`) and the second turn
-schedules again. Warm the capability cache when the session's `model/selection`
-changes so the first turn after a model pick is scheduled too. Real-machine
-evidence for both behaviours is in `MAINTAINER-TESTS.md` §5.
+Follow-up (resolved in 0.2.17-agent.1): the very first turn after a host restart
+/ plugin enable used to be stripped because `agent/inbox/claimed` must not await
+capability resolution. The cache is now warmed on `agent/created` and by a
+fire-and-forget resolve from the claimed plan, so the first Auto turn schedules
+normally; a genuinely cold miss still omits safely. Real-machine evidence for
+both behaviours is in `MAINTAINER-TESTS.md` §5.
 
 ## 0.2.16-rc.2 — projection telemetry contract (LANDED)
 

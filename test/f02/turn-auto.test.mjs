@@ -1,14 +1,16 @@
 import '../test-profile.mjs'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { createModernHost, loadApplyForRuntime, userMessage } from '../helpers/host-0.2.2-harness.mjs'
+import { createModernHost, loadApplyForRuntime, setTestRuntimeVersion, userMessage } from '../helpers/host-0.2.2-harness.mjs'
 
 const entry = await loadApplyForRuntime('0.2.2-alpha.2')
+setTestRuntimeVersion('0.2.2-alpha.2')
 
 const ENGINEERING = '设计并实现一个支持高并发、幂等写入和故障恢复的分布式事务系统'
 const TRIVIAL = '翻译这句话'
 
 function modern(t, config = {}, hostOptions = {}) {
+  setTestRuntimeVersion('0.2.2-alpha.2')
   const host = createModernHost({ apply: entry.apply, config: entry.Config(config), ...hostOptions })
   t.after(() => host.dispose())
   return host
@@ -20,22 +22,29 @@ async function autoModern(t, config = {}, hostOptions = {}) {
   return host
 }
 
+async function announced(host, ...args) {
+  const created = host.createAgent(...args)
+  await host.announceAgent(created.agent)
+  return created
+}
+
 test('F02-01 every claimed message contributes in either arrival order', async (t) => {
   const host = await autoModern(t)
   for (const [id, claimed] of [
     ['f02-batch-engineering-first', [userMessage(ENGINEERING), userMessage(TRIVIAL)]],
     ['f02-batch-trivial-first', [userMessage(TRIVIAL), userMessage(ENGINEERING)]],
   ]) {
-    const { agent } = host.createAgent(id)
+    const { agent } = await announced(host,id)
     const result = await host.runStep(agent, { claimed })
     assert.equal(result.config.reasoningEffort, 'high', id)
     assert.equal(agent.model.current().reasoningEffort, 'auto', id)
+    assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto', id)
   }
 })
 
-test('F02-02 a concrete user selection between step/end and turn/end is never overwritten', async (t) => {
+test('F02-02 a concrete user selection after step/end wins without turn/end restoration', async (t) => {
   const host = await autoModern(t)
-  const { agent } = host.createAgent('f02-restore-race')
+  const { agent } = await announced(host,'f02-restore-race')
   const result = await host.runStep(agent, {
     claimed: [userMessage(ENGINEERING)],
     afterStepEnd() {
@@ -49,17 +58,19 @@ test('F02-02 a concrete user selection between step/end and turn/end is never ov
 test('F02-03 resume reconstructs logical Auto from its own decision witness, not lastUsed', async (t) => {
   const id = 'f02-crash-resume'
   const crashed = await autoModern(t)
-  const before = crashed.createAgent(id)
+  const before = await announced(crashed,id)
   const first = await crashed.runStep(before.agent, {
     claimed: [userMessage(TRIVIAL)],
     continues: true,
   })
   assert.equal(first.config.reasoningEffort, 'low')
-  assert.equal(before.agent.model.current().reasoningEffort, 'low')
+  assert.equal(before.agent.model.current().reasoningEffort, 'low', 'continues:true leaves the active-turn capture window open')
+  assert.equal(crashed.rawCurrent(before.agent).reasoningEffort, 'auto', 'the native logical selection remains Auto')
+  assert.equal(before.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
   crashed.dispose()
 
   const resumedHost = await autoModern(t)
-  const resumed = resumedHost.createAgent(id, {
+  const resumed = await announced(resumedHost,id, {
     lastUsed: { provider: 'gw', model: 'thinker', reasoningEffort: 'low' },
   })
   const second = await resumedHost.runStep(resumed.agent, {
@@ -71,7 +82,7 @@ test('F02-03 resume reconstructs logical Auto from its own decision witness, not
 
 test('F02-04 disabled official Default remains omitted with no selection writes', async (t) => {
   const host = modern(t, { enabled: false })
-  const { agent, selectionEvents } = host.createAgent('f02-default-disabled', { effort: undefined })
+  const { agent, selectionEvents } = await announced(host,'f02-default-disabled', { effort: undefined })
   const result = await host.runStep(agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(result.config.reasoningEffort, undefined)
   assert.equal(selectionEvents.length, 0)
@@ -82,7 +93,7 @@ test('F02-05 unresolved capability fails safe without awaiting and recovers afte
   const capability = new Promise((_resolve, reject) => { rejectCapability = reject })
   const llm = { adapters: new Map(), resolveModelInfo() { return capability } }
   const host = modern(t, {}, { llm })
-  const { agent, events } = host.createAgent('f02-capability-wait')
+  const { agent, events } = await announced(host,'f02-capability-wait')
   let settled = false
   const pending = host.runStep(agent, { claimed: [userMessage(ENGINEERING)] })
     .then((result) => { settled = true; return result })
@@ -111,9 +122,9 @@ test('F02-05 unresolved capability fails safe without awaiting and recovers afte
 
 test('F02-06 fixed subagentEffort bypasses scheduling and preserves parent Auto', async (t) => {
   const host = await autoModern(t, { subagentEffort: 'max' })
-  const parent = host.createAgent('f02-fixed-parent')
+  const parent = await announced(host,'f02-fixed-parent')
   await host.runStep(parent.agent, { claimed: [userMessage(ENGINEERING)] })
-  const child = host.createAgent('f02-fixed-child', {
+  const child = await announced(host,'f02-fixed-child', {
     effort: 'high',
     header: { origin: 'subagent', delegationDepth: 1, parentSession: parent.session.id },
   })
@@ -125,22 +136,24 @@ test('F02-06 fixed subagentEffort bypasses scheduling and preserves parent Auto'
   assert.equal(host.logs.filter((line) => line.includes('rank ') && line.includes(child.session.id)).length, 0)
 })
 
-test('F02-07 dispose during the restoration window prevents later Auto writes', async (t) => {
+test('F02-07 dispose after step/end prevents late writes without a restoration phase', async (t) => {
   const host = await autoModern(t)
-  const { agent, selectionEvents } = host.createAgent('f02-dispose-restore')
+  const { agent, selectionEvents } = await announced(host,'f02-dispose-restore')
   await host.runStep(agent, {
     claimed: [userMessage(ENGINEERING)],
     afterStepEnd() { host.dispose() },
   })
-  assert.equal(selectionEvents.at(-1)?.reasoningEffort, 'high')
+  assert.equal(selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
+  assert.equal(agent.model.current().reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
   assert.equal(host.logs.filter((line) => line.includes('async emit listener failed')).length, 0)
 })
 
 test('F02-08 an explicit fixed subagent off is honored without entering Auto scheduling', async (t) => {
   const host = await autoModern(t, { subagentEffort: 'off' })
-  const parent = host.createAgent('f02-off-parent')
+  const parent = await announced(host,'f02-off-parent')
   await host.runStep(parent.agent, { claimed: [userMessage(ENGINEERING)] })
-  const child = host.createAgent('f02-off-child', {
+  const child = await announced(host,'f02-off-child', {
     effort: 'high',
     header: { origin: 'subagent', delegationDepth: 1, parentSession: parent.session.id },
   })

@@ -4,6 +4,88 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.17-agent.1] - 2026-11-16
+
+First `-agent` construction release (the `rc` line ends at `0.2.17-rc.1`). This
+is the "D contract" pass: the 0.2.2 loop resolves per-step Auto at the moment
+the host CAPTURES the selection, instead of writing a selection between steps.
+
+### Changed
+
+- **Modern routing seam (replaces step/end preselect + pending retry).** The
+  plugin wraps the agent's public `agent.model.current()`; inside an active
+  turn that wrapper returns the concrete effort planned for THIS step, while
+  the host's durable selection stays the logical `Auto` sentinel. No per-step
+  `agent.model.select()` write exists any more, so a host that captures the
+  selection synchronously at `agent/inbox/claimed` sees the scheduled level.
+  The durable `Auto` is restored at `turn/end` only when the user did not pick
+  a level after the step (through the native selector).
+- Legacy 0.2.1 routing (`agent/request` rewrite) is unchanged; manual picks,
+  `disabled`, `defaultLevel`, `subagentEffort` and unsupported routes keep
+  their previous semantics. `defaultLevel` / `subagentEffort` still pin the
+  durable selection once per turn (they are explicit user intent).
+- Unresolved Auto is still fail-closed at `agent/pre-step`; `capability.peek()`
+  misses degrade to an omission and kick a background resolve instead of
+  awaiting inside the host's synchronous `claimed` emission.
+
+### Fixed
+
+- Continuous tool turns: every step is now scheduled from its own evidence
+  (a failing tool result escalates the next step), and repeated
+  `agent.model.current()` reads inside one step return the same captured
+  selection without duplicating the decision record.
+- Unknown effort vectors: the fractional rank fallback is a STRICT total order
+  (`1 + 6i/(n-1)`), and `effortForRank` no longer rounds, so every advertised
+  item is exactly reachable.
+- Whole-group config parsing for `errorDecay` / `briefRamp` / `toolRamp`
+  strings: one empty or non-numeric fragment rejects the entire vector (with a
+  warning that names the key) instead of silently shortening it; CJK
+  separators (`，、；`) stay accepted.
+- English stems: `migrate/migration`, `optimize/optimization`,
+  `diagnose/diagnosis`, `integrate/integration` classify as engineering, while
+  ordinary words (`capital`, `sparse`, `authority`) do not.
+- Resumed windows: replayed tool-result blocks never become the task brief
+  (origin stays `standard`, brief tokens stop being counted twice), and a
+  multi-line brief claim is deduplicated as a whole instead of line by line.
+- Subagent returns no longer accumulate while `subagentReturnBump` is off, and
+  re-enabling it does not replay events from the disabled period.
+- Runtime contract: only a genuinely missing `@deepseek-ai/dsh-app-boot`
+  (`ERR_MODULE_NOT_FOUND` for that specifier) is treated as the 0.2.1 legacy
+  loop; an app-boot module that throws internally now fails loud instead of
+  silently falling back.
+- Capability mask ownership: a third-party wrapper installed over ours no
+  longer leaves a stale marker that suppresses re-registration, and our old
+  wrapper stops injecting Auto once disposed.
+- Decision store hardening: malformed JSON is reported and recovers to an
+  empty store, invalid session rows are skipped with a warning, and
+  `__proto__` session ids stay ordinary own keys.
+- Custom-model fill: candidates are deduplicated (model row vs override key)
+  and an explicit user-level `compat.supportsReasoningEffort: false` is never
+  overwritten by the automatic `true`.
+
+### Client
+
+- Badge, config loading and trajectory polling each abort their in-flight
+  request on unmount/session switch, so a late response cannot repaint the
+  previous session.
+- HTML injection refreshes stale HMR CSS, and a disposal removes only the
+  style node it installed.
+- Trajectory boundary chips are Tab-focusable buttons (`role="button"`),
+  Enter/Space activate them like a click, and focus is visible.
+
+### Tests
+
+- `node --test "test/**/*.test.mjs"` → 320 tests / 320 pass / 0 fail
+  (Node v24.22.1). New contract suites cover the capture seam, evidence
+  ranking, config parsing, store/runtime hardening and the client resource
+  lifecycle.
+- The suite is independent of whether `pnpm install` linked the optional
+  `@deepseek-ai/dsh-app-boot` peer: `test/helpers/host-module-guard.mjs` pins
+  the "host module absent" environment, and the contract tests install their
+  own resolve hooks. A real but unverified host version is still refused by
+  `lib/runtime.js`; the guard only keeps local `node_modules` from deciding
+  which contract the fixtures exercise.
+
 ## [0.2.17-rc.1] - 2026-11-16
 
 Whole-turn Auto on the 0.2.2 agent loop, plus a runtime contract gate. No

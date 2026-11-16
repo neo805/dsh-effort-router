@@ -28,6 +28,13 @@
   重挂载间隙里的请求仍可能被宿主以 `UNSUPPORTED_REASONING_EFFORT` 拒绝。
   临时停用请优先把 `enabled` 设为 `false`（拦截器仍在，会剥离 auto）；必须
   重挂载时，先让会话切到具体档位。
+- **开发树的宿主 peer 与测试无关。** `pnpm install` 可能把 7 个 `@deepseek-ai/dsh-*`
+  可选 peer（例如 `dsh-app-boot@0.2.0-rc.2`）链接进 `node_modules`；这些不是被验证
+  支持的宿主版本，插件在真实加载时会**拒绝**它们，而不是猜契约。测试用
+  `test/helpers/host-module-guard.mjs` 固定“宿主模块不存在”的环境，契约测试
+  （`loadApplyForRuntime` / `loadRuntimeWithAppBoot`）自己注册 mock；因此装没装
+  peer、装成哪个版本，都不应改变测试结果。标准命令仍是
+  `node --test "test/**/*.test.mjs"`。
 
 ## 1. 轨迹视图胶囊（`trajectoryAnnotate`，默认开）
 
@@ -99,18 +106,17 @@
 
 - **怎么开**：在 DSH 0.2.2 宿主（`0.2.2-alpha.2` / `0.2.2-rc.3`）上把模型选择器切成
   `Auto`，正常发一个多步任务即可。
-- **预期**：每一步在宿主捕获选择**之前**就写好具体档位（徽标显示 `Auto · high`
-  这类实际档位），整轮保持 Auto；中途手动选具体档位后，本轮结尾不会被改回 Auto；
-  下一轮重新从 Auto 开始。决策日志里每步应有一条 `origin … rank … -> provider/model
-  effort …`。
-- **已知宿主限制（不是回归）**：0.2.2 在发布 `step/end` 时不允许同一会话再 append，
-  所以「工具续步」的重新调度可能比该步晚一拍：该步沿用上一档，下一步才落到目标档。
-  这是实测到的宿主契约边界（详见 `ROADMAP.md` 0.2.17-rc.1），不是插件丢弃了调度。
-- **冷缓存第一轮（不是回归）**：插件在 `agent/inbox/claimed` 同步段里**不允许 await**
-  能力解析，所以宿主刚启动 / 刚启用插件后的第一轮无法在捕获前确定目标档，会安全省略
-  `effort`（决策记录 `mode=unsupported`，由该模型适配器默认档执行）；同一会话第二轮起
-  `agent/pre-step` 已把能力预热，claim 前即可写入具体档（实测第二轮回 `mode=auto`）。
-  要消除这一轮，须在用户改选模型时就提前预热——已登记为后续小项（`ROADMAP.md`）。
+- **预期**：逻辑上整轮保持 `Auto`；宿主在每一步捕获到的是本步调度出的具体档位
+  （请求头与徽标显示 `Auto · high` 这类实际档位），原生选择器在轮末回到 Auto。
+  中途手动选具体档位后，本轮结尾不会被改回 Auto；下一轮重新从 Auto 开始。
+  决策日志里每步应有一条 `origin … rank … -> provider/model effort …`。
+- **工具续步**：0.2.17-agent.1 起，续步与首步走同一条同步捕获路径——每一步都按该步
+  证据重新调度，不再出现「工具续步晚一拍、沿用上一档」的旧现象。若仍看到续步沿用
+  旧档，按回归记录（附决策日志中相邻两条 step 记录）。
+- **冷缓存第一轮**：能力解析在 `agent/created` 与 claim 计划里火忘预热，`current()` /
+  `claimed` 仍只做同步 peek；因此宿主刚启动 / 刚启用插件后的首个 Auto 轮通常也能在
+  捕获前给出具体档。真正的冷 miss 安全省略 `effort`（`mode=unsupported`），不阻塞、
+  不伪造选择。
 - **实机复测证据（2026-11-16，web profile，宿主 0.2.2-rc.3，插件 0.2.17-rc.1）**：
   会话 `session-943f7265…`（模型 `deepseek-account/deepseek-flash`，
   选择 `auto`）——turn 1 记录 `mode=unsupported`（冷缓存安全省略）、turn 2 记录
@@ -138,6 +144,7 @@
 | 0.2.16-rc.1 | 2026-10-25 | 通过（出品人视觉） | 未测 | 待验收 | 整数 rank 改变调度目标；徽标标签仍只显示实际 effort，悬停新增 origin → target rank/tier → mapping |
 | 0.2.16-rc.2 | 2026-10-25 | 未复测（无 UI 改动） | 未测 | 待验收 | 仅投影遥测与服务获取修复；请在决策日志确认新增 projectionsAvailable/todosAvailable/todoTransitions 字段，并确认真实会话路由无回归 |
 | 0.2.17-rc.1 | 2026-11-16 | 未复测（无 UI 改动） | 未测 | AI 已在 Web 实机验证（见第 5 项证据） | 双路径 + 整轮 Auto；Web 侧已验「整轮 Auto、轮末回 Auto、只读路由正常」；「中途手动不被改写」由自动测试覆盖，请在 Desktop 按第 5 项顺手确认徽标实际档位 |
+| 0.2.17-agent.1 | 2026-11-16 | 自动测试覆盖资源清理、会话切换与键盘操作；视觉待出品人确认 | 未测 | 待出品人验收 | 捕获时同步解析（不再 step/end 补写）；续步逐步重算；badge/config/trajectory 均带 AbortController；轨迹胶囊 Tab 可聚焦、Enter/Space 等价点击；冷缓存预热前移 |
 |  |  |  |  |  |  |
 
 ---

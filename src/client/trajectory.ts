@@ -185,6 +185,9 @@ export function startTrajectoryDecorator(): () => void {
   let pollTimer: ReturnType<typeof setTimeout> | undefined
   let sessionId: string | null = null
   let polling = false
+  /** In-flight poll; aborted on cleanup and on a session switch so a late
+   *  table can never paint another ledger. */
+  let pollController: AbortController | null = null
   const guard = createPollGuard()
 
   /** Rows queued for decoration on the next animation frame. */
@@ -327,10 +330,26 @@ export function startTrajectoryDecorator(): () => void {
           if (placement === 'b') {
             caption.setAttribute('class', 'er-trj-boundary')
             caption.setAttribute('data-er-trj-v', skin)
-            caption.addEventListener('click', (event) => {
-              event.stopPropagation()
+            // The chip is a control (it opens the native request summary), so
+            // it must be reachable by Tab and operable by Enter/Space exactly
+            // like a button; the visible focus ring comes from CSS.
+            caption.setAttribute('role', 'button')
+            caption.setAttribute('tabindex', '0')
+            if ('tabIndex' in caption) caption.tabIndex = 0
+            const activate = () => {
               const target = requestDotOf(tr)
               if (target) target.click()
+            }
+            caption.addEventListener('click', (event) => {
+              event.stopPropagation()
+              activate()
+            })
+            caption.addEventListener('keydown', (event) => {
+              const key = event && event.key
+              if (key !== 'Enter' && key !== ' ' && key !== 'Spacebar') return
+              event.preventDefault()
+              event.stopPropagation()
+              activate()
             })
           } else {
             caption.setAttribute('class', 'er-trj')
@@ -383,6 +402,12 @@ export function startTrajectoryDecorator(): () => void {
     const current = effectiveSessionId()
     if (guard.updateSession(current) || current !== sessionId) {
       sessionId = current
+      // A pane switch invalidates the in-flight read: abort it so the late
+      // table cannot repaint captions for the session that just left.
+      if (pollController) {
+        pollController.abort()
+        pollController = null
+      }
       clearAllCaptions()
     }
   }
@@ -443,6 +468,7 @@ export function startTrajectoryDecorator(): () => void {
     const requestToken = guard.snapshot()
     if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
       polling = true
+      pollController = typeof AbortController === 'function' ? new AbortController() : null
       try {
         const params = new URLSearchParams()
         params.set('view', 'anchors')
@@ -450,6 +476,7 @@ export function startTrajectoryDecorator(): () => void {
         else if (requestToken.hint) params.set('hint', requestToken.hint)
         const response = await fetch('/effort-router/state?' + params.toString(), {
           cache: 'no-store',
+          ...(pollController ? { signal: pollController.signal } : {}),
         })
         if (response.ok) {
           const json = await response.json()
@@ -477,6 +504,7 @@ export function startTrajectoryDecorator(): () => void {
         // The route is best-effort; a failed poll keeps the last known state.
       } finally {
         polling = false
+        pollController = null
       }
     }
     if (!stopped) pollTimer = setTimeout(tick, POLL_MS)
@@ -590,6 +618,10 @@ export function startTrajectoryDecorator(): () => void {
 
   return () => {
     stopped = true
+    if (pollController) {
+      pollController.abort()
+      pollController = null
+    }
     observer.disconnect()
     if (pollTimer !== undefined) clearTimeout(pollTimer)
     if (rafId !== undefined && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(rafId)

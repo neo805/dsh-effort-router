@@ -7,6 +7,7 @@
  * skip the ones that resolve with levels (catalog inheritance must never be
  * shadowed).
  */
+import './helpers/host-module-guard.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fillCandidates, planFill } from '../lib/custom-models.js'

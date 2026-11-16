@@ -12,12 +12,15 @@ import {
 } from '../helpers/host-0.2.2-harness.mjs'
 
 const entry = await loadApplyForRuntime('0.2.2-alpha.2')
+const legacyEntry = await loadApplyForRuntime('0.2.1-rc.5')
+setTestRuntimeVersion('0.2.2-alpha.2')
 
 const ENGINEERING = '设计并实现一个支持高并发、幂等写入和故障恢复的分布式事务系统'
 const TRIVIAL = '翻译这句话'
 const effort = (result) => result.config.reasoningEffort
 
 function modern(t, config = {}, hostOptions = {}) {
+  setTestRuntimeVersion('0.2.2-alpha.2')
   const host = createModernHost({ apply: entry.apply, config: entry.Config(config), ...hostOptions })
   t.after(() => host.dispose())
   return host
@@ -27,6 +30,12 @@ async function autoModern(t, config = {}, hostOptions = {}) {
   const host = modern(t, config, hostOptions)
   await host.primeCapability()
   return host
+}
+
+async function announced(host, ...args) {
+  const created = host.createAgent(...args)
+  await host.announceAgent(created.agent)
+  return created
 }
 
 test('F01-01 manifest and lockfile stop advertising the untested 0.2.x boundary', () => {
@@ -46,12 +55,13 @@ test('F01-01 manifest and lockfile stop advertising the untested 0.2.x boundary'
 
 test('F01-02 first Auto step is concrete before selection capture and remains logical Auto', async (t) => {
   const host = await autoModern(t)
-  const { agent, events, selectionEvents } = host.createAgent('f01-first')
+  const { agent, events, selectionEvents } = await announced(host,'f01-first')
   const result = await host.runStep(agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(effort(result), 'high')
   assert.equal(result.selection.reasoningEffort, 'high')
   assert.equal(agent.model.current().reasoningEffort, 'auto')
-  assert.equal(selectionEvents.at(-1)?.reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(selectionEvents.every((event) => event.reasoningEffort === 'auto'), true, 'D never writes a scheduled concrete selection')
   assert.equal(host.requests.length, 1, 'the prepared request is still sent')
   assert.equal(events.find((event) => event.type === 'request/header')?.data.header.config.reasoningEffort, 'high')
   assert.equal(host.logs.filter((line) => line.includes('rank 4 (high)') && line.includes(agent.session.id)).length, 1)
@@ -59,7 +69,7 @@ test('F01-02 first Auto step is concrete before selection capture and remains lo
 
 test('F01-03 tool continuation recalculates without another inbox claim', async (t) => {
   const host = await autoModern(t)
-  const { agent } = host.createAgent('f01-tool')
+  const { agent, selectionEvents } = await announced(host,'f01-tool')
   const first = await host.runStep(agent, {
     claimed: [userMessage(TRIVIAL)],
     assistant: assistantToolCall(),
@@ -70,15 +80,17 @@ test('F01-03 tool continuation recalculates without another inbox claim', async 
   const second = await host.runStep(agent, { step: 2 })
   assert.equal(effort(second), 'medium')
   assert.equal(agent.model.current().reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
   assert.equal(host.selectionCaptures.length, 2)
 })
 
 test('F01-04 same-step retry reuses the fixed selection without rescheduling', async (t) => {
   const singleHost = await autoModern(t)
-  const single = singleHost.createAgent('f01-retry-single')
+  const single = await announced(singleHost,'f01-retry-single')
   await singleHost.runStep(single.agent, { claimed: [userMessage(ENGINEERING)] })
   const retryHost = await autoModern(t)
-  const retry = retryHost.createAgent('f01-retry-three')
+  const retry = await announced(retryHost,'f01-retry-three')
   let streamAttempt = 0
   let preSteps = 0
   const failures = []
@@ -108,6 +120,8 @@ test('F01-04 same-step retry reuses the fixed selection without rescheduling', a
   assert.equal(result.attempts, 3)
   assert.deepEqual(retryHost.requests.map((item) => item.config.reasoningEffort), ['high', 'high', 'high'])
   assert.equal(retry.agent.model.current().reasoningEffort, 'auto')
+  assert.equal(retry.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(retry.selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
   const decisions = (logs) => logs.filter((line) => line.includes('rank ')).length
   assert.ok(decisions(singleHost.logs) > 0, 'positive control: the single attempt really scheduled')
   assert.equal(decisions(retryHost.logs), decisions(singleHost.logs))
@@ -117,16 +131,16 @@ test('F01-04 same-step retry reuses the fixed selection without rescheduling', a
 
 test('F01-05 concrete manual selection is never rewritten or reverted', async (t) => {
   const host = modern(t)
-  const { agent, selectionEvents } = host.createAgent('f01-manual', { effort: 'max' })
+  const { agent, selectionEvents } = await announced(host,'f01-manual', { effort: 'max' })
   const result = await host.runStep(agent, { claimed: [userMessage(TRIVIAL)] })
   assert.equal(effort(result), 'max')
   assert.equal(agent.model.current().reasoningEffort, 'max')
   assert.equal(selectionEvents.length, 0)
 })
 
-test('F01-06 manual takeover wins over Auto restoration and explicit Auto resumes', async (t) => {
+test('F01-06 manual takeover needs no restoration and explicit Auto resumes', async (t) => {
   const host = await autoModern(t)
-  const { agent } = host.createAgent('f01-takeover')
+  const { agent } = await announced(host,'f01-takeover')
   await host.runStep(agent, { claimed: [userMessage(ENGINEERING)] })
   agent.model.select({ provider: 'gw', model: 'thinker', reasoningEffort: 'max' })
   const manual = await host.runStep(agent, {
@@ -140,18 +154,19 @@ test('F01-06 manual takeover wins over Auto restoration and explicit Auto resume
   assert.equal(agent.model.current().reasoningEffort, 'auto')
 })
 
-test('F01-07 disabled mode removes only the private Auto sentinel before fixed selection', async (t) => {
+test('F01-07 disabled mode strips private Auto only from the concrete capture', async (t) => {
   const host = modern(t, { enabled: false })
-  const { agent } = host.createAgent('f01-disabled')
+  const { agent } = await announced(host,'f01-disabled')
   const result = await host.runStep(agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(effort(result), undefined)
-  assert.equal(agent.model.current().reasoningEffort, undefined)
+  assert.equal(agent.model.current().reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
   assert.equal(host.logs.filter((line) => line.includes('rank ')).length, 0)
 })
 
 test('F01-08 pinned default uses the same safe path but is not logical Auto', async (t) => {
   const host = await autoModern(t, { defaultLevel: 'high' })
-  const { agent } = host.createAgent('f01-default', { effort: undefined })
+  const { agent } = await announced(host,'f01-default', { effort: undefined })
   const result = await host.runStep(agent, { claimed: [userMessage(TRIVIAL)] })
   assert.equal(effort(result), 'high')
   assert.equal(agent.model.current().reasoningEffort, 'high')
@@ -162,14 +177,14 @@ test('F01-09 unsupported and off-only models never receive private Auto or expli
   const unsupported = await autoModern(t, { defaultLevel: 'high' }, {
     llm: { adapters: new Map(), async resolveModelInfo() { return { reasoning: null } } },
   })
-  const first = unsupported.createAgent('f01-unsupported')
+  const first = await announced(unsupported,'f01-unsupported')
   const fallback = await unsupported.runStep(first.agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(effort(fallback), undefined, 'an unsupported model must not receive the pinned high effort')
 
   const offOnly = await autoModern(t, {}, {
     llm: { adapters: new Map(), async resolveModelInfo() { return { reasoning: { efforts: [{ id: 'off' }] } } } },
   })
-  const second = offOnly.createAgent('f01-off-only')
+  const second = await announced(offOnly,'f01-off-only')
   const outcome = await offOnly.runStep(second.agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(effort(outcome), undefined, 'off-only fails closed to the provider default, never a guess or explicit off')
   assert.equal(second.agent.model.current().reasoningEffort, 'auto', 'logical Auto survives the safe omission')
@@ -185,16 +200,16 @@ test('F01-10 modern path preserves capability allow-list and nearest-up mapping'
       },
     },
   })
-  const { agent } = host.createAgent('f01-allow')
+  const { agent } = await announced(host,'f01-allow')
   const result = await host.runStep(agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(effort(result), 'high')
 })
 
 test('F01-11 subagent with Auto parent schedules from its own brief without changing parent', async (t) => {
   const host = await autoModern(t)
-  const parent = host.createAgent('f01-parent')
+  const parent = await announced(host,'f01-parent')
   await host.runStep(parent.agent, { claimed: [userMessage(TRIVIAL)] })
-  const child = host.createAgent('f01-child', {
+  const child = await announced(host,'f01-child', {
     effort: 'low',
     header: { origin: 'subagent', delegationDepth: 1, parentSession: parent.session.id },
   })
@@ -202,14 +217,15 @@ test('F01-11 subagent with Auto parent schedules from its own brief without chan
   assert.equal(effort(result), 'high')
   assert.equal(parent.agent.model.current().reasoningEffort, 'auto')
   assert.equal(child.agent.model.current().reasoningEffort, 'auto')
-  assert.equal(child.selectionEvents.at(-1)?.reasoningEffort, 'auto', 'the child retains its own logical Auto witness')
+  assert.equal(child.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(child.selectionEvents.every((event) => event.reasoningEffort === 'auto'), true, 'the child retains logical Auto without concrete select writes')
 })
 
 test('F01-12 subagent inherits a concrete parent selection verbatim', async (t) => {
   const host = modern(t)
-  const parent = host.createAgent('f01-manual-parent', { effort: 'max' })
+  const parent = await announced(host,'f01-manual-parent', { effort: 'max' })
   await host.runStep(parent.agent, { claimed: [userMessage(TRIVIAL)] })
-  const child = host.createAgent('f01-manual-child', {
+  const child = await announced(host,'f01-manual-child', {
     effort: 'max',
     header: { origin: 'subagent', delegationDepth: 1, parentSession: parent.session.id },
   })
@@ -247,8 +263,7 @@ test('F01-13 dispose during legacy downstream await cannot record or append stal
     inject() {}, effect(fn) { const off = fn(); if (off) effects.push(off); return () => {} },
   }
   setTestRuntimeVersion('0.2.1-rc.5')
-  entry.apply(ctx, entry.Config({}))
-  setTestRuntimeVersion('0.2.2-alpha.2')
+  legacyEntry.apply(ctx, legacyEntry.Config({}))
   const agent = {
     sessionId: 'f01-dispose-next',
     session: {
@@ -275,12 +290,12 @@ test('F01-13 dispose during legacy downstream await cannot record or append stal
 test('F01-14 same-session Auto witness survives a concrete last-used header on resume', async (t) => {
   const id = 'f01-resume-auto'
   const firstHost = await autoModern(t)
-  const first = firstHost.createAgent(id)
+  const first = await announced(firstHost,id)
   const initial = await firstHost.runStep(first.agent, { claimed: [userMessage(TRIVIAL)] })
   assert.equal(effort(initial), 'low')
   firstHost.dispose()
   const resumedHost = await autoModern(t)
-  const resumed = resumedHost.createAgent(id, {
+  const resumed = await announced(resumedHost,id, {
     lastUsed: { provider: 'gw', model: 'thinker', reasoningEffort: 'low' },
   })
   const result = await resumedHost.runStep(resumed.agent, {
@@ -288,16 +303,17 @@ test('F01-14 same-session Auto witness survives a concrete last-used header on r
   })
   assert.equal(effort(result), 'high')
   assert.equal(resumed.agent.model.current().reasoningEffort, 'auto')
+  assert.equal(resumed.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
 })
 
 test('F01-15 same-session concrete manual resume is not rescued by brief evidence', async (t) => {
   const id = 'f01-resume-manual'
   const firstHost = modern(t)
-  const first = firstHost.createAgent(id, { effort: 'low' })
+  const first = await announced(firstHost,id, { effort: 'low' })
   await firstHost.runStep(first.agent, { claimed: [userMessage(TRIVIAL)] })
   firstHost.dispose()
   const resumedHost = modern(t)
-  const resumed = resumedHost.createAgent(id, {
+  const resumed = await announced(resumedHost,id, {
     lastUsed: { provider: 'gw', model: 'thinker', reasoningEffort: 'low' },
   })
   const result = await resumedHost.runStep(resumed.agent, {

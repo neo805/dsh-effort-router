@@ -1,12 +1,16 @@
 import '../test-profile.mjs'
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { loadApplyForRuntime } from '../helpers/host-0.2.2-harness.mjs'
+import { loadApplyForRuntime, setTestRuntimeVersion } from '../helpers/host-0.2.2-harness.mjs'
 
 const ENGINEERING = '设计并实现一个支持高并发、幂等写入和故障恢复的分布式事务系统'
+const legacyEntries = new Map(await Promise.all(
+  ['0.2.1-rc.2', '0.2.1-rc.5'].map(async (runtime) => [runtime, await loadApplyForRuntime(runtime)]),
+))
 
 async function verifyLegacy(runtime) {
-  const entry = await loadApplyForRuntime(runtime)
+  const entry = legacyEntries.get(runtime)
+  setTestRuntimeVersion(runtime)
   const listeners = new Map()
   const effects = []
   let selected = 0

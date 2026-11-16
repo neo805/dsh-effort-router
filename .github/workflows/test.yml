@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   node-test:
     strategy:
@@ -13,6 +16,8 @@ jobs:
         node: ['22.19.0', '24.x']
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # A hung host fixture must not burn a runner for six hours.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,4 +25,23 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: corepack enable
       - run: pnpm install --ignore-scripts
+      # The shipped client bundle is generated: a build that changes it means
+      # the committed artifact is stale, which is a real release defect.
+      - run: pnpm build
+      - name: bundle diff
+        shell: bash
+        run: git diff --exit-code -- lib/client.js
+      # Pack must keep every artifact the manifest promises (files[]).
+      - name: pack contents
+        shell: bash
+        run: |
+          node -e "
+            const { readFileSync, existsSync } = require('node:fs');
+            const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+            const mains = [pkg.main, 'lib/client.js', 'cordis.patch.yml'].filter(Boolean);
+            for (const file of mains) if (!existsSync(file)) { console.error('missing packed artifact: ' + file); process.exit(1); }
+            for (const file of ['README.md', 'README.zh.md', 'CHANGELOG.md', 'LICENSE']) {
+              if (!existsSync(file)) { console.error('missing packaged doc: ' + file); process.exit(1); }
+            }
+          "
       - run: node --test "test/**/*.test.mjs"

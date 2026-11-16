@@ -65,7 +65,7 @@
 <header><div class="wrap">
   <h1>dsh-effort-router 产品需求文档</h1>
   <p>面向使用者与产品验收的非技术性需求说明：它解释产品要做什么、用户会怎样使用、哪些行为必须得到保证；不描述代码结构、变量或接口实现。</p>
-  <div class="meta"><span>当前产品基线 0.2.17-rc.1</span><span>文档更新 2026-11-16</span><span>非技术版</span><span>已实施待验收：0.2.2 支持（首要）；已批准：跨会话档位记忆</span></div>
+  <div class="meta"><span>当前产品基线 0.2.17-agent.1</span><span>文档更新 2026-11-16</span><span>非技术版</span><span>本轮已完成：0.2.2 连续步同步解析、证据链/配置解析硬化、客户端资源与无障碍</span></div>
 </div></header>
 <main>
 <nav aria-label="文档目录"><div class="inner"><a href="#purpose">产品目标</a><a href="#concepts">使用概念</a><a href="#journey">使用流程</a><a href="#auto-engine">Auto 计算流程</a><a href="#functional">功能需求</a><a href="#memory">跨会话记忆</a><a href="#options">用户选项</a><a href="#decisions">裁决登记册</a><a href="#acceptance">验收</a><a href="#boundaries">边界</a></div></nav>
@@ -73,13 +73,13 @@
 <section id="abstract">
   <h2>English abstract</h2>
   <p>dsh-effort-router helps users balance answer quality and reasoning cost for each step of an agent task. A user may either pin a specific reasoning level or choose <strong>Auto</strong>. In Auto mode, the product considers the original task, recent failures, repeated tool activity, information volume, and budget pressure before selecting the actual level for each step. A concrete user choice always takes priority. The product uses the host application's native model selector and read-only displays rather than adding a separate settings interface.</p>
-  <p><strong>Approved, not yet implemented:</strong> DSH 0.2.2 support is the important and urgent priority for the next implementation cycle. It must preserve both the existing DSH 0.2.1 path and continuous Auto scheduling throughout a turn. Official Auto means omitted effort with adapter defaults; it does not replace this evidence-driven scheduler.</p>
-  <p><strong>Also approved:</strong> the product will remember the user's last explicit Auto or concrete-level choice across sessions. It will remember the logical choice, never the temporary level produced by Auto scheduling. Restoring a preference must not override a current explicit choice, subagent inheritance, or an unsupported model's safety constraints.</p>
+  <p><strong>Approved repair direction:</strong> DSH 0.2.2 support must preserve both the existing DSH 0.2.1 path and continuous Auto scheduling throughout a turn. The next implementation resolves the logical Auto selection synchronously at the host's per-step selection capture; it no longer relies on a late follow-up selection write. Official Auto means omitted effort with adapter defaults; it does not replace this evidence-driven scheduler.</p>
+  <p><strong>Native global memory; F-06 frozen:</strong> DSH already remembers the latest explicit provider, model, and Auto/concrete-level choice across new sessions and restarts. The plugin will not build a second preference store or per-model memory. It only needs to preserve the native logical choice, schedule Auto after restoration, and avoid recording Auto's temporary outputs as new user intent.</p>
 </section>
 
 <section id="purpose">
   <h2>1. 文档目的与产品目标</h2>
-  <p>本文先记录当前版本已经提供的能力，以及已经实现、等待实机验收的 0.2.2 支持和仍待实施的跨会话档位记忆；随后用独立登记册保留全部已批准、已否决与延期选项。不同状态会明确区分，避免把计划能力或讨论项误读为当前能力。技术任务和版本安排见 <a href="DEVELOPMENT-PLAN.md">开发计划</a>。</p>
+  <p>本文先记录当前版本已经提供的能力、0.2.2 连续步调度的已确认缺陷与修复方向，以及 DSH 原生全局选择记忆；随后用独立登记册保留全部已批准、已否决、冻结与延期选项。不同状态会明确区分，避免把计划能力或讨论项误读为当前能力。技术任务和版本安排见 <a href="DEVELOPMENT-PLAN.md">开发计划</a>。</p>
   <div class="grid">
     <div class="card"><strong>按需思考</strong>简单步骤少花预算，复杂、信息量大或失败恢复中的步骤获得更多推理资源。</div>
     <div class="card"><strong>用户始终可接管</strong>用户选定具体档后，产品不再擅自改变；选择 Auto 才交给调度器。</div>
@@ -126,12 +126,12 @@
     <div class="node"><strong>选择实际执行档</strong><br><span class="small">Auto 逐步判断；手动保持原档</span></div><div class="arrow">→</div>
     <div class="node"><strong>只读反馈</strong><br><span class="small">显示模式、实际档与原因</span></div>
   </div>
-  <h3>跨会话恢复流程 <span class="tag next">已批准，待实施</span></h3>
-  <div class="flow" aria-label="跨会话记忆恢复流程">
-    <div class="node"><strong>记录人工选择</strong><br><span class="small">只记录 Auto 或具体档</span></div><div class="arrow">→</div>
-    <div class="node"><strong>新会话选择模型</strong><br><span class="small">查找该模型的最近偏好</span></div><div class="arrow">→</div>
-    <div class="node"><strong>检查当前意图</strong><br><span class="small">不覆盖当次选择或明确继承</span></div><div class="arrow">→</div>
-    <div class="node"><strong>恢复逻辑模式</strong><br><span class="small">Auto 仍是 Auto；具体档仍按能力校验</span></div>
+  <h3>跨会话恢复流程 <span class="tag done">DSH 原生全局记忆</span></h3>
+  <div class="flow" aria-label="DSH 原生全局选择恢复流程">
+    <div class="node"><strong>原生记录人工选择</strong><br><span class="small">保存最近的供应商、模型与 Auto/具体档</span></div><div class="arrow">→</div>
+    <div class="node"><strong>新会话或重启</strong><br><span class="small">读取同一份全局默认选择</span></div><div class="arrow">→</div>
+    <div class="node"><strong>当前意图优先</strong><br><span class="small">当次改选与明确继承不被插件覆盖</span></div><div class="arrow">→</div>
+    <div class="node"><strong>保持逻辑模式</strong><br><span class="small">Auto 继续逐步调度；具体档直通</span></div>
   </div>
 </section>
 
@@ -210,7 +210,7 @@
 
 <section id="functional">
   <h2>4. 功能需求</h2>
-  <p><span class="tag done">当前能力</span> 除特别标注“已批准，待实施”外，本节均描述当前产品应具备并持续保持的行为。</p>
+  <p><span class="tag done">当前能力</span> 本节描述产品应具备并持续保持的行为；已发现但尚未修复的连续步缺陷在裁决登记册单独标明。</p>
 
   <h3>4.1 模式选择与用户接管</h3>
   <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
@@ -235,7 +235,7 @@
 
   <h3>4.3 整轮 Auto、子代理与分支连续性</h3>
   <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
-    <tr><td>FR-040</td><td><strong>用户在一轮开始时选择 Auto 后，整轮都必须保持 Auto 持续调度。</strong>每一步的实际档可以变化，但不得把下一步误认成手动定档。</td><td>同一轮使用多个步骤和工具调用，确认每步都重新调度，模式始终显示 Auto。</td></tr>
+    <tr><td>FR-040</td><td><strong>用户在一轮开始时选择 Auto 后，整轮都必须保持 Auto 持续调度。</strong>每一步的实际档可以变化，但不得把下一步误认成手动定档。插件只在本步请求 capture 时把逻辑 Auto 解析为实际档；回合外的原生选择与配置恢复仍保持 Auto。</td><td>同一轮使用多个步骤和工具调用，确认每步都重新调度，模式始终显示 Auto；回合外恢复配置时不得把实际档固化成人工选择。</td></tr>
     <tr><td>FR-041</td><td>用户在整轮中途改选具体档，应立即退出 Auto；之后不得因旧记忆或上一步结果自动切回。</td><td>Auto 执行若干步骤后手动改档，检查后续步骤和记忆更新。</td></tr>
     <tr><td>FR-042</td><td>父会话使用具体档时，子代理应继承该档；父会话使用 Auto 时，子代理按自己的任务独立调度。</td><td>分别验证父手动、父 Auto、父会话继续执行后再返回的子代理。</td></tr>
     <tr><td>FR-043</td><td>无法确认子代理来源时，应采取保守继承，不得把可能的人工选择当成 Auto。</td><td>缺少父记录、档位不匹配、显式子代理覆盖及关闭思考的血缘。</td></tr>
@@ -261,20 +261,20 @@
 </section>
 
 <section id="memory">
-  <h2>5. 跨会话“上次档位”记忆 <span class="tag next">F-06 · 已批准，待实施</span></h2>
-  <p>该功能解决新建会话或重启应用后反复手选的问题。它记忆的是<strong>逻辑偏好</strong>，不是 Auto 在某一步临时选择的实际执行档。默认开启，可通过配置文件关闭，不新增设置界面。</p>
-  <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>已批准需求</th><th>验收方式</th></tr></thead><tbody>
-    <tr><td>FR-070</td><td>用户明确选择 Auto 或具体档后，新建会话及应用重启后都应能恢复最近一次选择。</td><td>分别验证 Auto、具体档、新建会话和完整重启。</td></tr>
-    <tr><td>FR-071</td><td>记忆按接入方式与模型分别保存，不把另一个模型的具体档强行套用到当前模型。</td><td>两个模型交替选择不同档位，再分别新建会话验证恢复结果。</td></tr>
-    <tr><td>FR-072</td><td>记住 Auto 时必须恢复为 Auto 持续调度，不得恢复成上一次某一步的实际执行档。</td><td>Auto 经历多个不同实际档后新建会话，仍显示并执行 Auto。</td></tr>
-    <tr><td>FR-073</td><td>当前会话的明确选择始终优先；用户中途改选后立即生效，并成为新的最近偏好。</td><td>恢复旧偏好后立即改选，检查当前步骤、后续步骤及下一会话。</td></tr>
-    <tr><td>FR-074</td><td>恢复顺序为：当前明确选择与明确继承优先，其次是当前模型的记忆，再次是产品配置的默认方式，最后才是宿主默认。</td><td>覆盖当前选择、子代理继承、有记忆、无记忆及未配置默认值等情况。</td></tr>
-    <tr><td>FR-075</td><td>记忆中的具体档在当前模型上不可用时，应忽略该记忆并使用既有默认方式，不得擅自换算成相邻档冒充人工选择。</td><td>保存一个具体档后切换到不支持它的模型，检查安全回退与提示。</td></tr>
-    <tr><td>FR-076</td><td>只有用户明确选择才能更新记忆；Auto 的计算结果、固定默认值和子代理继承不得被误记为人工偏好。</td><td>连续自动调度、使用默认档和子代理执行后，原记忆不应被污染。</td></tr>
-    <tr><td>FR-077</td><td>记忆仅保存在本机对应用户配置环境中，不同配置环境不得共享；只保存模型、逻辑选择和必要时间信息，不保存任务正文。</td><td>检查两个配置环境互不影响，删除插件数据后记忆消失，记录中无简报正文。</td></tr>
-    <tr><td>FR-078</td><td>恢复结果必须呈现在原生选择器中，不得新增第二套偏好控制或只读展示与实际状态不一致。</td><td>新会话打开原生选择器即可看到恢复结果，徽标、选择器和实际行为一致。</td></tr>
+  <h2>5. 原生全局选择记忆 <span class="tag done">F-06 · 冻结插件需求，复用 DSH</span></h2>
+  <p>2026-11-16 出品人确认：使用 DSH 原生全局选择记忆，不要求每个接入方式与模型分别记忆，冻结原 F-06 插件功能。DSH 保存最近一次明确选择的供应商、模型和逻辑 Auto/具体档；插件不得另建偏好库，也不得把 Auto 单步实际档写回成人工选择。</p>
+  <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>当前需求</th><th>验收方式</th></tr></thead><tbody>
+    <tr><td>FR-070</td><td>用户明确选择 Auto 或具体档后，新建会话及应用重启后由 DSH 恢复最近一次全局选择。</td><td>分别验证 Auto、具体档、新建会话和完整重启；插件无重复记忆开关。</td></tr>
+    <tr><td>FR-071</td><td>只保留一份原生全局默认选择，不建立 provider+model 偏好表。切换模型时遵循原生目标模型默认方式，不恢复旧模型的独立档位。</td><td>两个模型交替选择后，确认新会话只恢复最近全局选择，切换模型不套用旧模型偏好。</td></tr>
+    <tr><td>FR-072</td><td>原生恢复 Auto 后必须保持逻辑 Auto 并持续调度，不得变成上一次某一步的实际执行档。</td><td>Auto 经历多个不同实际档后新建会话，原生选择器仍显示 Auto，各步按证据执行。</td></tr>
+    <tr><td>FR-073</td><td>当前会话的明确选择始终优先；用户中途改选后立即生效，并由原生机制成为新的全局选择。</td><td>恢复旧选择后立即改选，检查当前步骤、后续步骤及下一会话。</td></tr>
+    <tr><td>FR-074</td><td>当前明确选择与明确继承优先；没有当次选择时使用原生全局默认。只有原生选择缺失时，才沿用插件既有默认档与宿主默认规则。</td><td>覆盖当前选择、子代理继承、原生 Auto/具体档、原生选择缺失及插件默认值。</td></tr>
+    <tr><td>FR-075</td><td>插件不得为了让旧模型的具体档适配当前模型而寻找相邻档。模型切换与不支持档位的处理遵循原生目标模型能力和安全回退。</td><td>切换到能力不同的模型，确认没有跨模型 nearest 换算或伪装成人工选择。</td></tr>
+    <tr><td>FR-076</td><td>只有原生明确选择流程更新全局记忆；插件的 Auto 计算结果、固定默认值和子代理继承不得写回全局选择。</td><td>连续自动调度、使用默认档和子代理执行后，原生全局选择不被污染。</td></tr>
+    <tr><td>FR-077</td><td>全局选择由 DSH 保存在对应本机配置环境中，插件不保存第二份偏好或任务正文。不同配置环境不得共享插件调度记录。</td><td>检查两个配置环境；插件数据中不存在偏好副本或简报正文。原生记忆的清理由 DSH 负责，不再承诺删除插件数据会清除它。</td></tr>
+    <tr><td>FR-078</td><td>原生选择器呈现逻辑 Auto/具体档；插件只读徽标和轨迹呈现实际执行档，不新增第二套偏好控制。</td><td>新会话打开原生选择器即可看到恢复结果；Auto 下选择器保持 Auto，徽标与实际档位一致。</td></tr>
   </tbody></table></div>
-  <div class="callout"><strong>与整轮 Auto 的关系：</strong>跨会话记忆负责“开始时恢复什么”，整轮 Auto 负责“开始之后是否持续自动”。恢复 Auto 后，整轮仍按 FR-040 持续调度；恢复具体档后，整轮仍按人工选择直通。</div>
+  <div class="callout"><strong>与整轮 Auto 的关系：</strong>DSH 负责“开始时恢复什么”，插件负责“开始之后是否持续自动”。恢复 Auto 后仍按 FR-040 逐步调度；恢复具体档后仍按人工选择直通。</div>
 </section>
 
 <section id="options">
@@ -290,7 +290,7 @@
     <tr><td>信息量证据</td><td>关注较长窗口，重复文本经过折扣；简报与工具结果分别判断。</td><td>可调整窗口、两档信息量阈值及重复折扣开关。</td></tr>
     <tr><td>任务词典</td><td>使用内置中英文线索。</td><td>可追加线索，或完整替换某类词典。</td></tr>
     <tr><td>只读显示</td><td>输入区徽标与轨迹投影开启；对话流工具小注关闭。</td><td>三个显示开关互不影响，均不改变调度。</td></tr>
-    <tr><td>跨会话记忆 <span class="tag next">待实施</span></td><td>批准后默认开启。</td><td>可通过配置文件关闭；不提供新的界面控制。</td></tr>
+    <tr><td>跨会话记忆 <span class="tag done">DSH 原生</span></td><td>由 DSH 保存最近全局选择。</td><td>插件不提供记忆开关、不保存偏好副本，也不新增界面控制。</td></tr>
   </tbody></table></div>
 </section>
 
@@ -298,10 +298,10 @@
   <h2>7. 本地记录、隐私与可删除性</h2>
   <ul>
     <li><strong>诊断记录：</strong>保存最近调度模式、实际档位和必要信号，用于展示与研究；会话正文不属于公开展示内容。</li>
-    <li><strong>偏好记录：</strong>跨会话记忆只保存模型、逻辑选择和必要时间信息，不保存用户简报或工具输出。</li>
-    <li><strong>配置环境隔离：</strong>不同用户配置环境的调度记录与偏好不得互相覆盖或共享。</li>
-    <li><strong>记录有界：</strong>诊断信息采用有限保留，不因长期使用无限增长；跨会话偏好只保留每个模型的最近选择。</li>
-    <li><strong>可删除：</strong>移除插件及其本地数据后，调度记录与偏好应一并消失，不留下需要手工清理的界面或耦合。</li>
+    <li><strong>原生选择记录：</strong>DSH 保存最近供应商、模型和逻辑选择；插件不另存偏好，不保存用户简报或工具输出。</li>
+    <li><strong>配置环境隔离：</strong>不同用户配置环境的调度记录不得互相覆盖或共享；原生全局选择遵循 DSH 自己的配置环境边界。</li>
+    <li><strong>记录有界：</strong>诊断信息采用有限保留，不因长期使用无限增长；原生只保留一份最近全局选择，插件不维护逐模型历史。</li>
+    <li><strong>可删除：</strong>移除插件及其本地数据后，插件调度记录与界面应一并消失；DSH 原生全局选择由 DSH 管理，不伪装成插件数据。</li>
     <li><strong>公开文档：</strong>不得包含个人路径、账号、密钥、会话全文或供应商凭据。</li>
   </ul>
 </section>
@@ -323,12 +323,12 @@
   <h2>9. 产品需求裁决登记册（F-01～F-12）</h2>
   <p>此前改写时把详细裁决项留在了开发计划，容易造成“这些需求已经消失”的误解。这里恢复完整登记册：<strong>编号只用于追踪，不代表全部都要实施。</strong>每项都列出你真正需要选择的方向、当前状态与建议。</p>
   <div class="table-wrap"><table><thead><tr><th>编号与状态</th><th>需要你决断的具体问题</th><th>当前结论或建议</th></tr></thead><tbody>
-    <tr><td><strong>F-01</strong><br><span class="decision-done">已批准 · 已实施 · 待实机验收</span></td><td>是否支持 DSH 0.2.2？如果支持，何时开始、保留多久的旧版双路径？</td><td><strong>已实施（0.2.17-rc.1）。</strong>0.2.1 的旧路径原样保留，0.2.2 走「claimed 同步选档 → 续步预选 → 轮末恢复」的新路径；运行时按实测版本白名单分派，未实测宿主拒绝加载。自动化 245/245，待 Web/Desktop 实机与你的验收。</td></tr>
-    <tr><td><strong>F-02</strong><br><span class="decision-done">已随 F-01 实施 · 待实机验收</span></td><td>不再询问 Auto 应该是哪种语义：整轮持续 Auto 已确定。随 F-01 迁移时，需要选择如何证明它仍是 Auto——依靠内部决策记录，还是每步后把选择器恢复为 Auto？</td><td><strong>两方案合并采用：</strong>调度依赖内部决策记录与证据，轮末把选择器恢复为 Auto（恢复前确认用户没有手动接管）。整轮 Auto 未被切断。</td></tr>
+    <tr><td><strong>F-01</strong><br><span class="decision-open">已批准 · 连续步修复待施工</span></td><td>是否支持 DSH 0.2.2？如果支持，何时开始、保留多久的旧版双路径？</td><td><strong>0.2.17-agent.1 已把 0.2.2 连续步调度改为「宿主读取当前选择时同步解析本步实际档」，不再依赖 step/end 后的补写。</strong>0.2.1 路径保留；未在允许清单内的宿主版本仍拒绝加载；连续步、接管、dispose 与第三方包装矩阵均由自动化测试覆盖。</td></tr>
+    <tr><td><strong>F-02</strong><br><span class="decision-open">整轮 Auto 保持批准 · 实现路线已重选</span></td><td>如何证明 Auto 在多步执行中仍是 Auto，同时让每一步使用新的实际档？</td><td><strong>采用当前选择同步解析路线：</strong>原生逻辑选择保持 Auto，每次宿主捕获本步选择时返回对应 concrete 实际档；不再逐步改写原生选择，也不再依赖轮末恢复。用户改选具体档后立即直通。</td></tr>
     <tr><td><strong>F-03</strong><br><span class="decision-open">延期裁决 · 中等重要/中等紧急</span></td><td>自定义模型“没有档位表”时，谁有权补？三选一：①保持只提示、不扩大自动补写；②用持久墓碑区分从未配置与主动关闭；③提供明确的用户自选模式，允许补写用户自管行。</td><td><strong>暂时保持现状，未来再议。</strong>有很高讨论价值；届时先只读验证墓碑能否经模型管理界面保存和重启后仍存在，再决定是否采用；当前不扩大写路径。</td></tr>
     <tr><td><strong>F-04</strong><br><span class="decision-done">已否决</span></td><td>是否投入 think-level 共存兼容，包括自动填充协调、入口适配和自动让位？</td><td><strong>已决定不考虑。</strong>不再安排相关工作，也无需继续裁决。</td></tr>
     <tr><td><strong>F-05</strong><br><span class="decision-open">延期裁决 · 中等重要/中等紧急</span></td><td>固定基本档位不够用时，是否引入：①本地静态模型能力知识库；②直接读取供应商原始模型列表的能力探测；③两者组合？</td><td><strong>暂时保持现有能力来源，未来再议。</strong>有很高讨论价值；重新讨论时仍需权衡知识维护、网络请求、隐私与错误能力声明风险。</td></tr>
-    <tr><td><strong>F-06</strong><br><span class="decision-done">已批准</span></td><td>是否增加跨会话“上次档位”记忆？</td><td><strong>已批准，待实施。</strong>只记忆用户的 Auto 或具体档，不记忆 Auto 单步输出；详见第 5 节。</td></tr>
+    <tr><td><strong>F-06</strong><br><span class="decision-done">冻结插件需求 · 复用原生</span></td><td>是否增加跨会话“上次档位”记忆？是否需要每个 provider+model 独立记忆？</td><td><strong>2026-11-16 已决定：</strong>使用 DSH 原生全局选择记忆，不要求每个 provider+model 的记忆，冻结原插件 F-06。只验收原生恢复后的 Auto/手动兼容，不开发第二套偏好存储；详见第 5 节。</td></tr>
     <tr><td><strong>F-07</strong><br><span class="decision-done">Auto 不改名；徽标迁移延期</span></td><td>是否把动态徽标迁到官方模型标签位置？是否给插件 Auto 改名，以避免和官方默认方式混淆？</td><td><strong>Auto 名称保持不变。</strong>0.2.2 官方模型选择界面把省略具体档显示为“Default”，并非“Auto”，不存在两个官方 Auto 字样的直接冲突。动态徽标位置也保持现状；是否迁移徽标为低重要、低紧急的延期讨论项。</td></tr>
     <tr><td><strong>F-08</strong><br><span class="decision-open">延期裁决 · 低重要/低紧急</span></td><td>是否调整：简报/工具信息量阈值、错误与重复升档阈值、节俭降档、会话总量预算，以及四部任务词典的新增、迁移或剪枝？</td><td><strong>暂时全部保持不变。</strong>有讨论价值，未来取得独立第二周期、任务结果和触发分布证据后再裁决。</td></tr>
     <tr><td><strong>F-09</strong><br><span class="decision-open">延期裁决 · 低重要/低紧急</span></td><td>是否为重复文本压缩增加 512KiB 上限？超限后按原始信息量计算会改变升档结果；是否值得改用异步压缩？</td><td><strong>暂时保持现状。</strong>有讨论价值，未来出现单次超过 8ms 或至少 1MiB 的真实结果时再决定。</td></tr>
@@ -348,7 +348,7 @@
     <tr><td>变化方式</td><td>记录的选择持续有效，直到用户或程序重新选择。</td><td>用户保持 Auto 不变，实际执行档可随步骤变化。</td></tr>
     <tr><td>二者关系</td><td>提供模型选择与适配器默认机制。</td><td>把官方选择机制当作未来迁移接缝，而不是用官方 Auto 替代调度器。</td></tr>
   </tbody></table></div>
-  <div class="callout warn"><strong>当前有效决策：</strong>F-01 已实施（0.2.17-rc.1，待实机与出品人验收），整轮 Auto（F-02）已随其交付；F-06 已批准、尚未实施；F-04 已否决；F-07 的 Auto 名称保持不变。F-03、F-05 为中等重要、中等紧急的延期裁决项，有很高讨论价值；F-07 的徽标迁移与 F-08～F-12 均为低重要、低紧急的延期项。所有延期项暂时保持不变，不在本轮实施。</div>
+  <div class="callout warn"><strong>当前有效决策：</strong>F-01/F-02 的整轮 Auto 目标不变，下一批以当前选择同步解析修复 0.2.2 连续步；F-06 冻结插件需求并复用 DSH 原生全局选择记忆；F-04 已否决；F-07 的 Auto 名称保持不变。F-03、F-05 为中等重要、中等紧急的延期裁决项；F-07 的徽标迁移与 F-08～F-12 均为低重要、低紧急的延期项，均不在本轮实施。</div>
 </section>
 
 <section id="acceptance">
@@ -359,12 +359,12 @@
     <tr><td>多行任务简报与长工具结果</td><td>简报只计一次，工具结果不冒充用户任务，重复内容不被当成新增信息。</td><td>FR-010、FR-013</td></tr>
     <tr><td>父会话分别使用 Auto 与具体档启动子代理</td><td>Auto 子代理独立调度，具体档子代理原样继承。</td><td>FR-042、FR-043</td></tr>
     <tr><td>新会话恢复 Auto</td><td>原生选择器恢复 Auto，整轮持续调度，而不是恢复上一步的具体档。</td><td>FR-070、FR-072、FR-078</td></tr>
-    <tr><td>两个模型分别记忆不同具体档</td><td>各自新会话恢复各自偏好；不支持记忆中的档位时安全使用默认方式。</td><td>FR-071、FR-075</td></tr>
-    <tr><td>重启应用、切换配置环境、删除插件数据</td><td>同一环境可恢复，不同环境不共享，删除后记忆与诊断消失。</td><td>FR-077</td></tr>
+    <tr><td>两个模型交替选择不同具体档</td><td>新会话只恢复最近的原生全局选择；切回旧模型时使用该模型的原生默认方式，不恢复插件逐模型偏好，也不做 nearest 换算。</td><td>FR-071、FR-075</td></tr>
+    <tr><td>重启应用、切换配置环境、删除插件数据</td><td>原生全局选择按 DSH 配置环境恢复；插件调度记录相互隔离且可删除，插件不另存偏好。</td><td>FR-077</td></tr>
     <tr><td>自定义模型曾被用户主动关闭</td><td>重启后不擅自补回；无法判断时给出提示而非猜测。</td><td>FR-051、FR-053</td></tr>
     <tr><td>切换会话与历史轨迹</td><td>只读信息属于当前会话；不确定时不显示，不能错标。</td><td>FR-060～FR-062</td></tr>
   </tbody></table></div>
-  <p class="small muted">具体的人工操作、失败判定与回滚方式见 <a href="MAINTAINER-TESTS.md">维护者验收备忘录</a>。新增记忆功能实施后，应在该备忘录中补充对应实机场景。</p>
+  <p class="small muted">具体的人工操作、失败判定与回滚方式见 <a href="MAINTAINER-TESTS.md">维护者验收备忘录</a>。下一批应补充原生全局选择恢复、Auto 连续步与手动接管的实机场景。</p>
 </section>
 
 <section id="boundaries">
@@ -378,7 +378,7 @@
     <li><strong>只读界面：</strong>对话流工具小注默认关闭且仍需集中实机复测；轨迹视觉与 Auto/手动行为保留人工验收。</li>
     <li><strong>社区插件：</strong>不开展 think-level 共存兼容工作，也不将其功能集纳入本项目。</li>
   </ol>
-  <div class="callout warn"><strong>状态提示：</strong>功能主线 0.2.2 支持（F-01，含 F-02 整轮 Auto）已实施，版本 0.2.17-rc.1，自动化 245/245，等待 Web/Desktop 实机与出品人验收；跨会话记忆（F-06）已批准、尚未实施。F-04 已否决；F-07 的 Auto 不改名；F-03、F-05 中等重要、中等紧急但延期，F-07 的徽标迁移及 F-08～F-12 低优先延期。除 0.2.2 支持外，其余功能提案均已否决、局部裁决或延期。</div>
+  <div class="callout warn"><strong>状态提示：</strong>当前版本 0.2.17-agent.1 已修复 0.2.2 连续步调度（捕获时同步解析），证据链/配置解析/存储与客户端资源生命周期同步硬化；F-06 已冻结，跨会话记忆复用 DSH 原生全局选择。F-04 已否决；F-07 的 Auto 不改名；F-03、F-05 中等重要、中等紧急但延期，F-07 的徽标迁移及 F-08～F-12 低优先延期。</div>
 </section>
 
 <section id="references">
@@ -393,6 +393,6 @@
   </ul>
 </section>
 </main>
-<footer><div class="wrap">dsh-effort-router · 产品需求（非技术版） · 当前能力 + 已批准的跨会话记忆需求</div></footer>
+<footer><div class="wrap">dsh-effort-router · 产品需求（非技术版） · 当前能力 + 原生全局选择记忆</div></footer>
 </body>
 </html>

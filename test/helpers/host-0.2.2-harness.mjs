@@ -12,35 +12,59 @@ import '../test-profile.mjs'
 
 const RUNTIME = Symbol.for('dsh-effort-router.test.runtime-version')
 let hooksInstalled = false
+let appBootSequence = 0
+let activeAppBootCase = null
+const appBootCases = new Map()
+
+function installAppBootHook() {
+  if (hooksInstalled) return
+  hooksInstalled = true
+  registerHooks({
+    resolve(specifier, context, nextResolve) {
+      if (specifier === '@deepseek-ai/dsh-app-boot') {
+        const id = activeAppBootCase
+        if (id !== null && appBootCases.get(id)?.kind === 'target-missing') {
+          throw Object.assign(new Error("Cannot find package '@deepseek-ai/dsh-app-boot'"), { code: 'ERR_MODULE_NOT_FOUND' })
+        }
+        return { url: `effort-router-test:app-boot${id === null ? '' : `?case=${id}`}`, shortCircuit: true }
+      }
+      if (specifier === 'dsh-test-internal-missing') {
+        throw Object.assign(new Error("Cannot find package 'dsh-test-internal-missing'"), { code: 'ERR_MODULE_NOT_FOUND' })
+      }
+      return nextResolve(specifier, context)
+    },
+    load(url, context, nextLoad) {
+      if (url.startsWith('effort-router-test:app-boot')) {
+        const id = new URL(url).searchParams.get('case')
+        const testCase = id === null ? null : appBootCases.get(Number(id))
+        let source = `export function getDshRuntimeVersion() { return globalThis[Symbol.for('dsh-effort-router.test.runtime-version')] }`
+        if (testCase?.kind === 'internal-throw') source = `throw new Error(${JSON.stringify(testCase.message || 'app-boot internal failure')})`
+        if (testCase?.kind === 'dependency-missing') source = `await import('dsh-test-internal-missing')`
+        return { format: 'module', source, shortCircuit: true }
+      }
+      return nextLoad(url, context)
+    },
+  })
+}
 
 /** Mock only the documented app-boot package boundary, never ctx.version. */
 export async function loadApplyForRuntime(version) {
   globalThis[RUNTIME] = version
-  if (!hooksInstalled) {
-    hooksInstalled = true
-    registerHooks({
-      resolve(specifier, context, nextResolve) {
-        if (specifier === '@deepseek-ai/dsh-app-boot') {
-          return { url: 'effort-router-test:app-boot', shortCircuit: true }
-        }
-        return nextResolve(specifier, context)
-      },
-      load(url, context, nextLoad) {
-        if (url === 'effort-router-test:app-boot') {
-          return {
-            format: 'module',
-            source: `export function getDshRuntimeVersion() { return globalThis[Symbol.for('dsh-effort-router.test.runtime-version')] }`,
-            shortCircuit: true,
-          }
-        }
-        return nextLoad(url, context)
-      },
-    })
-  }
+  activeAppBootCase = null
+  installAppBootHook()
   // Each test file is a separate node:test process; this query also makes the
   // selected runtime explicit in diagnostics instead of sharing a hidden ESM
   // cache with the legacy suite.
   return import(`../../lib/index.js?contract-runtime=${encodeURIComponent(version)}`)
+}
+
+export async function loadRuntimeWithAppBoot(testCase = {}) {
+  appBootSequence += 1
+  const id = appBootSequence
+  appBootCases.set(id, testCase)
+  activeAppBootCase = id
+  installAppBootHook()
+  return import(`../../lib/runtime.js?app-boot-case=${id}`)
 }
 
 export function setTestRuntimeVersion(version) { globalThis[RUNTIME] = version }
@@ -89,6 +113,7 @@ export function createModernHost(options = {}) {
   const listeners = new Map()
   const agents = new Set()
   const turnStates = new Map()
+  const rawCurrents = new WeakMap()
   const requests = []
   const selectionCaptures = []
   const selectionEvents = []
@@ -98,7 +123,8 @@ export function createModernHost(options = {}) {
   let agentSequence = 0
 
   const adapters = options.adapters || new Map([['gw', {
-    async resolveModelInfo() {
+    async resolveModelInfo(provider, model) {
+      if (typeof options.modelInfo === 'function') return options.modelInfo(provider, model)
       return options.modelInfo || {
         reasoning: {
           default: 'low',
@@ -192,6 +218,18 @@ export function createModernHost(options = {}) {
     return chain(payload)
   }
 
+  function rememberRawCurrent(agent) {
+    if (rawCurrents.has(agent)) return
+    if (!agent || !agent.model || typeof agent.model.current !== 'function') return
+    rawCurrents.set(agent, agent.model.current.bind(agent.model))
+  }
+
+  function rawCurrent(agent) {
+    const current = rawCurrents.get(agent)
+    if (!current) throw new Error('rawCurrent requires an Agent created or announced by this host')
+    return current()
+  }
+
   function createAgent(id, agentOptions = {}) {
     agentSequence += 1
     const sessionId = id || `modern-${agentSequence}`
@@ -201,16 +239,29 @@ export function createModernHost(options = {}) {
     let pending = clone(agentOptions.pending) || null
     let lastUsed = clone(agentOptions.lastUsed) || null
     let requestHeader
+    let appending = false
     const selections = []
     let session
-    const agent = {
-      id: sessionId,
-      sessionId,
-      options: {
-        provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
-        ...(Object.prototype.hasOwnProperty.call(agentOptions, 'effort') ? { reasoningEffort: agentOptions.effort } : {}),
-        ...(agentOptions.options || {}),
-      },
+    const explicitOptions = agentOptions.options || {}
+    const optionDescriptor = (key, fallback) => {
+      if (key === 'reasoningEffort' && Object.prototype.hasOwnProperty.call(agentOptions, 'effort')) {
+        return { value: agentOptions.effort }
+      }
+      if (Object.prototype.hasOwnProperty.call(explicitOptions, key)) return { value: explicitOptions[key] }
+      // DSH rc3 agentOptions exposes the native global selection through live
+      // getters. This fixture only models that public boundary; selectModel()
+      // below replaces the complete global default, with auto as an ordinary id.
+      if (options.nativeDefaults) return { get: () => options.nativeDefaults[key] }
+      return { value: fallback }
+    }
+    const agent = { id: sessionId, sessionId, options: {} }
+    for (const [key, fallback] of [['provider', 'gw'], ['model', 'thinker'], ['reasoningEffort', 'auto']]) {
+      Object.defineProperty(agent.options, key, {
+        enumerable: true, configurable: true, ...optionDescriptor(key, fallback),
+      })
+    }
+    for (const [key, value] of Object.entries(explicitOptions)) {
+      if (!['provider', 'model', 'reasoningEffort'].includes(key)) agent.options[key] = value
     }
     const fold = (event) => {
       if (event.type === 'model/selection') pending = clone(event.data)
@@ -231,22 +282,38 @@ export function createModernHost(options = {}) {
       events,
       messages,
       append(type, data) {
-        const event = { seq: events.length + 1, type, data: clone(data) }
-        events.push(event)
-        fold(event)
-        if (type === 'model/selection') {
-          selections.push(clone(data))
-          selectionEvents.push({ agentId: sessionId, ...clone(data) })
+        if (options.strictAppend === true && appending) {
+          throw new Error('session append cannot reenter while another append is being published')
         }
-        fire('session/event', session, event)
-        return event
+        const event = { seq: events.length + 1, type, data: clone(data) }
+        appending = true
+        try {
+          events.push(event)
+          fold(event)
+          if (type === 'model/selection') {
+            selections.push(clone(data))
+            selectionEvents.push({ agentId: sessionId, ...clone(data) })
+          }
+          fire('session/event', session, event)
+          return event
+        } finally {
+          appending = false
+        }
       },
       appendRequestHeader(header) {
+        if (options.strictAppend === true && appending) {
+          throw new Error('session append cannot reenter while another append is being published')
+        }
         const event = { seq: events.length + 1, type: 'session/requestHeader', data: { header: clone(header) } }
-        events.push(event)
-        fold(event)
-        fire('session/event', session, event)
-        return event
+        appending = true
+        try {
+          events.push(event)
+          fold(event)
+          fire('session/event', session, event)
+          return event
+        } finally {
+          appending = false
+        }
       },
       requestHeader() { return requestHeader },
       deriveMessages() { return [...messages] },
@@ -279,6 +346,7 @@ export function createModernHost(options = {}) {
     }
     turnStates.delete(sessionId)
     agents.add(agent)
+    rememberRawCurrent(agent)
     return { agent, session, events, selectionEvents: selections }
   }
 
@@ -421,6 +489,91 @@ export function createModernHost(options = {}) {
     }
   }
 
+  async function runContinuousTurn(agent, run = {}) {
+    const session = agent.session
+    const specs = run.steps || [{}]
+    const results = []
+    const turnState = { turn: run.turn === undefined ? 1 : run.turn, step: 0 }
+    turnStates.set(agent.id, turnState)
+    session.append('turn/start', { turn: turnState.turn })
+    let stepStarted = false
+    try {
+      for (let index = 0; index < specs.length; index += 1) {
+        const spec = specs[index] || {}
+        const turn = turnState.turn
+        const step = index + 1
+        turnState.step = step
+        const claimed = spec.claimed === undefined
+          ? (index === 0 ? (run.claimed || [userMessage()]) : [])
+          : spec.claimed
+        if (claimed.length) {
+          session.append('agent/inbox/spliced', {
+            target: index === 0 ? 'next-turn' : 'next-step',
+            start: 0, removedCount: claimed.length, inserted: [],
+          })
+          for (const message of claimed) fire('agent/inbox/claimed', { agent, message, turn })
+        }
+        // This capture intentionally precedes every await. In particular, the
+        // previous iteration's step/end microtasks have not run when a tool
+        // continuation reaches this line with claimed=[].
+        const selection = agent.model.current()
+        selectionCaptures.push({ agentId: agent.id, turn, step, selection: clone(selection) })
+        const preDecision = await waterfall('agent/pre-step', {
+          agent, turn, step, messages: claimed, signal: run.signal,
+          modelSelection: clone(selection),
+        }, async () => ({ kind: 'enter', messages: claimed }))
+        if (preDecision && preDecision.kind === 'reject') {
+          return [...results, { ...preDecision, selection: clone(selection), config: clone(selection), attempts: 0 }]
+        }
+        session.append('step/start', { turn, step })
+        stepStarted = true
+        const proposed = await waterfall('agent/request', {
+          agent, turn, step, signal: run.signal,
+        }, async () => clone(selection))
+        if (!proposed || proposed.provider !== selection.provider || proposed.model !== selection.model) {
+          throw new Error('agent/request changed provider/model after preStep selection capture')
+        }
+        if (proposed.reasoningEffort !== selection.reasoningEffort) {
+          throw new Error('agent/request changed reasoningEffort after preStep selection capture')
+        }
+        const prepared = await llm.prepareCall(clone(proposed), run.signal)
+        const resolved = prepared && prepared.config ? prepared.config : proposed
+        if (claimed.length) session.messages.push(...claimed)
+        requests.push({
+          agentId: agent.id, turn, step, attempt: 1,
+          provider: resolved.provider, model: resolved.model,
+          reasoningEffort: resolved.reasoningEffort,
+          config: clone(resolved), adapterDefaults: clone(prepared && prepared.adapterDefaults),
+        })
+        const header = { config: clone(resolved), adapterDefaults: clone(prepared && prepared.adapterDefaults) }
+        const headerKey = JSON.stringify({ config: header.config, adapterDefaults: header.adapterDefaults })
+        const baseline = session.requestHeader()
+        const baselineKey = baseline
+          ? JSON.stringify({ config: baseline.config, adapterDefaults: baseline.adapterDefaults })
+          : undefined
+        if (!agent.__requestHeaderLogged || baselineKey !== headerKey) {
+          session.append('request/header', {
+            header, reason: agent.__requestHeaderLogged ? 'change' : baseline ? 'resume' : 'initial',
+          })
+        }
+        agent.__requestHeaderLogged = true
+        session.messages.push(
+          spec.assistantMessage || spec.assistant || assistantToolCall(),
+          ...(spec.toolResults || []),
+        )
+        results.push({ ...prepared, config: clone(resolved), selection: clone(selection), attempts: 1 })
+        session.append('step/end', { turn, step })
+        stepStarted = false
+        // Do not await here: this is the real tool-continuation edge.
+      }
+      return results
+    } finally {
+      if (stepStarted) session.append('step/end', { turn: turnState.turn, step: turnState.step })
+      if (turnStates.get(agent.id) === turnState) turnStates.delete(agent.id)
+      session.append('turn/end', { turn: turnState.turn })
+    }
+  }
+
   async function primeCapability(prime = {}) {
     const effort = prime.effort || 'high'
     const { agent } = createAgent(prime.id || `capability-prime-${agentSequence + 1}`, {
@@ -435,6 +588,21 @@ export function createModernHost(options = {}) {
     return agent
   }
 
+  async function announceAgent(agent, source = 'fresh', signal) {
+    rememberRawCurrent(agent)
+    // The public agent/created seam is serial and awaited by the real registry.
+    // Keeping it opt-in preserves the existing synchronous createAgent fixture.
+    for (const { listener } of [...(listeners.get('agent/created') || [])]) {
+      // Only a listener that actually returns a promise may suspend creation.
+      // Awaiting a synchronous listener would add a microtask of latency and
+      // make "creation stays non-blocking" indistinguishable from "creation
+      // blocks on the resolver", which is exactly what FR-040 pins down.
+      const pending = listener({ agent, source, ...(signal === undefined ? {} : { signal }) })
+      if (pending && typeof pending.then === 'function') await pending
+    }
+    return agent
+  }
+
   function dispose() {
     if (disposed) return
     disposed = true
@@ -446,7 +614,18 @@ export function createModernHost(options = {}) {
 
   const api = {
     ctx, llm, services, logs, requests, selectionCaptures, selectionEvents, eventErrors,
-    createAgent, runStep, primeCapability, emit, waterfall, dispose,
+    createAgent, announceAgent, rawCurrent, runStep, runContinuousTurn, primeCapability, emit, waterfall, dispose,
+    selectModel(next) {
+      if (!options.nativeDefaults) throw new Error('nativeDefaults fixture was not enabled')
+      if (!next || typeof next.provider !== 'string' || typeof next.model !== 'string' || typeof next.reasoningEffort !== 'string') {
+        throw new TypeError('selectModel requires a complete provider/model/reasoningEffort selection')
+      }
+      options.nativeDefaults.provider = next.provider
+      options.nativeDefaults.model = next.model
+      options.nativeDefaults.reasoningEffort = next.reasoningEffort
+      return clone(options.nativeDefaults)
+    },
+    defaultSelection() { return options.nativeDefaults ? clone(options.nativeDefaults) : undefined },
     listenerCount(name) { return (listeners.get(name) || []).length },
     apply(config = {}) {
       if (typeof options.apply !== 'function') throw new Error('loadApplyForRuntime() must supply the public apply()')

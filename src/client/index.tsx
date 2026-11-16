@@ -32,7 +32,7 @@ import { ROUTE_KIND, RouteRow, routeRowDefinition } from './annotations'
 export const inject = ['slots', 'locale']
 
 export function apply(ctx: any) {
-  ensureStyles()
+  ctx.effect(() => ensureStyles(), 'effort-router: styles')
   const t: (key: string) => string = ctx.locale.bind(NS)
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'effort-router: dictionaries')
@@ -52,10 +52,11 @@ export function apply(ctx: any) {
   // 3. Chat captions (opt-in via config chatAnnotate, read once at load) -------
   ctx.effect(() => {
     let cancelled = false
-    fetch('/effort-router/state?view=config', { cache: 'no-store' })
+    const controller = new AbortController()
+    fetch('/effort-router/state?view=config', { cache: 'no-store', signal: controller.signal })
       .then((response) => (response.ok ? response.json() : null))
       .then((json) => {
-        if (cancelled || !json || json.chatAnnotate !== true) return
+        if (cancelled || controller.signal.aborted || !json || json.chatAnnotate !== true) return
         ctx.inject(['uiConversation'], (scope: any) => {
           const conversation = scope.uiConversation
           if (conversation && conversation.events && typeof conversation.events.register === 'function') {
@@ -70,6 +71,6 @@ export function apply(ctx: any) {
         })
       })
       .catch(() => { /* the route is best-effort; no flag, no captions */ })
-    return () => { cancelled = true }
+    return () => { cancelled = true; controller.abort() }
   }, 'effort-router: chat captions (chatAnnotate)')
 }

@@ -45,6 +45,9 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
     setState(null)
     let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
+    // One controller per effect run: unmount and session switches abort the
+    // in-flight read so a late response can never repaint another session.
+    const controller = new AbortController()
     const tick = async () => {
       if (stopped) return
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
@@ -54,12 +57,12 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
       try {
         const response = await fetch(
           '/effort-router/state?view=badge&sessionId=' + encodeURIComponent(sessionId),
-          { cache: 'no-store' },
+          { cache: 'no-store', signal: controller.signal },
         )
         if (response.ok) {
           const json = (await response.json()) as DecisionState
           const next = { ...json, sessionId }
-          if (!stopped) {
+          if (!stopped && !controller.signal.aborted) {
             setState((previous) => (sameBadgeState(previous, next) ? previous : next))
           }
         }
@@ -71,6 +74,7 @@ export function Badge(props: { sessionId?: string; t: (key: string) => string })
     tick()
     return () => {
       stopped = true
+      controller.abort()
       if (timer !== undefined) clearTimeout(timer)
     }
   }, [sessionId])

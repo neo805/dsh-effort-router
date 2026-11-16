@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-**Version:** `0.2.17-rc.1` (DSH 0.2.1-rc.2 → 0.2.2-rc.3 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
+**Version:** `0.2.17-agent.1` (DSH 0.2.1-rc.2 → 0.2.2-rc.3 compatible) · [Changelog](CHANGELOG.md) · [Roadmap](ROADMAP.md)
 
 A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routing**, plus reasoning levels for hand-declared `llm-pi-ai` custom models.
 
@@ -16,7 +16,7 @@ A DSH (DeepSeek Harness) plugin: **context-aware per-step reasoning-effort routi
 - Unknown selector ids: normalized from their advertised weakest-to-strongest order and logged once, never silently treated as `high`
 - Manual wins: a concrete level in the selector passes through verbatim; Auto hands the step to the scheduler
 - Subagent inheritance (0.2.15): a child started from a parent running **Auto** is scheduled from its own spawn brief (origin classification, warm-up floor, frugal demotion); a child started from a parent on a **concrete level** inherits that level verbatim. The seed is classified by provenance — the parent's recorded decision plus the host's `parentSession` lineage — so a human pick is never mistaken for a schedule
-- **Whole-turn Auto on the 0.2.2 loop** (0.2.17): 0.2.2 captures each step's model selection BEFORE `agent/pre-step` and rejects an `agent/request` handler that changes it. The router therefore writes the step's concrete effort through `agent.model.select()` in the synchronous `agent/inbox/claimed` hook (before the capture), preselects the next step after `step/end`, and restores the logical `Auto` sentinel at `turn/end` — the turn stays Auto from first step to last. The `agent/request` rewrite survives only for 0.2.1 hosts. No `model.select()` → the step fails closed in `agent/pre-step` instead of silently rewriting
+- **Whole-turn Auto on the 0.2.2 loop** (0.2.17): 0.2.2 captures each step's model selection BEFORE `agent/pre-step` and rejects an `agent/request` handler that changes it. The router therefore wraps the agent's public `agent.model.current()`: while a turn is active the wrapper returns the concrete effort scheduled for THAT step at the very moment the host captures it, while the durable session selection stays the logical `Auto` — no per-step `model.select()` write exists. `turn/end` restores nothing unless the native selection still equals the capture the turn planned from, so a user pick made after the step wins. The `agent/request` rewrite survives only for 0.2.1 hosts. A host that exposes no `current()` fails closed in `agent/pre-step` instead of silently rewriting
 - **Runtime contract gate** (0.2.17): the host version comes from the public `@deepseek-ai/dsh-app-boot` `getDshRuntimeVersion()` and selects the loop contract from a per-version allowlist (`0.2.1-rc.2`/`0.2.1-rc.5` legacy; `0.2.2-alpha.2`/`0.2.2-rc.3` modern). The `engines.dsh` range is an install envelope, not a certification: an unverified build refuses to load instead of guessing which loop it has
 
 ## Why an Auto mask instead of a panel

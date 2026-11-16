@@ -8,6 +8,7 @@
  * test runner gives every test FILE its own process, so setting the variable
  * once at module load isolates the whole file without touching test bodies.
  */
+import './helpers/host-module-guard.mjs'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

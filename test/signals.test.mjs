@@ -663,7 +663,7 @@ test('consecSameTool observes the trailing identical-tool run (no decision use)'
 
 // ---- cleanup-pass coverage: resumed-window anchor, budget, disabled channel --
 
-test('origin: a resumed window anchors on the last GENUINE user text (notices are skipped)', () => {
+test('origin: resumed tool results and notices never become a brief', () => {
   const signals = makeSignals()
   const messages = [
     // The projection opens mid-task: a tool result, then a synthetic notice.
@@ -671,7 +671,9 @@ test('origin: a resumed window anchors on the last GENUINE user text (notices ar
     { role: 'user', content: [{ type: 'text', text: '帮我重构整个分布式架构' }], source: { form: 'notice', kind: 'runtime-context' } },
   ]
   const sig = signals.collect(makeAgent(messages), { turn: 1, step: 1 })
-  assert.equal(sig.originClass, 'trivial', 'the notice text is not a brief — the tool-result text anchors instead')
+  assert.equal(sig.originClass, 'standard', 'with no genuine user brief, the resumed origin stays standard')
+  assert.equal(sig.briefTokens, 0, 'tool-result and notice text are not task briefs')
+  assert.equal(sig.briefVolumeRaw, 0)
   assert.equal(sig.warmup, false, 'a resumed task starts with its warm-up already expired')
 })
 

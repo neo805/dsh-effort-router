@@ -14,8 +14,9 @@
 ("vibe coding") mode. The human is the **producer** (requirements intake,
 decision authority, product-level acceptance); the AI is the **first author**
 (requirements, plan, implementation, tests, packaging, deployment, evidence).
-This document states the norms both sides follow: an rc-only versioning ladder
-with producer approval for the second and first digits, test-first development,
+This document states the norms both sides follow: agent-suffixed versioning,
+producer-controlled patch advancement on approved pushes, and explicit producer
+approval for the second and first digits, test-first development,
 a fixed four-rung verification ladder (standardized tests → Web install → AI
 -driven real-machine verification through the DSH Web surface → Desktop install
 → producer acceptance) with a 15-minute Web budget for this mature project,
@@ -72,26 +73,31 @@ personal or machine-specific information.
 
 ## 2. 版本号治理
 
-版本号形如 `X.X.X-rc.X`。**本项目当前版本 `0.2.17-rc.1`；此后所有版本号都必须
-带 `rc` 后缀**（`package.json`、`CHANGELOG.md` 标题、README 首屏、git tag 一律
-一致）。
+自下一版本起，版本号形如 `X.X.X-agent.X`。`0.2.17-rc.1` 是最后一个使用 `rc`
+后缀的版本；下一施工版本从 `0.2.17-agent.1` 开始。此后所有新版本号都必须带
+`agent` 后缀（`package.json`、`CHANGELOG.md` 标题、README 首屏、git tag 一律一致）。
+DSH 宿主及其依赖包自身的 `rc` 版本与安装区间不受本规则影响，不得机械替换。
 
 | 情形 | 做法 | 示例 |
 |---|---|---|
-| 修 bug、调参数、改文案、UI 变更 | **只递增 rc 序号**，不动基三位 | `0.2.15-rc.1` → `0.2.15-rc.2` |
-| 小功能演进 | **第 3 位 +1，rc 重置为 1** | `0.2.14` → `0.2.15-rc.1` |
-| 大功能演进（需动第 2 位） | **必须先报出品人审批**，批准后 `0.x.0-rc.1` | `0.2.x` → `0.3.0-rc.1` |
-| 动第 1 位 | 同大功能演进，须审批 | `0.x` → `1.0.0-rc.1` |
+| agent 自主修改（通常对应 bug 修复，也包括施工中的参数、文案、UI 修正） | **可自由递增 agent 序号**，不动基三位 | `0.2.17-agent.1` → `0.2.17-agent.2` |
+| 出品人明确指示 push 到 GitHub 的版本（通常对应小功能演进） | **第 3 位 +1，agent 重置为 0**，再按审批执行 push/tag | `0.2.17-agent.4` → `0.2.18-agent.0` |
+| 大功能演进（需动第 2 位） | **仅当出品人明确指示**，批准后 `0.x.0-agent.0` | `0.2.x` → `0.3.0-agent.0` |
+| 核心架构演进（需动第 1 位） | **仅当出品人明确指示**，批准后 `X.0.0-agent.0` | `0.x` → `1.0.0-agent.0` |
 
-- **要谦虚。** 一串 bug 修复不值得一个 patch 号；版本号是给使用者的承诺，不是
-  进度条的装饰。
+- **要谦虚。** agent 序号记录施工迭代，不是发布进度；只有出品人指示 push 时才
+  按上表推进第 3 位。第 2 位与第 1 位不得由 agent 自行升级。
 - 版本号写在 `package.json` 的 `version`；git tag 用 `v` 前缀同名（如
-  `v0.2.15-rc.1`），**tag 只在出品人批准 push 时一并创建**。
-- 一次交付只对应一个版本号；rc 序号只增不减、不复用、不回退。
+  `v0.2.18-agent.0`），**tag 只在出品人批准 push 时一并创建**。
+- 同一基三位内 agent 序号只增不减、不复用、不回退；推进基三位后从 `agent.0`
+  重新开始。一个对外交付只对应一个最终版本号。
 - 每次版本变更**必须**同步写 `CHANGELOG.md`（[Keep a Changelog] 结构：
   `Added / Changed / Fixed / Removed`，只记对外可见的行为变化）。
 - **README 首屏必须标注当前版本号**，`README.md` 与 `README.zh.md` 两版都要有，
   且与实际发布的版本号一致。
+- 迁移提示：semver 预发布标识按字典序比较，`agent` 小于 `rc`。本地精确 tarball
+  不受影响，但不得把同基三位的 `agent` 包当作比旧 `rc` 更高的 npm 版本；对外
+  发布应通过上述第 3 位推进消除该歧义。
 
 [Keep a Changelog]: https://keepachangelog.com/
 

@@ -35,13 +35,36 @@ export const CSS = [
   // ~80 chars) can still truncate; the full caption always sits in `title`.
   '.er-trj-boundary{position:absolute;top:-7px;z-index:6;display:inline-block;box-sizing:border-box;max-width:min(80ch,70vw);padding:0 4px;border-radius:3px;color:var(--dsw-alias-label-secondary,#a2a8b0);font-size:9px;line-height:13px;font-family:var(--dsw-mono-font,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;user-select:none}',
   '.er-trj-boundary:hover{color:var(--dsw-alias-label-primary,inherit)}',
+  // Keyboard parity: the chip is a real control (role=button, Tab stop), so
+  // focus must be visible without a mouse.
+  '.er-trj-boundary:focus-visible{outline:1px solid var(--dsw-alias-border-accent,currentColor);outline-offset:1px}',
 ].join('')
 
 export function ensureStyles() {
-  if (typeof document === 'undefined' || !document.head) return
-  if (document.getElementById(STYLE_ID)) return
+  if (typeof document === 'undefined' || !document.head) return () => {}
+  // CSS is a live asset: HMR re-installs without a full page reload, so an
+  // existing node is REFRESHED rather than trusted. Ownership stays with the
+  // generation that CREATED the node: a later apply refreshes the rules but
+  // never adopts the node, so cleanup only removes what this apply installed.
+  const owner = {}
+  const existing = document.getElementById(STYLE_ID)
+  if (existing) {
+    if (existing.textContent !== CSS) existing.textContent = CSS
+    if (!existing.__erOwner) existing.__erOwner = owner
+    return () => {}
+  }
   const style = document.createElement('style')
   style.id = STYLE_ID
   style.textContent = CSS
+  style.__erOwner = owner
   document.head.appendChild(style)
+  return () => {
+    if (style.__erOwner !== owner) return
+    style.__erOwner = null
+    if (style.remove) style.remove()
+    else if (document.head && Array.isArray(document.head.children)) {
+      const at = document.head.children.indexOf(style)
+      if (at >= 0) document.head.children.splice(at, 1)
+    }
+  }
 }
