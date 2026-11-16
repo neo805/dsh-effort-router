@@ -884,6 +884,80 @@ test('route: the stored anchor table is cached per session across polls', async 
   assert.equal(reads, 1, 'the second poll is served from the cache')
 })
 
+test('route: merged anchor polls use cached snapshots before replaying finished sessions', async () => {
+  const sessions = Array.from({ length: 8 }, (_, index) => ({ id: `s-merge-${index}` }))
+  const cached = new Map()
+  let replays = 0
+  const projections = {
+    cachedSnapshot(session, keys) {
+      assert.deepEqual(keys, ['effortRouterAnchors'])
+      const anchors = cached.get(session.id)
+      return anchors ? { values: { effortRouterAnchors: { anchors } } } : undefined
+    },
+    stateOf(session, key) {
+      if (key !== 'effortRouterAnchors') return undefined
+      replays += 1
+      const anchors = {
+        [`call_${session.id}`]: { provider: 'gw', model: 'thinker', effort: 'low' },
+      }
+      cached.set(session.id, anchors)
+      return { anchors }
+    },
+    register: () => () => {},
+  }
+  const h = routeHarness(entry.Config({}), {
+    sessions: { list: () => sessions, get: () => undefined },
+    projections,
+  })
+
+  const first = await h.asJson('/effort-router/state', '?view=anchors')
+  assert.equal(first.anchorsResolved, 'merged')
+  assert.equal(replays, 8, 'a cold merge folds at most the capped eight sessions')
+  const second = await h.asJson('/effort-router/state', '?view=anchors')
+  assert.deepEqual(second.anchors, first.anchors)
+  assert.equal(replays, 8, 'a warm poll must not replay every finished log again')
+})
+
+test('route: a hook-remembered finished session does not invalidate its stored cache forever', async () => {
+  let reads = 0
+  let projections = 0
+  const h = routeHarness(entry.Config({}), {
+    sessions: { get: () => undefined },
+    llm: {
+      adapters: new Map(),
+      async resolveModelInfo() {
+        return { reasoning: { efforts: [{ id: 'low' }, { id: 'high' }] } }
+      },
+    },
+    projections: {
+      stateOf(_session, key) {
+        if (key === 'effortRouterAnchors') projections += 1
+        return key === 'effortRouterAnchors' ? { anchors: {} } : undefined
+      },
+      cachedSnapshot: () => undefined,
+      register: () => () => {},
+    },
+    sessionQuery: {
+      async readSession() {
+        reads += 1
+        return { events: storedEvents }
+      },
+    },
+  })
+  const agent = plainAgent('s-remembered-finished')
+  await h.onRequest({ agent, turn: 1, step: 1 }, async () => ({
+    provider: 'gw', model: 'thinker', reasoningEffort: 'auto',
+  }))
+
+  const first = await h.asJson('/effort-router/state', '?sessionId=s-remembered-finished&view=anchors')
+  assert.equal(first.anchors.call_cached.effort, 'low')
+  assert.equal(reads, 1)
+  const second = await h.asJson('/effort-router/state', '?sessionId=s-remembered-finished&view=anchors')
+  assert.deepEqual(second.anchors, first.anchors)
+  assert.equal(reads, 1, 'an idle hook reference is not perpetual live activity')
+  assert.equal(projections, 0, 'a cached successful stored fold needs no live projection read')
+})
+
 test('apply: an unreadable selection projection is never read as "no pick" (safe direction)', async () => {
   const logs = []
   const listeners = new Map()

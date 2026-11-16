@@ -60,8 +60,8 @@ test('F01-02 first Auto step is concrete before selection capture and remains lo
   assert.equal(effort(result), 'high')
   assert.equal(result.selection.reasoningEffort, 'high')
   assert.equal(agent.model.current().reasoningEffort, 'auto')
-  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
-  assert.equal(selectionEvents.every((event) => event.reasoningEffort === 'auto'), true, 'D never writes a scheduled concrete selection')
+  assert.equal(agent.session.projection('modelSelection').pending, null, 'capture does not fabricate a native Auto pending pick')
+  assert.equal(selectionEvents.length, 0, 'FR-076: scheduled Auto never re-enters native selection memory')
   assert.equal(host.requests.length, 1, 'the prepared request is still sent')
   assert.equal(events.find((event) => event.type === 'request/header')?.data.header.config.reasoningEffort, 'high')
   assert.equal(host.logs.filter((line) => line.includes('rank 4 (high)') && line.includes(agent.session.id)).length, 1)
@@ -80,8 +80,8 @@ test('F01-03 tool continuation recalculates without another inbox claim', async 
   const second = await host.runStep(agent, { step: 2 })
   assert.equal(effort(second), 'medium')
   assert.equal(agent.model.current().reasoningEffort, 'auto')
-  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
-  assert.equal(selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
+  assert.equal(agent.session.projection('modelSelection').pending, null)
+  assert.equal(selectionEvents.length, 0)
   assert.equal(host.selectionCaptures.length, 2)
 })
 
@@ -120,8 +120,8 @@ test('F01-04 same-step retry reuses the fixed selection without rescheduling', a
   assert.equal(result.attempts, 3)
   assert.deepEqual(retryHost.requests.map((item) => item.config.reasoningEffort), ['high', 'high', 'high'])
   assert.equal(retry.agent.model.current().reasoningEffort, 'auto')
-  assert.equal(retry.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
-  assert.equal(retry.selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
+  assert.equal(retry.agent.session.projection('modelSelection').pending, null)
+  assert.equal(retry.selectionEvents.length, 0)
   const decisions = (logs) => logs.filter((line) => line.includes('rank ')).length
   assert.ok(decisions(singleHost.logs) > 0, 'positive control: the single attempt really scheduled')
   assert.equal(decisions(retryHost.logs), decisions(singleHost.logs))
@@ -160,7 +160,7 @@ test('F01-07 disabled mode strips private Auto only from the concrete capture', 
   const result = await host.runStep(agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(effort(result), undefined)
   assert.equal(agent.model.current().reasoningEffort, 'auto')
-  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending, null)
   assert.equal(host.logs.filter((line) => line.includes('rank ')).length, 0)
 })
 
@@ -169,7 +169,9 @@ test('F01-08 pinned default uses the same safe path but is not logical Auto', as
   const { agent } = await announced(host,'f01-default', { effort: undefined })
   const result = await host.runStep(agent, { claimed: [userMessage(TRIVIAL)] })
   assert.equal(effort(result), 'high')
-  assert.equal(agent.model.current().reasoningEffort, 'high')
+  assert.equal(agent.model.current().reasoningEffort, undefined,
+    'the pinned default is a capture, not a native selection write')
+  assert.equal(agent.session.projection('modelSelection').pending, null)
   assert.equal(host.logs.filter((line) => line.includes('rank ')).length, 0)
 })
 
@@ -188,6 +190,7 @@ test('F01-09 unsupported and off-only models never receive private Auto or expli
   const outcome = await offOnly.runStep(second.agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(effort(outcome), undefined, 'off-only fails closed to the provider default, never a guess or explicit off')
   assert.equal(second.agent.model.current().reasoningEffort, 'auto', 'logical Auto survives the safe omission')
+  assert.equal(second.agent.session.projection('modelSelection').pending, null)
   assert.equal(offOnly.requests.some((item) => ['auto', 'off'].includes(item.config.reasoningEffort)), false)
 })
 
@@ -237,8 +240,8 @@ test('F01-11 subagent with Auto parent schedules from its own brief without nati
   const result = await host.runStep(child.agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(effort(result), 'high')
   assert.equal(parent.agent.model.current().reasoningEffort, 'auto')
-  assert.equal(child.agent.model.current().reasoningEffort, 'high',
-    'a concrete inherited child must not be restored to Auto at turn/end')
+  assert.equal(child.agent.model.current().reasoningEffort, 'low',
+    'a concrete inherited child keeps the native inherited value')
   assert.equal(child.agent.session.projection('modelSelection').pending, null)
   assert.equal(child.selectionEvents.length, 0, 'FR-076: scheduled delegation output never enters native selection memory')
 })
@@ -309,7 +312,7 @@ test('F01-13 dispose during legacy downstream await cannot record or append stal
   assert.equal(appended, 0)
 })
 
-test('F01-14 same-session Auto witness survives a concrete last-used header on resume', async (t) => {
+test('F01-14 concrete last-used state on resume is manual, not an Auto store witness', async (t) => {
   const id = 'f01-resume-auto'
   const firstHost = await autoModern(t)
   const first = await announced(firstHost,id)
@@ -323,9 +326,10 @@ test('F01-14 same-session Auto witness survives a concrete last-used header on r
   const result = await resumedHost.runStep(resumed.agent, {
     turn: 2, step: 1, claimed: [userMessage(ENGINEERING)],
   })
-  assert.equal(effort(result), 'high')
-  assert.equal(resumed.agent.model.current().reasoningEffort, 'auto')
-  assert.equal(resumed.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(effort(result), 'low')
+  assert.equal(resumed.agent.model.current().reasoningEffort, 'low')
+  assert.equal(resumed.agent.session.projection('modelSelection').pending, null)
+  assert.equal(resumed.selectionEvents.length, 0)
 })
 
 test('F01-15 same-session concrete manual resume is not rescued by brief evidence', async (t) => {

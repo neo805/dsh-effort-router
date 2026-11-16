@@ -6,9 +6,33 @@ All notable changes to dsh-effort-router are documented here. The format follows
 
 ## [0.2.18-agent.2] - 2026-11-16
 
-Documentation-only release: the repository layout, the collaboration body and the
-requirements register were reorganized. No code, schema, packaging or runtime
-behaviour changed.
+Behaviour release after the 0.2.18-agent.2 review batch: the modern Auto loop no
+longer writes native selection state, manual picks survive later turns, identical
+briefs are claimed per physical occurrence, and finished-history reads, trajectory
+pruning and hidden-tab polling no longer repeat work. The repository layout and
+maintainer documents were reorganized in the same version.
+
+### Fixed
+
+- Modern Auto re-plans when the native raw selection changes inside one step
+  (including Auto → Auto on another model) instead of returning a stale capture or
+  leaking the private `Auto` sentinel into `agent/pre-step`.
+- A consumed manual pick is no longer mistaken for a plugin echo. Consecutive
+  turns stay manual until the user explicitly selects Auto; scheduled modern Auto
+  no longer calls `model.select()` at `turn/end` or appends any Auto selection
+  event. The only remaining selection write is the guarded restore of an
+  unsupported manual effort that had to be omitted.
+- Identical briefs are claimed one-for-one by physical occurrence in projection
+  order, claim-first order, late claims and `replaceGeneration` replay; a global
+  text boolean can no longer swallow the second genuine message.
+- Finished-session anchor reads now use the cached snapshot before replaying the
+  stored log. A session merely remembered by the hook is no longer treated as
+  permanently live, so the stored cache survives polling.
+- Trajectory pruning now removes the owned caption and request-boundary marker as
+  well as the row bookkeeping, so reinserting the same row cannot leave two chips.
+- A hidden document performs no row scans, fetches or timer reschedules; one
+  decorator-level visibility listener wakes each live root once when visible and
+  is removed with the last root.
 
 ### Changed
 

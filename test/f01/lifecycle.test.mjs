@@ -97,7 +97,7 @@ test('F01-19 abort during streaming preserves logical Auto without a restoration
     /aborted by test/,
   )
   assert.equal(agent.model.current().reasoningEffort, 'auto')
-  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending, null)
   assert.equal(selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
   assert.equal(host.eventErrors.length, 0)
 })
@@ -131,7 +131,7 @@ test('F01-20 dispose during modern prepareCall prevents late writes and restores
   assert.equal(selectionEvents.length, writesAtDispose, 'no listener may write after the plugin is disposed')
   assert.equal(selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
   assert.equal(agent.model.current().reasoningEffort, 'auto')
-  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending, null)
   // Read the public in-memory projection: a second dispose is idempotent and
   // cannot flush an illegal late debounce, so a disk-only assertion could pass vacuously.
   assert.deepEqual(await lastDecisionThrough(stateRoute, agent.sessionId), decisionAtDispose, 'no decision is recorded after disposal')
@@ -156,8 +156,8 @@ test('F01-21 a delayed session A completion cannot restore or schedule into sess
   assert.equal(b.agent.model.current().reasoningEffort, 'auto')
   assert.equal(a.selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
   assert.equal(b.selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
-  assert.equal(a.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
-  assert.equal(b.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(a.agent.session.projection('modelSelection').pending, null)
+  assert.equal(b.agent.session.projection('modelSelection').pending, null)
 })
 
 test('F01-22 an unsupported subagent model strips inherited effort instead of guessing', async (t) => {
@@ -226,7 +226,7 @@ test('F01-24 a stale pre-branch completion cannot write into the replacement ses
   host.dispose() // flush any stale late record into the shared test store
   assert.equal(replacement.selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
   assert.equal(replacement.agent.model.current().reasoningEffort, 'auto')
-  assert.equal(replacement.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(replacement.agent.session.projection('modelSelection').pending, null)
   const decisions = storedDecisions(replacement.agent.sessionId)
   assert.equal(decisions.at(-1)?.turn, 2, 'the newest durable decision belongs to the replacement generation')
   assert.equal(decisions.filter((decision) => decision.turn === 1).length <= 1, true, 'the old generation cannot add a second late decision')

@@ -401,6 +401,7 @@ export function startTrajectoryDecorator(): () => void {
 
   const schedulePoll = (st: RootState) => {
     if (stopped || st.stopped) return
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
     if (st.polling || st.timer !== undefined) return
     if (!hasTrajectoryRows(st)) return
     st.timer = setTimeout(() => {
@@ -411,6 +412,7 @@ export function startTrajectoryDecorator(): () => void {
 
   const poll = async (st: RootState) => {
     if (stopped || st.stopped) return
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
     if (!hasTrajectoryRows(st)) return
     st.loadId += 1
     const loadId = st.loadId
@@ -419,7 +421,6 @@ export function startTrajectoryDecorator(): () => void {
     st.controller = controller
     st.polling = true
     try {
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
       const params = new URLSearchParams()
       params.set('view', 'anchors')
       // Ownership is mandatory: a root without a valid session id never got
@@ -497,9 +498,13 @@ export function startTrajectoryDecorator(): () => void {
   }
 
   const pruneRow = (st: RootState, tr: HTMLElement) => {
-    st.pendingRows.delete(tr)
+    // pruneRow owns rows leaving the ledger, exactly like shedRow owns rows
+    // being disposed: detach the real caption, clear the DONE marker and the
+    // pending flag BEFORE dropping the weak-map entry. Otherwise a removed row
+    // that React later re-inserts carries a stale caption/marker outside any
+    // cache and grows a second chip.
+    shedRow(st, tr)
     st.anchorIds.delete(tr)
-    st.captions.delete(tr)
   }
 
   const pruneTree = (st: RootState, el: HTMLElement) => {
@@ -644,6 +649,21 @@ export function startTrajectoryDecorator(): () => void {
       attributeFilter: [ROOT_ATTR],
     })
   }
+  // One listener for every root, not one per poller. While the document is
+  // hidden no root scans rows, keeps a timer, or opens a request; waking on
+  // visibilitychange repaints immediately instead of waiting for a tick that
+  // would have been skipped.
+  const onVisibilityChange = () => {
+    if (stopped) return
+    if (document.visibilityState === 'hidden') {
+      for (const st of states.values()) stopPoll(st)
+      return
+    }
+    for (const st of states.values()) wakeRoot(st)
+  }
+  if (typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', onVisibilityChange)
+  }
   reconcileRoots()
 
   return () => {
@@ -652,6 +672,9 @@ export function startTrajectoryDecorator(): () => void {
     if (roster) {
       roster.disconnect()
       roster = null
+    }
+    if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
     for (const st of Array.from(states.values())) disposeRoot(st)
     states.clear()

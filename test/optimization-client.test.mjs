@@ -131,8 +131,18 @@ function fakeTimers() {
   let nextId = 1
   const timers = new Map()
   return {
-    setTimeout(callback) { const id = nextId++; timers.set(id, callback); return id },
+    setTimeout(callback, delay = 0) { const id = nextId++; timers.set(id, { callback, delay }); return id },
     clearTimeout(id) { timers.delete(id) },
+    size() { return timers.size },
+    runNext() {
+      const next = timers.entries().next()
+      if (next.done) return false
+      const [id, timer] = next.value
+      timers.delete(id)
+      timer.callback()
+      return true
+    },
+    delays() { return [...timers.values()].map((timer) => timer.delay) },
   }
 }
 
@@ -364,12 +374,23 @@ function addTrajectoryRoot(body, sessionId) {
 
 function trajectoryWorld(sessionId = SESSION_A) {
   const body = new FakeElement('body')
+  const listeners = new Map()
   const document = {
     body,
     visibilityState: 'visible',
     createElement: (tag) => new FakeElement(tag),
     querySelector: (selector) => body.querySelector(selector),
     querySelectorAll: (selector) => body.querySelectorAll(selector),
+    addEventListener(type, listener) {
+      const current = listeners.get(type) || new Set()
+      current.add(listener)
+      listeners.set(type, current)
+    },
+    removeEventListener(type, listener) { listeners.get(type)?.delete(listener) },
+    dispatchEvent(event) {
+      for (const listener of listeners.get(event.type) || []) listener(event)
+    },
+    listenerCount(type) { return listeners.get(type)?.size || 0 },
   }
   return {
     document,
@@ -427,7 +448,7 @@ function setupTrajectory(t, sessionOrWorld = SESSION_A) {
     cancelAnimationFrame: frames.cancelAnimationFrame,
     MutationObserver: TestMutationObserver,
   })
-  return { ...world, requests, frames, observers, mutate }
+  return { ...world, requests, timers, frames, observers, mutate }
 }
 
 test('Badge unmount aborts its in-flight request and ignores a late response', { concurrency: false }, async (t) => {
@@ -623,6 +644,89 @@ test('trajectory isolates side-by-side roots, session switches, removal, and unk
   assert.equal(bRequest.signal.aborted, false, 'removing A must not abort B')
   assert.match(domText(second.caption()), /low/, 'removing A must not remove or repaint B')
   assert.equal(unknown.caption(), null)
+})
+
+test('trajectory removing and reinserting the same row never leaves an orphaned old caption', { concurrency: false }, async (t) => {
+  const world = setupTrajectory(t)
+  const second = world.addRoot(SESSION_B)
+  const stop = startTrajectoryDecorator({ trajectoryAnnotate: true })
+  t.after(stop)
+  world.requests[0].respond(anchorsPayload('high'))
+  world.requests[1].respond(anchorsPayload('low'))
+  await flushPromises()
+  world.frames.flush()
+  assert.equal(world.eventCell.querySelectorAll('[data-er-trj]').length, 1)
+  assert.equal(second.eventCell.querySelectorAll('[data-er-trj]').length, 1)
+
+  world.row.remove()
+  world.mutate([{ type: 'childList', target: world.root, addedNodes: [], removedNodes: [world.row] }])
+  assert.equal(world.caption(), null, 'pruning must surrender the actual DOM caption, not only its WeakMap key')
+  world.root.appendChild(world.row)
+  world.mutate([{ type: 'childList', target: world.root, addedNodes: [world.row], removedNodes: [] }])
+  assert.equal(world.requests.length, 3, 'only the reinserted root polls again')
+  world.requests[2].respond(anchorsPayload('medium'))
+  await flushPromises()
+  world.frames.flush()
+
+  const captions = world.eventCell.querySelectorAll('[data-er-trj]')
+  assert.equal(captions.length, 1, 'the reinserted row must not accumulate old and new effort chips')
+  assert.match(domText(captions[0]), /medium/)
+  assert.doesNotMatch(domText(world.eventCell), /high/)
+  assert.match(domText(second.caption()), /low/, 'the untouched root keeps its own caption')
+})
+
+test('trajectory hidden ticks do no row scans, requests, or periodic rescheduling', { concurrency: false }, async (t) => {
+  const world = setupTrajectory(t)
+  const stop = startTrajectoryDecorator({ trajectoryAnnotate: true })
+  t.after(stop)
+  world.requests[0].respond(anchorsPayload('high'))
+  await flushPromises()
+  world.frames.flush()
+  assert.equal(world.timers.size(), 1)
+
+  let rowScans = 0
+  const querySelectorAll = world.root.querySelectorAll.bind(world.root)
+  world.root.querySelectorAll = (selector) => {
+    if (selector === 'tr[data-trajectory-row-key]') rowScans += 1
+    return querySelectorAll(selector)
+  }
+  world.document.visibilityState = 'hidden'
+  assert.equal(world.timers.runNext(), true)
+  await flushPromises()
+  assert.equal(rowScans, 0, 'visibility is checked before any full-row scan')
+  assert.equal(world.requests.length, 1, 'a hidden document never fetches')
+  assert.equal(world.timers.size(), 0, 'a hidden document does not keep an empty polling loop alive')
+})
+
+test('trajectory visibility resume wakes each live root once and dispose removes the listener', { concurrency: false }, async (t) => {
+  const world = setupTrajectory(t)
+  const second = world.addRoot(SESSION_B)
+  const stop = startTrajectoryDecorator({ trajectoryAnnotate: true })
+  world.requests[0].respond(anchorsPayload('high'))
+  world.requests[1].respond(anchorsPayload('low'))
+  await flushPromises()
+  world.frames.flush()
+  world.document.visibilityState = 'hidden'
+  const scheduled = world.timers.size()
+  for (let index = 0; index < scheduled; index += 1) world.timers.runNext()
+  await flushPromises()
+  const requestsWhileHidden = world.requests.length
+
+  world.document.visibilityState = 'visible'
+  world.document.dispatchEvent({ type: 'visibilitychange' })
+  assert.equal(world.requests.length, requestsWhileHidden + 2, 'each side-by-side root resumes with one single-flight request')
+  world.requests.at(-2).respond(anchorsPayload('medium'))
+  world.requests.at(-1).respond(anchorsPayload('high'))
+  await flushPromises()
+  world.frames.flush()
+  assert.match(domText(world.caption()), /medium/)
+  assert.match(domText(second.caption()), /high/)
+
+  stop()
+  assert.equal(world.document.listenerCount('visibilitychange'), 0)
+  const afterDispose = world.requests.length
+  world.document.dispatchEvent({ type: 'visibilitychange' })
+  assert.equal(world.requests.length, afterDispose, 'a disposed decorator cannot be revived by a late visibility event')
 })
 
 test('trajectory boundary chip click forwards to the native request dot', { concurrency: false }, async (t) => {

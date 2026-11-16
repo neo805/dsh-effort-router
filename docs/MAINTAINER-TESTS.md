@@ -107,8 +107,9 @@
 - **怎么开**：在 DSH 0.2.2 宿主（`0.2.2-alpha.2` / `0.2.2-rc.3`）上把模型选择器切成
   `Auto`，正常发一个多步任务即可。
 - **预期**：逻辑上整轮保持 `Auto`；宿主在每一步捕获到的是本步调度出的具体档位
-  （请求头与徽标显示 `Auto · high` 这类实际档位），原生选择器在轮末回到 Auto。
-  中途手动选具体档位后，本轮结尾不会被改回 Auto；下一轮重新从 Auto 开始。
+  （请求头与徽标显示 `Auto · high` 这类实际档位），原生选择器始终停留在 `Auto`
+  ——调度 Auto 不会在轮末被插件写回。中途手动选具体档位后，该档保持到用户显式
+  改回 `Auto`；下一轮不会自动恢复 Auto，也不会被旧决策记录重新调度。
   决策日志里每步应有一条 `origin … rank … -> provider/model effort …`。
 - **工具续步**：0.2.17-agent.1 起，续步与首步走同一条同步捕获路径——每一步都按该步
   证据重新调度，不再出现「工具续步晚一拍、沿用上一档」的旧现象。若仍看到续步沿用
@@ -121,9 +122,23 @@
   会话 `session-943f7265…`（模型 `deepseek-account/deepseek-flash`，
   选择 `auto`）——turn 1 记录 `mode=unsupported`（冷缓存安全省略）、turn 2 记录
   `mode=auto effort=low origin=standard warmup=true`；宿主投影 `lastUsed.reasoningEffort=low`
-  / `pending.reasoningEffort=auto`（轮末已恢复逻辑 Auto）；只读路由
+  / `pending.reasoningEffort=auto`（该版轮末仍会写回逻辑 Auto；0.2.18-agent.2 起
+  调度 Auto 不再有任何轮末写回，这条仅作历史证据）；只读路由
   `GET /effort-router/state?view=badge&sessionId=…` 返回 200 且 `last.mode=auto,last.effort=low`；
   宿主日志无 `agent/request proposed reasoning effort …` 与 `UNSUPPORTED_REASONING_EFFORT`。
+- **实机复测证据（2026-11-16，web profile，DSH 0.2.2-rc.3，插件 0.2.18-agent.2，完整重启后安装）**：
+  连续 Auto 会话 `session-f65bf558…`（`deepseek-account/deepseek-flash`，显式选 `auto`）走过
+  turn 1 / step 1–3，三步决策均为 `mode=auto, effort=low`；step 1 的 `request/header` 为
+  `reasoningEffort=low`，宿主日志无 `UNSUPPORTED_REASONING_EFFORT` 或 proposed-effort 拒绝。
+  Session 日志只有一次 `model/selection`（seq 3，建立会话时显式 `select auto`），
+  `turn/end` 后没有第二次 selection——调度 Auto 零写回。
+  人工接管会话 `session-7b2c00e9…`：step 1 为 `mode=auto`，期间显式选择 `high`（seq 19）；
+  后续 step 2/3 与下一轮 turn 2 / step 1 均为 `mode=manual, effort=high`，`turn/end` 后
+  没有写回 `auto`；日志中的 selection 仍只有显式 `auto` 与显式 `high` 两次。
+  注意宿主本次只为该会话记录了 step 1 的 `request/header`，后续步的档位证据来自插件
+  full 视图的 `recent` 决策记录，而不是把缺省 header 当作通过。
+  本轮尚未覆盖：same-step 模型切换的真实宿主（自动测试覆盖）、finished history 双宿主、
+  多会话轨迹与后台标签休眠的真实视觉；Desktop 重启验收仍由出品人完成。
 - **未实测宿主**：插件会拒绝加载并在日志给出
   `[effort-router] unsupported DSH runtime "…"`；升级宿主后必须先补该版本的契约
   证据，再往 `lib/runtime.js` 白名单里加。
@@ -143,9 +158,10 @@
 | 0.2.15-rc.5 | 2026-10-25 | 未复测（无轨迹改动） | 未测 | 待验收 | Badge 改为只显示实际 effort，不再用目标 tier 冒充；调度修复不影响胶囊视觉，仍需出品人确认徽标空值表现 |
 | 0.2.16-rc.1 | 2026-10-25 | 通过（出品人视觉） | 未测 | 待验收 | 整数 rank 改变调度目标；徽标标签仍只显示实际 effort，悬停新增 origin → target rank/tier → mapping |
 | 0.2.16-rc.2 | 2026-10-25 | 未复测（无 UI 改动） | 未测 | 待验收 | 仅投影遥测与服务获取修复；请在决策日志确认新增 projectionsAvailable/todosAvailable/todoTransitions 字段，并确认真实会话路由无回归 |
-| 0.2.17-rc.1 | 2026-11-16 | 未复测（无 UI 改动） | 未测 | AI 已在 Web 实机验证（见第 5 项证据） | 双路径 + 整轮 Auto；Web 侧已验「整轮 Auto、轮末回 Auto、只读路由正常」；「中途手动不被改写」由自动测试覆盖，请在 Desktop 按第 5 项顺手确认徽标实际档位 |
+| 0.2.17-rc.1 | 2026-11-16 | 未复测（无 UI 改动） | 未测 | AI 已在 Web 实机验证（见第 5 项证据） | 双路径 + 整轮 Auto；Web 侧已验「整轮 Auto、轮末回 Auto、只读路由正常」（当时语义；0.2.18-agent.2 起轮末不再写回）；「中途手动不被改写」由自动测试覆盖，请在 Desktop 按第 5 项顺手确认徽标实际档位 |
 | 0.2.17-agent.1 | 2026-11-16 | 自动测试覆盖资源清理、会话切换与键盘操作；视觉待出品人确认 | 未测 | 待出品人验收 | 捕获时同步解析（不再 step/end 补写）；续步逐步重算；badge/config/trajectory 均带 AbortController；轨迹胶囊 Tab 可聚焦、Enter/Space 等价点击；冷缓存预热前移 |
 | 0.2.18-agent.0 | 2026-11-16 | 与 0.2.17-agent.1 同代码；320/320 全绿 | 未测 | 待出品人重启 Desktop 后验收 | 首个推送版（0.2.17-agent.1 → 0.2.18-agent.0 仅版本治理 bump）；请在 Desktop 按第 5 项确认徽标实际档位、轨迹胶囊键盘操作与悬停/焦点样式 |
+| 0.2.18-agent.2 | 2026-11-16 | 自动测试 369/369；视觉待出品人 | 未测（默认关） | Web RPC 已验连续 Auto / 人工保持 / 零轮末写回；Desktop 待验收 | T01–T07 施工完成；Web 证据见第 5 项两个会话。same-step 模型切换、finished history、多会话轨迹、hidden 标签的真实视觉仍待验收 |
 |  |  |  |  |  |  |
 
 ---

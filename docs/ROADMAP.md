@@ -4,6 +4,35 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
+## 0.2.18-agent.2 — capture revisions, occurrence accounting, cached history (BUILT; Web smoke verified, Desktop pending)
+
+Built 2026-11-16 (test baseline 369/369, no skips; Web RPC smoke verified on DSH
+0.2.2-rc.3). Desktop acceptance remains with the producer. This batch closes the
+modern-loop residue left after 0.2.18-agent.1:
+
+- **T01** a raw-selection revision inside one step invalidates the stale capture
+  and re-plans it against the new provider/model/effort; Auto → Auto on another
+  model receives a concrete level instead of leaking the sentinel.
+- **T02** the modern loop no longer reads the decision store as an echo witness and
+  performs no scheduled-Auto `model.select()` at `turn/end`. A consumed manual
+  pick stays manual across turns; the only selection write left is the guarded
+  restore of an unsupported manual effort after safe omission. The legacy 0.2.1
+  loop keeps its existing echo and request-rewrite semantics.
+- **T03** brief claims are matched to projection occurrences one-for-one, covering
+  projection-only, projection-first with late claims, and generation replacement
+  replay. A global text boolean no longer swallows a second identical message.
+- **T04** merged anchors consult the finished-session cache before replaying stored
+  logs, and only a genuinely live session invalidates that cache; hook/session
+  references are no longer treated as permanent live activity.
+- **T05 / T06** trajectory pruning releases the owned caption and boundary marker
+  before dropping row bookkeeping; hidden documents do no row scans, fetches or
+  timer reschedules, and a single decorator-level visibility listener wakes each
+  live root once when visible.
+- **T07 / T08** maintainer documents distinguish the delivered modern no-write
+  semantics from the historical 0.2.17 behaviour; the release is packed, the
+  bundle hash matches source, and Web RPC smoke evidence is recorded. Desktop
+  smoke and producer visual acceptance stay open.
+
 ## 0.2.18-agent.1 — per-step projection only (LANDED)
 
 Delivered 2026-11-16 (test baseline 356/356, no skips). The construction batch
@@ -62,7 +91,8 @@ decisions below:
   `agent.model.select()` write remains.
 - `turn/end` restores the durable `Auto` only when the native selection still
   equals the capture the turn planned from — a user pick made after the step
-  wins, and a disposed plugin never writes.
+  wins, and a disposed plugin never writes. **Historical: superseded by
+  0.2.18-agent.2, where scheduled modern Auto performs no turn-end write.**
 - Capability warm-up moved to `agent/created` plus a fire-and-forget resolve
   from the claimed plan; `current()`/`claimed` still peek synchronously, so a
   cold cache omits the effort instead of awaiting.

@@ -70,6 +70,52 @@ test('NEXT FR-041: a same-step native Auto to manual change invalidates only the
     'manual takeover must not schedule a second time in the same step')
 })
 
+test('NEXT FR-040/041: a same-step Auto model change is replanned instead of leaking the sentinel', async (t) => {
+  const host = await autoModern(t)
+  await host.primeCapability({ model: 'thinker-2' })
+  const { agent } = await announced(host, 'next-current-auto-model-change', {
+    effort: 'auto', pending: nativeAuto(),
+  })
+  const result = await host.runStep(agent, {
+    claimed: [userMessage(ENGINEERING)],
+    afterFirstCapture({ selection }) {
+      assert.equal(selection.reasoningEffort, 'high')
+      agent.model.select({ provider: 'gw', model: 'thinker-2', reasoningEffort: 'auto' })
+    },
+  })
+  assert.equal(result.kind, undefined, 'pre-step must enter rather than reject unresolved Auto')
+  assert.equal(result.config.model, 'thinker-2')
+  assert.equal(result.config.reasoningEffort, 'high', 'the new raw Auto selection needs its own current-step plan')
+  assert.equal(result.attempts, 1)
+  assert.deepEqual(host.requests.map((item) => [item.model, item.reasoningEffort]), [
+    ['thinker-2', 'high'],
+  ], 'the replacement capture is what the request actually sends')
+  assert.equal(host.rawCurrent(agent).reasoningEffort, 'auto',
+    'the native Auto selection is never rewritten by the capture')
+})
+
+test('NEXT FR-073: a consumed manual selection is not mistaken for an Auto echo on later turns', async (t) => {
+  const host = await autoModern(t)
+  const { agent } = await announced(host, 'next-manual-after-auto-echo', {
+    effort: 'auto', pending: nativeAuto(),
+  })
+  const manual = await host.runStep(agent, {
+    claimed: [userMessage(TRIVIAL)],
+    afterFirstCapture({ selection }) {
+      assert.equal(selection.reasoningEffort, 'low')
+      agent.model.select(nativeEffort('low'))
+    },
+  })
+  assert.equal(manual.config.reasoningEffort, 'low')
+  assert.equal(agent.session.projection('modelSelection').pending, null, 'the request consumed the explicit pending pick')
+
+  const next = await host.runStep(agent, { turn: 2, claimed: [userMessage(ENGINEERING)] })
+  assert.equal(next.config.reasoningEffort, 'low',
+    'an old plugin decision is not ownership evidence for a concrete native selection')
+  const later = await host.runStep(agent, { turn: 3, claimed: [userMessage(ENGINEERING)] })
+  assert.equal(later.config.reasoningEffort, 'low', 'manual ownership remains stable across later turns')
+})
+
 test('NEXT FR-044/073: replacement concrete state cannot borrow the old generation Auto witness', async (t) => {
   const host = await autoModern(t)
   const id = 'next-replacement-manual'
@@ -110,6 +156,22 @@ test('NEXT FR-076: a fixed default never writes native model/selection state', a
   const result = await host.runStep(created.agent, { claimed: [userMessage(TRIVIAL)] })
   assert.equal(result.config.reasoningEffort, 'high')
   assert.equal(selectCalls.length, 0, 'the fixed default belongs to capture, not native selection memory')
+  assert.equal(created.selectionEvents.length, 0)
+})
+
+test('NEXT FR-040/076: native global Auto needs no plugin turn-end selection restoration', async (t) => {
+  const host = await autoModern(t)
+  const created = host.createAgent('next-native-auto-no-restore')
+  const selectCalls = countSelects(created.agent)
+  await host.announceAgent(created.agent)
+  const first = await host.runStep(created.agent, { claimed: [userMessage(ENGINEERING)] })
+  assert.equal(first.config.reasoningEffort, 'high')
+  await settle()
+  const second = await host.runStep(created.agent, { turn: 2, claimed: [userMessage(ENGINEERING)] })
+  assert.equal(second.config.reasoningEffort, 'high')
+  await settle()
+  assert.equal(host.rawCurrent(created.agent).reasoningEffort, 'auto', 'the native global choice was already Auto')
+  assert.equal(selectCalls.length, 0, 'scheduled Auto never writes concrete or Auto native selection')
   assert.equal(created.selectionEvents.length, 0)
 })
 

@@ -76,7 +76,7 @@ test('D FR-040/060: current() resolves each strict continuation synchronously an
   assert.equal(host.selectionEvents.some((row) => row.reasoningEffort !== 'auto'), false, 'no concrete request value may enter native selection state')
   assert.equal(agent.model.current().reasoningEffort, 'auto', 'turn/end closes the concrete capture window')
   assert.equal(host.rawCurrent(agent).reasoningEffort, 'auto', 'raw native intent survives concrete request/header projection')
-  assert.equal(agent.session.projection('modelSelection').pending.reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending, null)
   host.dispose()
   const recent = JSON.parse(readFileSync(file, 'utf8')).sessions[agent.id]?.recent || []
   for (const [step, effort] of [[1, 'low'], [2, 'medium']]) {

@@ -286,6 +286,49 @@ for (const [label, replacementLength] of [['shorter', 1], ['equal-length', 3], [
   })
 }
 
+test('FR-013: projection-only resume counts identical genuine briefs once per physical occurrence', () => {
+  const messages = [userMsg(MULTILINE), userMsg(MULTILINE)]
+  const agent = makeAgent(messages, 'brief-projection-identical-resume')
+  const signals = makeSignals()
+
+  const sig = signals.collect(agent, { turn: 3, step: 1 })
+  assert.equal(sig.briefVolumeRaw, 2 * sig.briefTokens,
+    'two physical user messages must not collapse into one global text dedupe hit')
+  assert.equal(sig.briefVolume, 2 * sig.briefEffective)
+})
+
+test('FR-013: identical projection-first briefs consume their late claims one-for-one', () => {
+  const messages = [userMsg(MULTILINE), userMsg(MULTILINE)]
+  const agent = makeAgent(messages, 'brief-projection-identical-late-claims')
+  const signals = makeSignals()
+  const before = signals.collect(agent, { turn: 3, step: 1 })
+  assert.equal(before.briefVolumeRaw, 2 * before.briefTokens)
+
+  signals.onClaimed({ agent, message: messages[0], turn: 3 })
+  signals.onClaimed({ agent, message: messages[1], turn: 3 })
+  const after = signals.collect(agent, { turn: 3, step: 2 })
+  assert.equal(after.briefVolumeRaw, before.briefVolumeRaw,
+    'late claims are echoes of the two projected occurrences, not two additional briefs')
+  assert.equal(after.briefVolume, before.briefVolume)
+})
+
+test('FR-044/FR-013: branch replacement rebuilds identical brief occurrences without boolean text dedupe', () => {
+  const original = [userMsg(MULTILINE)]
+  const replacement = [userMsg(MULTILINE), userMsg(MULTILINE)]
+  const agent = makeAgent(original, 'branch-identical-brief-occurrences')
+  agent.session.surface = { replaceGeneration: 0 }
+  const signals = makeSignals()
+  const before = signals.collect(agent, { turn: 1, step: 1 })
+  assert.equal(before.briefVolumeRaw, before.briefTokens)
+
+  agent.session.deriveMessages = () => replacement
+  agent.session.surface.replaceGeneration = 1
+  const after = signals.collect(agent, { turn: 2, step: 1 })
+  assert.equal(after.briefVolumeRaw, 2 * after.briefTokens,
+    'the atomic rebuild must preserve both physical occurrences on the replacement branch')
+  assert.equal(after.briefVolume, 2 * after.briefEffective)
+})
+
 test('FR-044: an ordinary same-generation shrink does not clear evidence by length', () => {
   const messages = oldBranchMessages()
   const agent = makeAgent(messages, 'branch-compaction-control')

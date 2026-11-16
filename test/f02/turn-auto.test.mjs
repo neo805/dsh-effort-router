@@ -38,7 +38,7 @@ test('F02-01 every claimed message contributes in either arrival order', async (
     const result = await host.runStep(agent, { claimed })
     assert.equal(result.config.reasoningEffort, 'high', id)
     assert.equal(agent.model.current().reasoningEffort, 'auto', id)
-    assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto', id)
+    assert.equal(agent.session.projection('modelSelection').pending, null, id)
   }
 })
 
@@ -55,7 +55,7 @@ test('F02-02 a concrete user selection after step/end wins without turn/end rest
   assert.equal(agent.model.current().reasoningEffort, 'max')
 })
 
-test('F02-03 resume reconstructs logical Auto from its own decision witness, not lastUsed', async (t) => {
+test('F02-03 concrete lastUsed on resume stays manual without a native Auto pending selection', async (t) => {
   const id = 'f02-crash-resume'
   const crashed = await autoModern(t)
   const before = await announced(crashed,id)
@@ -66,7 +66,7 @@ test('F02-03 resume reconstructs logical Auto from its own decision witness, not
   assert.equal(first.config.reasoningEffort, 'low')
   assert.equal(before.agent.model.current().reasoningEffort, 'low', 'continues:true leaves the active-turn capture window open')
   assert.equal(crashed.rawCurrent(before.agent).reasoningEffort, 'auto', 'the native logical selection remains Auto')
-  assert.equal(before.agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(before.agent.session.projection('modelSelection').pending, null)
   crashed.dispose()
 
   const resumedHost = await autoModern(t)
@@ -76,8 +76,10 @@ test('F02-03 resume reconstructs logical Auto from its own decision witness, not
   const second = await resumedHost.runStep(resumed.agent, {
     turn: 2, step: 1, claimed: [userMessage(ENGINEERING)],
   })
-  assert.equal(second.config.reasoningEffort, 'high')
-  assert.equal(resumed.agent.model.current().reasoningEffort, 'auto')
+  assert.equal(second.config.reasoningEffort, 'low',
+    'the modern store is telemetry, not proof that a concrete native selection is an Auto echo')
+  assert.equal(resumed.agent.model.current().reasoningEffort, 'low')
+  assert.equal(resumed.selectionEvents.length, 0, 'resume must not synthesize a native Auto selection')
 })
 
 test('F02-04 disabled official Default remains omitted with no selection writes', async (t) => {
@@ -104,6 +106,7 @@ test('F02-05 unresolved capability fails safe without awaiting and recovers afte
   assert.equal(settledWithoutResolvingCapability, true, 'synchronous claimed must not await capability resolution')
   assert.equal(result.config.reasoningEffort, undefined, 'the deterministic safe outcome is omission, not an arbitrary accepted error')
   assert.equal(agent.model.current().reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending, null)
   assert.equal(host.requests.some((item) => ['auto', 'off'].includes(item.config.reasoningEffort)), false)
   assert.equal(events.filter((event) => event.type === 'request/header').length, 1)
 
@@ -131,7 +134,9 @@ test('F02-06 fixed subagentEffort bypasses scheduling and preserves parent Auto'
   const result = await host.runStep(child.agent, { claimed: [userMessage(TRIVIAL)] })
   assert.equal(result.config.reasoningEffort, 'max')
   assert.equal(parent.agent.model.current().reasoningEffort, 'auto')
-  assert.equal(child.agent.model.current().reasoningEffort, 'max')
+  assert.equal(parent.agent.session.projection('modelSelection').pending, null)
+  assert.equal(child.agent.model.current().reasoningEffort, 'high',
+    'the fixed subagent level is a capture, not a native selection write')
   assert.equal(child.selectionEvents.length, 0, 'FR-076: a fixed subagent capture must not write native selection memory')
   assert.equal(host.logs.filter((line) => line.includes('rank ') && line.includes(child.session.id)).length, 0)
 })
@@ -143,9 +148,9 @@ test('F02-07 dispose after step/end prevents late writes without a restoration p
     claimed: [userMessage(ENGINEERING)],
     afterStepEnd() { host.dispose() },
   })
-  assert.equal(selectionEvents.every((event) => event.reasoningEffort === 'auto'), true)
+  assert.equal(selectionEvents.length, 0)
   assert.equal(agent.model.current().reasoningEffort, 'auto')
-  assert.equal(agent.session.projection('modelSelection').pending?.reasoningEffort, 'auto')
+  assert.equal(agent.session.projection('modelSelection').pending, null)
   assert.equal(host.logs.filter((line) => line.includes('async emit listener failed')).length, 0)
 })
 
@@ -159,7 +164,8 @@ test('F02-08 an explicit fixed subagent off is honored without entering Auto sch
   })
   const result = await host.runStep(child.agent, { claimed: [userMessage(ENGINEERING)] })
   assert.equal(result.config.reasoningEffort, 'off')
-  assert.equal(child.agent.model.current().reasoningEffort, 'off')
+  assert.equal(child.agent.model.current().reasoningEffort, 'high',
+    'the fixed subagent off is a capture, not a native selection write')
   assert.equal(child.selectionEvents.length, 0, 'FR-076: a fixed subagent capture must not write native selection memory')
   assert.equal(host.logs.filter((line) => line.includes('rank ') && line.includes(child.session.id)).length, 0)
 })

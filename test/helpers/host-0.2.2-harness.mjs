@@ -238,11 +238,24 @@ export function createModernHost(options = {}) {
     const messages = []
     let pending = clone(agentOptions.pending) || null
     let lastUsed = clone(agentOptions.lastUsed) || null
+    const explicitOptions = agentOptions.options || {}
+    // The native durable selection is NOT the request-header projection. The
+    // host records what was actually sent in lastUsed, but a scheduled Auto
+    // capture must not turn the native logical Auto into the concrete effort.
+    // A deliberate native pick (pending, an explicit effort, or a restored
+    // concrete lastUsed) is durable until another native pick replaces it.
+    let durable = clone(agentOptions.lastUsed) || clone(agentOptions.pending)
+      || (agentOptions.effort !== undefined
+        ? {
+            provider: explicitOptions.provider || 'gw',
+            model: explicitOptions.model || 'thinker',
+            reasoningEffort: agentOptions.effort,
+          }
+        : null)
     let requestHeader
     let appending = false
     const selections = []
     let session
-    const explicitOptions = agentOptions.options || {}
     const optionDescriptor = (key, fallback) => {
       if (key === 'reasoningEffort' && Object.prototype.hasOwnProperty.call(agentOptions, 'effort')) {
         return { value: agentOptions.effort }
@@ -268,8 +281,19 @@ export function createModernHost(options = {}) {
       if (event.type === 'request/header') {
         requestHeader = event.data.header
         const current = selectionOf(requestHeader && requestHeader.config)
-        if (current && JSON.stringify(current) === JSON.stringify(pending)) pending = null
+        // The host consumes the explicit native pick when it starts the
+        // request. The header itself is telemetry: it may contain a concrete
+        // Auto capture or a stripped unsupported level, never a new user pick.
+        const hadPending = !!pending
+        if (pending) pending = null
         lastUsed = current
+        // A host that cannot express a concrete level drops it from the
+        // request. Without an explicit pick in this request, the dropped value
+        // is not native state anymore; the manual restore path can return it.
+        if (!hadPending && current && current.reasoningEffort === undefined
+          && durable && durable.reasoningEffort && durable.reasoningEffort !== 'auto') {
+          durable = clone(current)
+        }
       }
       if (event.type === 'session/requestHeader') {
         if (event.data && event.data.header !== undefined) requestHeader = event.data.header
@@ -326,13 +350,14 @@ export function createModernHost(options = {}) {
     agent.session = session
     agent.model = {
       current() {
-        const value = pending || lastUsed || agent.options
+        const value = pending || durable || agent.options
         return value ? clone(value) : undefined
       },
       select(next) {
         if (next && typeof next === 'object' && typeof next.provider === 'string' && typeof next.model === 'string') {
-          const recorded = pending || lastUsed
+          const recorded = pending || durable || agent.options
           if (JSON.stringify(next) === JSON.stringify(recorded)) return
+          durable = clone(next)
           session.append('model/selection', next)
         }
       },
@@ -390,7 +415,11 @@ export function createModernHost(options = {}) {
       }
       if (priorTools.length) session.messages.push(...priorTools)
       aborted(signal)
-      const selection = agent.model.current()
+      let selection = agent.model.current()
+      if (typeof run.afterFirstCapture === 'function') {
+        run.afterFirstCapture({ agent, turn, step, selection: clone(selection) })
+        selection = agent.model.current()
+      }
       selectionCaptures.push({ agentId: agent.id, turn, step, selection: clone(selection) })
       const preDecision = await waterfall('agent/pre-step', {
         agent, turn, step, messages: claimed, signal,

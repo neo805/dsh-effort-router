@@ -39,6 +39,7 @@ async function verifyLegacy(runtime, options = {}) {
     effect(fn) { const off = fn(); if (off) effects.push(off); return () => {} },
   }
   entry.apply(ctx, entry.Config(options.config ?? {}))
+  let currentEffort = 'auto'
   const agent = {
     sessionId: `f01-legacy-${options.id ?? 'single-path'}-${runtime}`,
     session: {
@@ -48,19 +49,25 @@ async function verifyLegacy(runtime, options = {}) {
       requestHeader: () => ({}),
     },
     model: {
-      current: () => ({ provider: 'gw', model: 'thinker', reasoningEffort: 'auto' }),
+      current: () => ({ provider: 'gw', model: 'thinker', reasoningEffort: currentEffort }),
       select() { selected += 1 },
     },
   }
-  let next = async () => ({ provider: 'gw', model: 'thinker', reasoningEffort: 'auto' })
+  let next = async () => ({ provider: 'gw', model: 'thinker', reasoningEffort: currentEffort })
   for (const handler of [...listeners.get('agent/request')].reverse()) {
     const downstream = next
     next = (current) => handler(current, downstream)
   }
-  const result = await next({ agent, turn: 1, step: 1 })
-  assert.equal(result.reasoningEffort, options.expected ?? 'high')
+  const sequence = options.sequence ?? [{ expected: options.expected ?? 'high' }]
+  let autoRequests = 0
+  for (const [index, step] of sequence.entries()) {
+    currentEffort = step.effort ?? 'auto'
+    if (currentEffort === 'auto') autoRequests += 1
+    const result = await next({ agent, turn: step.turn ?? 1, step: step.step ?? index + 1 })
+    assert.equal(result.reasoningEffort, step.expected, `${runtime} sequence step ${index + 1}`)
+  }
   assert.equal(selected, 0, `${runtime} must not use the 0.2.2 selection writer`)
-  assert.equal(appended <= 1, true, 'at most the existing logical-Auto witness is appended')
+  assert.equal(appended <= autoRequests, true, 'at most one existing logical-Auto witness per Auto request')
   for (const off of effects.reverse()) off()
 }
 
@@ -71,6 +78,33 @@ test('F01-16 tested 0.2.1 runtimes keep request interception single-path even if
 })
 
 const interpolatedLevels = ['low', 'vendor-3', 'vendor-4', 'vendor-5', 'max']
+
+test('F01-19 legacy consecutive Auto steps preserve direct manual takeover and later Auto', async () => {
+  for (const runtime of ['0.2.1-rc.2', '0.2.1-rc.5']) {
+    await verifyLegacy(runtime, {
+      id: 'multi-step-manual-ownership',
+      sequence: [
+        { turn: 1, step: 1, effort: 'auto', expected: 'high' },
+        { turn: 1, step: 2, effort: 'max', expected: 'max' },
+        { turn: 2, step: 1, effort: 'max', expected: 'max' },
+        { turn: 3, step: 1, effort: 'auto', expected: 'high' },
+      ],
+    })
+  }
+})
+
+test('F01-20 legacy omits a manual effort the current model cannot express', async () => {
+  for (const runtime of ['0.2.1-rc.2', '0.2.1-rc.5']) {
+    await verifyLegacy(runtime, {
+      id: 'manual-unsupported',
+      levels: ['low'],
+      sequence: [
+        { turn: 1, step: 1, effort: 'max', expected: undefined },
+        { turn: 1, step: 2, effort: 'max', expected: undefined },
+      ],
+    })
+  }
+})
 
 test('F01-17 legacy explicit allowedEfforts also filters final ids, not interpolated ranks', async () => {
   for (const runtime of ['0.2.1-rc.2', '0.2.1-rc.5']) {
