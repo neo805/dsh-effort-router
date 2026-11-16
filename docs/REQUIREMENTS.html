@@ -65,7 +65,7 @@
 <header><div class="wrap">
   <h1>dsh-effort-router 产品需求文档</h1>
   <p>面向使用者与产品验收的非技术性需求说明：它解释产品要做什么、用户会怎样使用、哪些行为必须得到保证；不描述代码结构、变量或接口实现。</p>
-  <div class="meta"><span>当前产品基线 0.2.18-agent.0</span><span>文档更新 2026-11-16</span><span>非技术版</span><span>本轮已完成：0.2.2 连续步同步解析、证据链/配置解析硬化、客户端资源与无障碍</span></div>
+  <div class="meta"><span>当前产品基线 0.2.18-agent.2</span><span>文档更新 2026-11-16</span><span>非技术版</span><span>本轮已完成：T-01～T-09（逐步投影、只信当前原生选择、委派时代冻结、最终档位过滤、投影代际重建、日志缓存、对话根隔离与无障碍、发布检查）</span></div>
 </div></header>
 <main>
 <nav aria-label="文档目录"><div class="inner"><a href="#purpose">产品目标</a><a href="#concepts">使用概念</a><a href="#journey">使用流程</a><a href="#auto-engine">Auto 计算流程</a><a href="#functional">功能需求</a><a href="#memory">跨会话记忆</a><a href="#options">用户选项</a><a href="#decisions">裁决登记册</a><a href="#acceptance">验收</a><a href="#boundaries">边界</a></div></nav>
@@ -73,13 +73,13 @@
 <section id="abstract">
   <h2>English abstract</h2>
   <p>dsh-effort-router helps users balance answer quality and reasoning cost for each step of an agent task. A user may either pin a specific reasoning level or choose <strong>Auto</strong>. In Auto mode, the product considers the original task, recent failures, repeated tool activity, information volume, and budget pressure before selecting the actual level for each step. A concrete user choice always takes priority. The product uses the host application's native model selector and read-only displays rather than adding a separate settings interface.</p>
-  <p><strong>Approved repair direction:</strong> DSH 0.2.2 support must preserve both the existing DSH 0.2.1 path and continuous Auto scheduling throughout a turn. The next implementation resolves the logical Auto selection synchronously at the host's per-step selection capture; it no longer relies on a late follow-up selection write. Official Auto means omitted effort with adapter defaults; it does not replace this evidence-driven scheduler.</p>
+  <p><strong>Delivered direction (0.2.18-agent.1):</strong> DSH 0.2.2 support preserves both the existing DSH 0.2.1 path and continuous Auto scheduling throughout a turn. The logical Auto selection is resolved synchronously at the host's per-step selection capture; no late follow-up selection write remains, and the plugin no longer persists a concrete level of its own. Official Auto means omitted effort with adapter defaults; it does not replace this evidence-driven scheduler.</p>
   <p><strong>Native global memory; F-06 frozen:</strong> DSH already remembers the latest explicit provider, model, and Auto/concrete-level choice across new sessions and restarts. The plugin will not build a second preference store or per-model memory. It only needs to preserve the native logical choice, schedule Auto after restoration, and avoid recording Auto's temporary outputs as new user intent.</p>
 </section>
 
 <section id="purpose">
   <h2>1. 文档目的与产品目标</h2>
-  <p>本文先记录当前版本已经提供的能力、0.2.2 连续步调度的已确认缺陷与修复方向，以及 DSH 原生全局选择记忆；随后用独立登记册保留全部已批准、已否决、冻结与延期选项。不同状态会明确区分，避免把计划能力或讨论项误读为当前能力。技术任务和版本安排见 <a href="DEVELOPMENT-PLAN.md">开发计划</a>。</p>
+  <p>本文记录当前版本已经提供的能力（含 T-01～T-09 交付的修复）、仍存在的边界与已接受残留，以及 DSH 原生全局选择记忆；随后用独立登记册保留全部已批准、已否决、冻结与延期选项。不同状态会明确区分，避免把计划能力或讨论项误读为当前能力。技术任务和版本安排见 <a href="DEVELOPMENT-PLAN.md">开发计划</a>。</p>
   <div class="grid">
     <div class="card"><strong>按需思考</strong>简单步骤少花预算，复杂、信息量大或失败恢复中的步骤获得更多推理资源。</div>
     <div class="card"><strong>用户始终可接管</strong>用户选定具体档后，产品不再擅自改变；选择 Auto 才交给调度器。</div>
@@ -193,9 +193,9 @@
         <h4>④ 模型能力与用户允许范围</h4>
         <ul>
           <li>只从当前模型真实提供的档位中选择</li>
-          <li>再应用用户设置的允许档位范围</li>
+          <li>再按用户设置的允许档位过滤，判断以模型最终档位名为准</li>
           <li>目标不存在时按既定方向取可用档</li>
-          <li>未知档位按模型声明顺序判断强弱</li>
+          <li>未知档位按模型声明顺序推断强弱；混合已知与未知档位时保证严格先后，不出现并列</li>
         </ul>
       </div>
     </div>
@@ -210,7 +210,7 @@
 
 <section id="functional">
   <h2>4. 功能需求</h2>
-  <p><span class="tag done">当前能力</span> 本节描述产品应具备并持续保持的行为；已发现但尚未修复的连续步缺陷在裁决登记册单独标明。</p>
+  <p><span class="tag done">当前能力</span> 本节描述产品应具备并持续保持的行为；本轮已交付的修复见第 9 节 F-01/F-02 与第 11 节状态提示，仍待人工复测的场景见第 10 节末尾。</p>
 
   <h3>4.1 模式选择与用户接管</h3>
   <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
@@ -230,21 +230,21 @@
     <tr><td>FR-014</td><td>待办完成、子代理返回和上下文压缩后的整合步骤，可作为提高强度的证据；被关闭的信号不得在重新开启后补放。</td><td>分别验证信号开启、关闭、重新开启及新事件发生时的行为。</td></tr>
     <tr><td>FR-015</td><td>上下文或预算紧张，以及子代理执行时，可适当降低强度；任务初期仍应保留合理的难度起点。</td><td>检查预算阈值、子代理和任务初期之间的取舍。</td></tr>
     <tr><td>FR-016</td><td>Auto 不得主动关闭思考；只有明确证据表明历史已不兼容思考模式时，才可进入保护性恢复。</td><td>普通无推理块消息不得误判；确证的历史问题应可恢复并在解除后释放。</td></tr>
-    <tr><td>FR-017</td><td>不同模型的可用档位不一致时，应选择安全、可解释的实际档，不得选择模型未提供的档位。</td><td>覆盖标准档位、自定义档位、较多未知档位及允许范围为空的情况。</td></tr>
+    <tr><td>FR-017</td><td>不同模型的可用档位不一致时，应选择安全、可解释的实际档，不得选择模型未提供的档位。混合已知与未知档位时，强度顺序必须严格递增，不得把两个不同档位算成同一强度。</td><td>覆盖标准档位、自定义档位、较多未知档位及允许范围为空的情况；每个档位在其自身强度上都必须能被精确选中，三种回退方向都不得越出允许范围。</td></tr>
   </tbody></table></div>
 
   <h3>4.3 整轮 Auto、子代理与分支连续性</h3>
   <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
-    <tr><td>FR-040</td><td><strong>用户在一轮开始时选择 Auto 后，整轮都必须保持 Auto 持续调度。</strong>每一步的实际档可以变化，但不得把下一步误认成手动定档。插件只在本步请求 capture 时把逻辑 Auto 解析为实际档；回合外的原生选择与配置恢复仍保持 Auto。</td><td>同一轮使用多个步骤和工具调用，确认每步都重新调度，模式始终显示 Auto；回合外恢复配置时不得把实际档固化成人工选择。</td></tr>
+    <tr><td>FR-040</td><td><strong>用户在一轮开始时选择 Auto 后，整轮都必须保持 Auto 持续调度。</strong>每一步的实际档可以变化，但不得把下一步误认成手动定档。插件只在本步请求 capture 时把逻辑 Auto 解析为实际档，不写入具体档位的持久选择；回合外的原生选择与配置恢复仍保持 Auto。</td><td>同一轮使用多个步骤和工具调用，确认每步都重新调度，模式始终显示 Auto；回合外恢复配置时不得把实际档固化成人工选择。</td></tr>
     <tr><td>FR-041</td><td>用户在整轮中途改选具体档，应立即退出 Auto；之后不得因旧记忆或上一步结果自动切回。</td><td>Auto 执行若干步骤后手动改档，检查后续步骤和记忆更新。</td></tr>
     <tr><td>FR-042</td><td>父会话使用具体档时，子代理应继承该档；父会话使用 Auto 时，子代理按自己的任务独立调度。</td><td>分别验证父手动、父 Auto、父会话继续执行后再返回的子代理。</td></tr>
-    <tr><td>FR-043</td><td>无法确认子代理来源时，应采取保守继承，不得把可能的人工选择当成 Auto。</td><td>缺少父记录、档位不匹配、显式子代理覆盖及关闭思考的血缘。</td></tr>
-    <tr><td>FR-044</td><td>会话恢复或分支切换后，不得把旧分支的错误、信息量和任务起点错误带入新分支。</td><td>切换到内容不同、长度不同或相同的分支，检查证据是否属于当前分支。</td></tr>
+    <tr><td>FR-043</td><td>无法确认子代理来源时，应采取保守继承，不得把可能的人工选择当成 Auto。子代理创建时冻结父会话当时的调度时代，此后父会话的新决策不影响该子代理的判断。</td><td>缺少父记录、档位不匹配、显式子代理覆盖及关闭思考的血缘；父会话先手动接管再回到 Auto 时，子代理仍按冻结时代判断而不是被新记录带走。</td></tr>
+    <tr><td>FR-044</td><td>会话恢复或分支切换后，不得把旧分支的错误、信息量和任务起点错误带入新分支。投影被整体替换时，证据与简报计量必须原子重建，而不是按增量继续累加。</td><td>切换到内容不同、长度不同或相同的分支；替换分支后旧错误、旧重复与旧工具体量必须归零，而内容缩短但未被替换时快照保持不变。</td></tr>
   </tbody></table></div>
 
   <h3>4.4 自定义模型的基本档位支持</h3>
   <div class="table-wrap"><table class="req"><thead><tr><th>编号</th><th>需求</th><th>验收方式</th></tr></thead><tbody>
-    <tr><td>FR-050</td><td>对从未配置推理档位的自定义模型，产品可在确认模型确实没有可用档位后，补充一套基本选择。</td><td>未配置模型获得基本档位；已有配置的模型保持不变。</td></tr>
+    <tr><td>FR-050</td><td>对从未配置推理档位的自定义模型，产品可在明确解析出「该模型没有任何可用档位」后补充一套基本选择；缺少模型元数据不算确认。</td><td>未配置模型获得基本档位；已有配置的模型保持不变；元数据缺失或解析失败时只提示、不写配置。</td></tr>
     <tr><td>FR-051</td><td>用户在模型管理界面明确接管或关闭某个模型后，产品不得在下次启动时擅自补回。</td><td>关闭、保存、重载和重启后，用户选择仍被尊重。</td></tr>
     <tr><td>FR-052</td><td>自动补充不得增加“关闭思考”选项，也不得覆盖用户明确声明的兼容性限制。</td><td>检查基本档位内容和用户显式关闭推理能力的情况。</td></tr>
     <tr><td>FR-053</td><td>无法判断模型能力时，应提示用户补充配置，而不是猜测能力或静默失败。</td><td>模型目录缺少信息时能看到明确诊断，原配置不被破坏。</td></tr>
@@ -270,7 +270,7 @@
     <tr><td>FR-073</td><td>当前会话的明确选择始终优先；用户中途改选后立即生效，并由原生机制成为新的全局选择。</td><td>恢复旧选择后立即改选，检查当前步骤、后续步骤及下一会话。</td></tr>
     <tr><td>FR-074</td><td>当前明确选择与明确继承优先；没有当次选择时使用原生全局默认。只有原生选择缺失时，才沿用插件既有默认档与宿主默认规则。</td><td>覆盖当前选择、子代理继承、原生 Auto/具体档、原生选择缺失及插件默认值。</td></tr>
     <tr><td>FR-075</td><td>插件不得为了让旧模型的具体档适配当前模型而寻找相邻档。模型切换与不支持档位的处理遵循原生目标模型能力和安全回退。</td><td>切换到能力不同的模型，确认没有跨模型 nearest 换算或伪装成人工选择。</td></tr>
-    <tr><td>FR-076</td><td>只有原生明确选择流程更新全局记忆；插件的 Auto 计算结果、固定默认值和子代理继承不得写回全局选择。</td><td>连续自动调度、使用默认档和子代理执行后，原生全局选择不被污染。</td></tr>
+    <tr><td>FR-076</td><td>只有原生明确选择流程更新全局记忆；插件的 Auto 计算结果、固定默认值和子代理继承不得写回全局选择。插件不再写入任何具体档位，固定默认档与子代理固定档只影响当步实际发送。</td><td>连续自动调度、使用默认档和子代理执行后，原生全局选择不被污染；一轮结束后原生选择器的值与回合开始时一致。</td></tr>
     <tr><td>FR-077</td><td>全局选择由 DSH 保存在对应本机配置环境中，插件不保存第二份偏好或任务正文。不同配置环境不得共享插件调度记录。</td><td>检查两个配置环境；插件数据中不存在偏好副本或简报正文。原生记忆的清理由 DSH 负责，不再承诺删除插件数据会清除它。</td></tr>
     <tr><td>FR-078</td><td>原生选择器呈现逻辑 Auto/具体档；插件只读徽标和轨迹呈现实际执行档，不新增第二套偏好控制。</td><td>新会话打开原生选择器即可看到恢复结果；Auto 下选择器保持 Auto，徽标与实际档位一致。</td></tr>
   </tbody></table></div>
@@ -279,7 +279,7 @@
 
 <section id="options">
   <h2>6. 用户可配置能力</h2>
-  <p>所有选项都在用户配置文件中，不提供设置页面。下表使用自然语言概括，实际编辑格式以 <a href="README.zh.md">使用说明</a> 为准。</p>
+  <p>所有选项都在用户配置文件中，不提供设置页面。下表使用自然语言概括，实际编辑格式以 <a href="../README.zh.md">使用说明</a> 为准。</p>
   <div class="table-wrap"><table><thead><tr><th>能力分组</th><th>当前默认行为</th><th>用户可调整的内容</th></tr></thead><tbody>
     <tr><td>总体模式</td><td>功能开启，未明确选择时使用 Auto；子代理遵循来源关系。</td><td>可关闭功能、固定默认档，或为子代理指定固定默认档。</td></tr>
     <tr><td>最终档位范围</td><td>使用模型提供的非关闭档；缺失目标时选择接近且偏强的可用档。</td><td>可限制允许档位，或改为只向上、只向下选择。</td></tr>
@@ -323,8 +323,8 @@
   <h2>9. 产品需求裁决登记册（F-01～F-12）</h2>
   <p>此前改写时把详细裁决项留在了开发计划，容易造成“这些需求已经消失”的误解。这里恢复完整登记册：<strong>编号只用于追踪，不代表全部都要实施。</strong>每项都列出你真正需要选择的方向、当前状态与建议。</p>
   <div class="table-wrap"><table><thead><tr><th>编号与状态</th><th>需要你决断的具体问题</th><th>当前结论或建议</th></tr></thead><tbody>
-    <tr><td><strong>F-01</strong><br><span class="decision-open">已批准 · 已交付</span></td><td>是否支持 DSH 0.2.2？如果支持，何时开始、保留多久的旧版双路径？</td><td><strong>0.2.18-agent.0（起始于 0.2.17-agent.1）已把 0.2.2 连续步调度改为「宿主读取当前选择时同步解析本步实际档」，不再依赖 step/end 后的补写。</strong>0.2.1 路径保留；未在允许清单内的宿主版本仍拒绝加载；连续步、接管、dispose 与第三方包装矩阵均由自动化测试覆盖。</td></tr>
-    <tr><td><strong>F-02</strong><br><span class="decision-open">整轮 Auto 保持批准 · 实现路线已重选</span></td><td>如何证明 Auto 在多步执行中仍是 Auto，同时让每一步使用新的实际档？</td><td><strong>采用当前选择同步解析路线：</strong>原生逻辑选择保持 Auto，每次宿主捕获本步选择时返回对应 concrete 实际档；不再逐步改写原生选择，也不再依赖轮末恢复。用户改选具体档后立即直通。</td></tr>
+    <tr><td><strong>F-01</strong><br><span class="decision-open">已批准 · 已交付</span></td><td>是否支持 DSH 0.2.2？如果支持，何时开始、保留多久的旧版双路径？</td><td><strong>0.2.18-agent.0 起支持 0.2.2，0.2.18-agent.1 完成收口：连续步调度在宿主读取当前选择时同步解析本步实际档，插件不再写具体档位，也不再依赖 step/end 补写或回合末恢复具体档。</strong>0.2.1 路径保留；未在允许清单内的宿主版本仍拒绝加载；连续步、接管、dispose、第三方包装与投影替换均由自动化测试覆盖，并在 DSH Web 真机确认。</td></tr>
+    <tr><td><strong>F-02</strong><br><span class="decision-open">整轮 Auto 保持批准 · 路线已交付</span></td><td>如何证明 Auto 在多步执行中仍是 Auto，同时让每一步使用新的实际档？</td><td><strong>当前选择同步解析路线已交付：</strong>原生逻辑选择保持 Auto，每次宿主捕获本步选择时返回对应实际档；插件不再逐步改写原生选择，也不再保存具体档位。逻辑 Auto 由宿主的选择投影维持，回合末只做受保护的 Auto 意图恢复，若原生选择已被改动则跳过。用户改选具体档后立即直通，不再被旧记录拉回 Auto。</td></tr>
     <tr><td><strong>F-03</strong><br><span class="decision-open">延期裁决 · 中等重要/中等紧急</span></td><td>自定义模型“没有档位表”时，谁有权补？三选一：①保持只提示、不扩大自动补写；②用持久墓碑区分从未配置与主动关闭；③提供明确的用户自选模式，允许补写用户自管行。</td><td><strong>暂时保持现状，未来再议。</strong>有很高讨论价值；届时先只读验证墓碑能否经模型管理界面保存和重启后仍存在，再决定是否采用；当前不扩大写路径。</td></tr>
     <tr><td><strong>F-04</strong><br><span class="decision-done">已否决</span></td><td>是否投入 think-level 共存兼容，包括自动填充协调、入口适配和自动让位？</td><td><strong>已决定不考虑。</strong>不再安排相关工作，也无需继续裁决。</td></tr>
     <tr><td><strong>F-05</strong><br><span class="decision-open">延期裁决 · 中等重要/中等紧急</span></td><td>固定基本档位不够用时，是否引入：①本地静态模型能力知识库；②直接读取供应商原始模型列表的能力探测；③两者组合？</td><td><strong>暂时保持现有能力来源，未来再议。</strong>有很高讨论价值；重新讨论时仍需权衡知识维护、网络请求、隐私与错误能力声明风险。</td></tr>
@@ -348,7 +348,7 @@
     <tr><td>变化方式</td><td>记录的选择持续有效，直到用户或程序重新选择。</td><td>用户保持 Auto 不变，实际执行档可随步骤变化。</td></tr>
     <tr><td>二者关系</td><td>提供模型选择与适配器默认机制。</td><td>把官方选择机制当作未来迁移接缝，而不是用官方 Auto 替代调度器。</td></tr>
   </tbody></table></div>
-  <div class="callout warn"><strong>当前有效决策：</strong>F-01/F-02 的整轮 Auto 目标不变，下一批以当前选择同步解析修复 0.2.2 连续步；F-06 冻结插件需求并复用 DSH 原生全局选择记忆；F-04 已否决；F-07 的 Auto 名称保持不变。F-03、F-05 为中等重要、中等紧急的延期裁决项；F-07 的徽标迁移与 F-08～F-12 均为低重要、低紧急的延期项，均不在本轮实施。</div>
+  <div class="callout warn"><strong>当前有效决策：</strong>F-01/F-02 的整轮 Auto 目标已交付（当前选择同步解析，插件不写具体档位）；F-06 冻结插件需求并复用 DSH 原生全局选择记忆；F-04 已否决；F-07 的 Auto 名称保持不变。F-03、F-05 为中等重要、中等紧急的延期裁决项；F-07 的徽标迁移与 F-08～F-12 均为低重要、低紧急的延期项，均未在本轮实施。</div>
 </section>
 
 <section id="acceptance">
@@ -364,31 +364,31 @@
     <tr><td>自定义模型曾被用户主动关闭</td><td>重启后不擅自补回；无法判断时给出提示而非猜测。</td><td>FR-051、FR-053</td></tr>
     <tr><td>切换会话与历史轨迹</td><td>只读信息属于当前会话；不确定时不显示，不能错标。</td><td>FR-060～FR-062</td></tr>
   </tbody></table></div>
-  <p class="small muted">具体的人工操作、失败判定与回滚方式见 <a href="MAINTAINER-TESTS.md">维护者验收备忘录</a>。下一批应补充原生全局选择恢复、Auto 连续步与手动接管的实机场景。</p>
+  <p class="small muted">具体的人工操作、失败判定与回滚方式见 <a href="MAINTAINER-TESTS.md">维护者验收备忘录</a>。原生全局选择恢复、整轮 Auto 连续步与手动接管已在 0.2.18-agent.1 的 DSH Web 真机场景中验证；0.2.1 旧路径与 Desktop 重启后的复测仍待补。</p>
 </section>
 
 <section id="boundaries">
   <h2>11. 当前边界与后续待定事项</h2>
   <ol>
-    <li><strong>宿主版本：</strong>当前已发布基线是 DSH 0.2.1 系列；0.2.2 支持已获批准，必须在下一次施工中与旧版兼容、整轮 Auto 持续调度一起交付。</li>
+    <li><strong>宿主版本：</strong>DSH 0.2.2 支持已交付，与 0.2.1 双路径共存；允许清单之外的宿主版本仍拒绝加载，新的宿主版本需要先补契约测试再放开。</li>
     <li><strong>自定义模型声明权：</strong>“从未配置”和“用户主动关闭”在某些情况下外观相同。当前宁可提示而不扩大自动写入；持久墓碑只是待讨论方案，不是当前能力。</li>
     <li><strong>模型能力来源：</strong>当前不维护外部模型知识库，也不直接读取供应商原始模型列表；是否增加另行裁决。</li>
-    <li><strong>分支与重启：</strong>分支证据隔离和重启后早期证据仍有个别边界，已列入技术修复计划。</li>
+    <li><strong>分支与重启：</strong>投影替换已按代际整体重建证据，切换分支不再带入旧错误与旧信息量；重启后旧错误首桶仍可能使最初几步偏高，属已接受残留。</li>
     <li><strong>校准：</strong>首轮研究不支持下意识调整阈值或词典；需要独立第二周期和任务结果证据。</li>
     <li><strong>只读界面：</strong>对话流工具小注默认关闭且仍需集中实机复测；轨迹视觉与 Auto/手动行为保留人工验收。</li>
     <li><strong>社区插件：</strong>不开展 think-level 共存兼容工作，也不将其功能集纳入本项目。</li>
   </ol>
-  <div class="callout warn"><strong>状态提示：</strong>当前版本 0.2.18-agent.0 已修复 0.2.2 连续步调度（捕获时同步解析），证据链/配置解析/存储与客户端资源生命周期同步硬化；F-06 已冻结，跨会话记忆复用 DSH 原生全局选择。F-04 已否决；F-07 的 Auto 不改名；F-03、F-05 中等重要、中等紧急但延期，F-07 的徽标迁移及 F-08～F-12 低优先延期。</div>
+  <div class="callout warn"><strong>状态提示：</strong>当前产品基线 0.2.18-agent.2（代码基线 0.2.18-agent.1）已交付 T-01～T-09：逐步投影只读调度、只信任当前原生选择、委派时代冻结、最终档位过滤、投影代际重建、日志锚点缓存、对话根隔离与样式引用计数、发布检查改为真实打包产物。F-06 已冻结，跨会话记忆复用 DSH 原生全局选择。F-04 已否决；F-07 的 Auto 不改名；F-03、F-05 中等重要、中等紧急但延期，F-07 的徽标迁移及 F-08～F-12 低优先延期。</div>
 </section>
 
 <section id="references">
   <h2>12. 相关文档</h2>
   <ul>
-    <li><a href="README.zh.md">中文使用说明</a>：当前功能与配置方式。</li>
+    <li><a href="../README.zh.md">中文使用说明</a>：当前功能与配置方式。</li>
     <li><a href="DEVELOPMENT-PLAN.md">开发计划</a>：技术任务、已批准功能的实施步骤与待定事项。</li>
     <li><a href="ROADMAP.md">路线图</a>：历史决策、已接受残留和研究状态。</li>
     <li><a href="MAINTAINER-TESTS.md">维护者验收备忘录</a>：真实客户端的人工验收场景。</li>
-    <li><a href="CHANGELOG.md">更新日志</a>：已经交付的行为变化。</li>
+    <li><a href="../CHANGELOG.md">更新日志</a>：已经交付的行为变化。</li>
     <li><a href="COLLABORATION.md">协作规范</a>：决策权、版本与交付闸门。</li>
   </ul>
 </section>

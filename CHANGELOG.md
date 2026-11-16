@@ -6,8 +6,9 @@ All notable changes to dsh-effort-router are documented here. The format follows
 
 ## [0.2.18-agent.2] - 2026-11-16
 
-Documentation-only release: the repository layout and the collaboration body were
-reorganized. No code, schema, packaging or runtime behaviour changed.
+Documentation-only release: the repository layout, the collaboration body and the
+requirements register were reorganized. No code, schema, packaging or runtime
+behaviour changed.
 
 ### Changed
 
@@ -34,6 +35,12 @@ reorganized. No code, schema, packaging or runtime behaviour changed.
   links.
 - Local release tarballs were collected into `artifacts/` (still untracked);
   `docs/ops/` files were sorted into `logs/` and `reports/`.
+- `docs/REQUIREMENTS.html` now reflects the delivered T-01…T-09 pass: the product
+  baseline moved to `0.2.18-agent.2`, the "approved repair direction" paragraph
+  became "delivered", FR-017/040/043/044/050/076 gained the strict-ordering,
+  frozen-era, generation-rebuild and confirmed-metadata wording, and the
+  boundary section no longer claims 0.2.2 support is pending.
+  `docs/DEVELOPMENT-PLAN.md` carries the same release status on its header.
 
 ## [0.2.18-agent.1] - 2026-11-16
 
