@@ -49,6 +49,22 @@ function countSelects(agent) {
   return calls
 }
 
+test('NEXT FR-040: a cold Auto capture omits an unavailable effort instead of serializing undefined', async (t) => {
+  const host = modern(t, {}, { resolvePending: new Promise(() => {}) })
+  const { agent } = await announced(host, 'next-cold-auto-capture', {
+    effort: 'auto', pending: nativeAuto(),
+  })
+  agent.session.append('turn/start', { turn: 1 })
+  await host.emit('agent/inbox/claimed', { agent, message: userMessage(ENGINEERING), turn: 1 })
+
+  const capture = agent.model.current()
+  assert.equal(capture.reasoningEffort, undefined,
+    'an unresolved model cannot schedule a concrete level')
+  assert.equal(Object.hasOwn(capture, 'reasoningEffort'), false,
+    'the request header snapshot rejects an own undefined property')
+  assert.deepEqual(JSON.parse(JSON.stringify(capture)), { provider: 'gw', model: 'thinker' })
+})
+
 test('NEXT FR-041: a same-step native Auto to manual change invalidates only the stale capture', async (t) => {
   const host = await autoModern(t)
   const { agent } = host.createAgent('next-current-manual-takeover', {

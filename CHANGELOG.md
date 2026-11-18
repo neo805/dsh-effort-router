@@ -4,6 +4,15 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- A cold Auto capture no longer returns an own `reasoningEffort: undefined`
+  property. DSH snapshots `request/header` as strict JSON, where an own
+  `undefined` fails the append and aborts the turn; the capture now omits the
+  key, which is the host's equivalent "no explicit level" representation.
+
 ## [0.2.18-agent.2] - 2026-11-16
 
 Behaviour release after the 0.2.18-agent.2 review batch: the modern Auto loop no
