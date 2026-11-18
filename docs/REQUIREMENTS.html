@@ -65,7 +65,7 @@
 <header><div class="wrap">
   <h1>dsh-effort-router 产品需求文档</h1>
   <p>面向使用者与产品验收的非技术性需求说明：它解释产品要做什么、用户会怎样使用、哪些行为必须得到保证；不描述代码结构、变量或接口实现。</p>
-  <div class="meta"><span>当前产品基线 0.2.18-agent.2</span><span>文档更新 2026-11-16</span><span>非技术版</span><span>本轮施工：T01～T07 已完成；T08 已完成打包与 Web RPC 冒烟，Desktop 待验收</span><span>范围：同步 capture 的 revision 重规划、现代路径零原生 Auto 写回、同文 occurrence 认领、历史锚点缓存、轨迹清理与后台休眠、证据与打包验收</span></div>
+  <div class="meta"><span>当前产品基线 0.2.19-agent.0</span><span>文档更新 2026-11-19</span><span>非技术版</span><span>本轮：0.2.19-agent.0 冷启动 Auto 请求头热修复已交付；0.2.18-agent.2 的 T01～T08 仍为当前能力基线</span><span>范围：同步 capture 的 revision 重规划、现代路径零原生 Auto 写回、同文 occurrence 认领、历史锚点缓存、轨迹清理与后台休眠、冷启动请求头严格 JSON、证据与打包验收</span></div>
 </div></header>
 <main>
 <nav aria-label="文档目录"><div class="inner"><a href="#purpose">产品目标</a><a href="#concepts">使用概念</a><a href="#journey">使用流程</a><a href="#auto-engine">Auto 计算流程</a><a href="#functional">功能需求</a><a href="#memory">跨会话记忆</a><a href="#options">用户选项</a><a href="#decisions">裁决登记册</a><a href="#acceptance">验收</a><a href="#boundaries">边界</a></div></nav>
@@ -73,13 +73,13 @@
 <section id="abstract">
   <h2>English abstract</h2>
   <p>dsh-effort-router helps users balance answer quality and reasoning cost for each step of an agent task. A user may either pin a specific reasoning level or choose <strong>Auto</strong>. In Auto mode, the product considers the original task, recent failures, repeated tool activity, information volume, and budget pressure before selecting the actual level for each step. A concrete user choice always takes priority. The product uses the host application's native model selector and read-only displays rather than adding a separate settings interface.</p>
-  <p><strong>Delivered direction (0.2.18-agent.2):</strong> DSH 0.2.2 support preserves both the existing DSH 0.2.1 path and continuous Auto scheduling throughout a turn. The logical Auto selection is resolved synchronously at the host's per-step selection capture; re-planning happens when the native raw selection changes within a step. Scheduled modern Auto performs no <code>model.select()</code> write and appends no Auto selection event; a manual pick stays manual on later turns until the user explicitly returns to Auto. The only selection write left restores an unsupported manual effort after it had to be omitted. Official Auto means omitted effort with adapter defaults; it does not replace this evidence-driven scheduler.</p>
+  <p><strong>Delivered direction (0.2.18-agent.2):</strong> DSH 0.2.2 support preserves both the existing DSH 0.2.1 path and continuous Auto scheduling throughout a turn. The logical Auto selection is resolved synchronously at the host's per-step selection capture; re-planning happens when the native raw selection changes within a step. Scheduled modern Auto performs no <code>model.select()</code> write and appends no Auto selection event; a manual pick stays manual on later turns until the user explicitly returns to Auto. The only selection write left restores an unsupported manual effort after it had to be omitted. Official Auto means omitted effort with adapter defaults; it does not replace this evidence-driven scheduler. <strong>0.2.19-agent.0</strong> additionally omits the <code>reasoningEffort</code> key entirely when a cold Auto capture has no concrete level, instead of materializing an own <code>undefined</code> that DSH's strict-JSON <code>request/header</code> snapshot rejects.</p>
   <p><strong>Native global memory; F-06 frozen:</strong> DSH already remembers the latest explicit provider, model, and Auto/concrete-level choice across new sessions and restarts. The plugin will not build a second preference store or per-model memory. It only needs to preserve the native logical choice, schedule Auto after restoration, and avoid recording Auto's temporary outputs as new user intent.</p>
 </section>
 
 <section id="purpose">
   <h2>1. 文档目的与产品目标</h2>
-  <p>本文记录当前版本已经提供的能力（含 0.2.18-agent.1 的 T-01～T-09 与 0.2.18-agent.2 的 T01～T07 交付；T08 的 Web 冒烟已验、Desktop 待验收）、仍存在的边界与已接受残留，以及 DSH 原生全局选择记忆；随后用独立登记册保留全部已批准、已否决、冻结与延期选项。不同状态会明确区分，避免把计划能力或讨论项误读为当前能力。技术任务和版本安排见 <a href="DEVELOPMENT-PLAN.md">开发计划</a>。</p>
+  <p>本文记录当前版本已经提供的能力（含 0.2.18-agent.1 的 T-01～T-09、0.2.18-agent.2 的 T01～T08，以及 0.2.19-agent.0 的冷启动 Auto 请求头修复）、仍存在的边界与已接受残留，以及 DSH 原生全局选择记忆；随后用独立登记册保留全部已批准、已否决、冻结与延期选项。不同状态会明确区分，避免把计划能力或讨论项误读为当前能力。技术任务和版本安排见 <a href="DEVELOPMENT-PLAN.md">开发计划</a>。</p>
   <div class="grid">
     <div class="card"><strong>按需思考</strong>简单步骤少花预算，复杂、信息量大或失败恢复中的步骤获得更多推理资源。</div>
     <div class="card"><strong>用户始终可接管</strong>用户选定具体档后，产品不再擅自改变；选择 Auto 才交给调度器。</div>
@@ -378,7 +378,7 @@
     <li><strong>只读界面：</strong>对话流工具小注默认关闭且仍需集中实机复测；轨迹视觉与 Auto/手动行为保留人工验收。</li>
     <li><strong>社区插件：</strong>不开展 think-level 共存兼容工作，也不将其功能集纳入本项目。</li>
   </ol>
-  <div class="callout warn"><strong>状态提示：</strong>当前产品基线 0.2.18-agent.2 已完成 T01～T07：同一步选择 revision 重规划、现代路径人工所有权与零原生 Auto 写回、同文 brief 按物理 occurrence 认领、历史锚点缓存优先、轨迹清理与后台标签休眠、文档与打包验收。T08 的 Web RPC 冒烟已验（连续 Auto、人工保持、零轮末写回），Desktop 重启与剩余真机矩阵待出品人验收。0.2.18-agent.1 的逐步投影、只信任当前原生选择、委派时代冻结、最终档位过滤、投影代际重建、日志缓存、对话根隔离与无障碍仍保留。F-06 已冻结，跨会话记忆复用 DSH 原生全局选择。F-04 已否决；F-07 的 Auto 不改名；F-03、F-05 中等重要、中等紧急但延期，F-07 的徽标迁移及 F-08～F-12 低优先延期。</div>
+  <div class="callout warn"><strong>状态提示：</strong>当前产品基线 0.2.19-agent.0 已修复冷启动 Auto 的严格 JSON 请求头失败：无具体档位时不再物化 own <code>undefined</code>，而是在 <code>request/header</code> 中省略该键。Web 影子会话真实跑通两步 Auto（均为 high）且只保留显式 <code>auto</code> selection；Desktop 已经 plugin-manager 安装到该版本并通过 13 个 lib 哈希校验。0.2.18-agent.2 的 T01～T08 继续有效：同一步选择 revision 重规划、现代路径人工所有权与零原生 Auto 写回、同文 brief 按物理 occurrence 认领、历史锚点缓存优先、轨迹清理与后台标签休眠、文档与打包验收。0.2.18-agent.1 的逐步投影、只信任当前原生选择、委派时代冻结、最终档位过滤、投影代际重建、日志缓存、对话根隔离与无障碍仍保留。F-06 已冻结，跨会话记忆复用 DSH 原生全局选择。F-04 已否决；F-07 的 Auto 不改名；F-03、F-05 中等重要、中等紧急但延期，F-07 的徽标迁移及 F-08～F-12 低优先延期。</div>
 </section>
 
 <section id="references">

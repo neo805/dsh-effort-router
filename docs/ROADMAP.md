@@ -4,6 +4,23 @@ Recorded 2026-10-10, after the 0.2.0 code-review pass. Items are ordered by
 the maintainer's priority; nothing here is scheduled until explicitly picked
 up.
 
+## 0.2.19-agent.0 — cold Auto request-header serialization (LANDED)
+
+Released 2026-11-19 (test baseline 370/370, no skips). This is a regression fix
+for the cold-start Auto path on DSH 0.2.2-rc.3. An unresolved capability used to
+make the capture return an own `reasoningEffort: undefined` property. DSH folds
+the current selection into `request/header` and snapshots that event as strict
+JSON; the own `undefined` aborted the append and the whole turn failed with
+`session event "request/header" carries non-JSON-serializable data`.
+
+The fix omits the key entirely when no concrete level exists, which is the host's
+equivalent representation of "no explicit level". A Web shadow session created
+after installing 0.2.19-agent.0 selected `deepseek-account/deepseek-flash/auto`,
+completed two routing steps, persisted a serializable `request/header` with
+`reasoningEffort=high`, and wrote only the explicit initial `auto` selection. The
+Desktop profile was then upgraded through `plugin_manager`; all 13 `lib/*.js`
+hashes match source and the plugin remains enabled with `defaultLevel=auto`.
+
 ## 0.2.18-agent.2 — capture revisions, occurrence accounting, cached history (BUILT; Web and Desktop live Auto smoke verified, producer visual pending)
 
 Built 2026-11-16 (test baseline 369/369, no skips; Web RPC smoke verified on DSH

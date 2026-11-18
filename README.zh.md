@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-**当前版本：** `0.2.18-agent.2`（兼容 DSH 0.2.1-rc.2 → 0.2.2-rc.3）· [更新日志](CHANGELOG.md) · [路线图](docs/ROADMAP.md)
+**当前版本：** `0.2.19-agent.0`（兼容 DSH 0.2.1-rc.2 → 0.2.2-rc.3）· [更新日志](CHANGELOG.md) · [路线图](docs/ROADMAP.md)
 
 DSH（DeepSeek Harness）插件：**按上下文自动调节每一步的思考档位（reasoning effort）**，并让手写声明的 `llm-pi-ai` 自定义模型也能选档位。
 

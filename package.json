@@ -1,6 +1,6 @@
 {
   "name": "dsh-effort-router",
-  "version": "0.2.18-agent.2",
+  "version": "0.2.19-agent.0",
   "publishConfig": {
     "access": "public"
   },

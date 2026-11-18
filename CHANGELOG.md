@@ -4,7 +4,11 @@ All notable changes to dsh-effort-router are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.19-agent.0] - 2026-11-19
+
+Regression release for the cold-start Auto request-header failure observed on
+DSH 0.2.2-rc.3: an unresolved capability must not turn "no concrete level" into
+an own `reasoningEffort: undefined` property.
 
 ### Fixed
 

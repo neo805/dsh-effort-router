@@ -69,7 +69,7 @@ personal or machine-specific information.
 
 版本号形如 `X.X.X-agent.X`，**一律带 `agent` 后缀**（`package.json`、`CHANGELOG.md`
 标题、README 首屏、git tag 四处一致）。`rc` 后缀只属于 DSH 宿主及其依赖包，
-不得机械替换。**下一施工版本从 `0.2.18-agent.2` 开始**；当前生效版本以
+不得机械替换。**下一施工版本从 `0.2.19-agent.0` 开始**；当前生效版本以
 `package.json` 为准。
 
 | 情形 | 做法 | 示例 |

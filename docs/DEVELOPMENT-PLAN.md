@@ -1,6 +1,13 @@
-# 开发计划 — 0.2.18-agent.2（已施工，待产品出口验收）
+# 开发计划 — 0.2.18-agent.2 与 0.2.19-agent.0 热修复
 
-> 状态：**T01–T08 已施工，自动化 369/369 绿；Web RPC 与 Desktop 动态 Auto 冒烟均已通过，Desktop 安装后完整重启并验证轮末零写回；产品出口视觉与剩余边缘矩阵待出品人验收**。基线为 `0.2.18-agent.1`；本轮只修有复现证据的行为缺陷，不做感觉型重写。实际 push/tag 须出品人另行批准。
+> **2026-11-19 热修复：** `0.2.19-agent.0` 修复冷启动 Auto 在 `lib/turn-auto.js`
+> 的 `ownSelection` 中物化 own `reasoningEffort: undefined` 的问题。DSH 的
+> `request/header` 按严格 JSON 快照，own `undefined` 会使 append 抛错并终止整轮；
+> 现在无具体档位时完全省略该键。回归测试覆盖 capability 永不解析的冷启动路径，
+> 全量 370/370。Web 影子会话真实跑通两步 Auto，Desktop 已经 `plugin_manager`
+> 升级并通过包哈希校验。
+>
+> 状态：**T01–T08 已施工，自动化 370/370 绿；Web RPC 与 Desktop 动态 Auto 冒烟均已通过，Desktop 安装后完整重启并验证轮末零写回；产品出口视觉与剩余边缘矩阵待出品人验收**。基线为 `0.2.18-agent.1`；本轮只修有复现证据的行为缺陷，不做感觉型重写。实际 push/tag 须出品人另行批准。
 >
 > 需求优先级：`REQUIREMENTS.html` > 已批准技术路线 > `ROADMAP.md` > 旧测试与旧注释。旧测试若锁定与需求冲突的行为，应按需求改写，不得为了保绿继续保留错误行为。
 

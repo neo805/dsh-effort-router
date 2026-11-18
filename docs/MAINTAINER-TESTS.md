@@ -154,8 +154,26 @@
   `request/header` seq 3259 为 `reason=resume, reasoningEffort=high`；`state.recent`
   的 turn 9 决策均为 auto/high。由此确认 `.2` 的 scheduled Auto 不再在轮内或
   `turn/end` 写回原生选择，请求仍按 concrete 档位发出。
+- **冷启动 Auto 请求头条目证据（2026-11-19，web profile，DSH 0.2.2-rc.3，
+  插件 0.2.19-agent.0）**：新会话 `session-5133a7ea…` 显式选择
+  `deepseek-account/deepseek-flash/auto`，真实 prompt 跑完 turn 1 / step 1–2，
+  两步均为 `mode=auto, effort=high`（engineering cues，targetRank 4）。落盘日志共
+  32 个事件，`model/selection` 只有 seq 3 的显式 `auto`；`request/header` seq 12
+  的 config 为 `{provider, model, reasoningEffort:'high', maxTokens:256000}`，
+  含 99 个 tools 且可序列化；`turn/end` seq 30 为 `completed`，没有
+  `non-JSON-serializable data` 或其它 error 事件。这同时验证了冷启动未解析能力时
+  省略键、请求按 concrete 档发出、以及调度 Auto 无后续 selection 写回。
+- **Desktop 安装证据（2026-11-19，desktop profile，DSH 0.2.2-rc.3）**：
+  经 `plugin_manager` 的 `install_bundle` 安装
+  `artifacts/dsh-effort-router-0.2.19-agent.0.tgz`（stage=enable、changed=true、
+  application=applied）。安装版本为 `0.2.19-agent.0`，13 个 `lib/*.js` 哈希一致；
+  `/effort-router/state?view=config` 返回 enabled=true、defaultLevel=auto、
+  trajectoryAnnotate=true。该次安装的 pnpm 解析同时把无关的 billion-context 从
+  0.1.214 升到 0.1.216，未改本插件源码。
 - **未做**：Desktop 的 same-step 双模型切换、finished history、多会话轨迹、hidden
   后台标签与徽标视觉仍待产品出口验收；这些不能用自动测试或安装成功替代。
+  本轮 Desktop 会话为手动档，未额外触发新的 Desktop Auto 轮；冷启动修复的实机
+  证据来自 Web 影子 profile 与自动回归测试。
 - **未实测宿主**：插件会拒绝加载并在日志给出
   `[effort-router] unsupported DSH runtime "…"`；升级宿主后必须先补该版本的契约
   证据，再往 `lib/runtime.js` 白名单里加。
@@ -179,6 +197,7 @@
 | 0.2.17-agent.1 | 2026-11-16 | 自动测试覆盖资源清理、会话切换与键盘操作；视觉待出品人确认 | 未测 | 待出品人验收 | 捕获时同步解析（不再 step/end 补写）；续步逐步重算；badge/config/trajectory 均带 AbortController；轨迹胶囊 Tab 可聚焦、Enter/Space 等价点击；冷缓存预热前移 |
 | 0.2.18-agent.0 | 2026-11-16 | 与 0.2.17-agent.1 同代码；320/320 全绿 | 未测 | 待出品人重启 Desktop 后验收 | 首个推送版（0.2.17-agent.1 → 0.2.18-agent.0 仅版本治理 bump）；请在 Desktop 按第 5 项确认徽标实际档位、轨迹胶囊键盘操作与悬停/焦点样式 |
 | 0.2.18-agent.2 | 2026-11-16（Desktop 安装 11-17） | 自动测试 369/369；视觉待出品人 | 未测（默认关） | Web RPC 与 Desktop 动态 Auto 均已验：连续 Auto / 人工保持 / 零轮末写回 | 安装经 plugin-manager，13 个 lib 哈希一致；Desktop 在安装后重启，seq 3251 后 284 条事件无新 selection；same-step 模型切换、finished history、多会话轨迹、hidden 标签的真实视觉仍待验收 |
+| 0.2.19-agent.0 | 2026-11-19 | 自动测试 370/370；视觉待出品人 | 未测（默认关） | Web 冷启动 Auto 两步均为 high，请求头严格 JSON 通过；调度 Auto 仅一次显式 selection | 修复 own `reasoningEffort: undefined`；Web session-5133a7ea… 两步 Auto、turn completed；Desktop 经 plugin-manager 安装且 13 个 lib 哈希一致，本轮 Desktop 为手动档未额外触发 Auto |
 |  |  |  |  |  |  |
 
 ---
